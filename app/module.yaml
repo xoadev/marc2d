@@ -1,0 +1,16 @@
+product: android/app
+
+dependencies:
+  - $compose.material3
+  - $libs.activity.compose
+
+settings:
+  android:
+    namespace: io.x0a.marc2d
+    # Android 15, el de la Pixel 3a con LineageOS 22.
+    minSdk: 35
+    versionName: 0.1.0
+  compose: enabled
+
+plugins:
+  ktlint: enabled

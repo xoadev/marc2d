@@ -1,0 +1,23 @@
+tasks:
+  check:
+    action: !marc2d.ktlint.ktlint
+      sourceDir: ${module.rootDir}/src
+      tool:
+        - com.pinterest.ktlint:ktlint-cli:1.8.0
+        - io.nlopez.compose.rules:ktlint:0.6.8
+      format: false
+  format:
+    action: !marc2d.ktlint.ktlint
+      sourceDir: ${module.rootDir}/src
+      tool:
+        - com.pinterest.ktlint:ktlint-cli:1.8.0
+        - io.nlopez.compose.rules:ktlint:0.6.8
+      format: true
+
+checks:
+  - name: ktlint
+    performedBy: check
+
+commands:
+  - name: ktlintFormat
+    performedBy: format
