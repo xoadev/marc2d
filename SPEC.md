@@ -40,9 +40,9 @@ eye color only appears when something matters. When its state changes it stays w
 
 | State     | Eye                     | What triggers it                             |
 | --------- | ----------------------- | -------------------------------------------- |
-| Intruder  | red band                | HA, with `select.*_state`                   |
-| Alarm     | yellow                  | HA, with `select.*_state`                   |
-| Recording | red lens                | HA, with `select.*_state`                   |
+| Intruder  | red band                | HA, with `select.*_state`                    |
+| Alarm     | yellow                  | HA, with `select.*_state`                    |
+| Recording | red lens                | HA, with `select.*_state`                    |
 | Offline   | an X                    | the panel, if there is any warning on screen |
 | Sleeping  | closed                  | the panel, below 5 lx                        |
 | Walking   | looks where it is going | the panel, if nothing else applies           |
@@ -87,14 +87,14 @@ The panel connects to the broker named in the configuration and registers itself
 device discovery (`homeassistant/device/marc2d_<panel>/config`). If it goes down, the
 MQTT last will marks it as `unavailable`. The intercom does not depend on MQTT.
 
-| Entity                     | Data                  | When it is published                   |
-| -------------------------- | --------------------- | -------------------------------------- |
-| `sensor.*_light`             | ambient light, in lux | if it changes by at least 2 lx and 20% |
-| `sensor.*_battery`         | level, in %           | if it changes, checked every minute    |
-| `sensor.*_battery_temperature`  | battery, in °C        | if it changes, checked every minute    |
-| `binary_sensor.*_charging` | charging or not       | if it changes, checked every minute    |
-| `siren.*_siren`           | turns on and off      | on change                              |
-| `select.*_state`          | droid state           | on change                              |
+| Entity                         | Data                  | When it is published                   |
+| ------------------------------ | --------------------- | -------------------------------------- |
+| `sensor.*_light`               | ambient light, in lux | if it changes by at least 2 lx and 20% |
+| `sensor.*_battery`             | level, in %           | if it changes, checked every minute    |
+| `sensor.*_battery_temperature` | battery, in °C        | if it changes, checked every minute    |
+| `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
+| `siren.*_siren`                | turns on and off      | on change                              |
+| `select.*_state`               | droid state           | on change                              |
 
 The siren sounds at full volume on the alarm channel and stops by itself after 10 minutes, because if the
 connection is lost HA could no longer turn it off.
