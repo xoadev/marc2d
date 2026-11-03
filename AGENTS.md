@@ -26,20 +26,14 @@ Spec, change, checks, commit, PR. Nothing is finished until the checks of what y
 them all. Everything reaches `main` through a PR, from its own branch.
 
 ```sh
-# App
-./kotlin check               # ktlint, Compose rules and tests
-./kotlin build -m app        # builds the APK
-./kotlin do ktlintFormat     # fixes the formatting
-
-# Integration
-alias hapy='uv run --no-project --python 3.14 --with-requirements tests/requirements.txt'
-hapy ruff format custom_components tests
-hapy ruff check custom_components tests
-hapy pytest                  # fails below 90% coverage
+make check       # everything below, plus markdownlint
+make format      # fixes the formatting of all the code
+make build       # builds the APK
+make help        # lists the rest, such as app-check or integration-check
 ```
 
-The build uses Kotlin Toolchain: do not add Gradle. CI also runs hassfest, the HACS validation, actionlint and
-markdownlint with `.markdownlint-cli2.yaml`.
+The Makefile only wraps `./kotlin` and `uv`. The build uses Kotlin Toolchain: do not add Gradle. The integration's
+tests fail below 90% coverage. CI also runs hassfest, the HACS validation and actionlint.
 
 ## App and integration
 
