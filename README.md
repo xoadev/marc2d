@@ -21,7 +21,8 @@ It's a half-joking personal project, shared in case it's useful to someone.
 
 ## Status
 
-In testing, with a single panel and no releases. Things still break freely. Next up is a Home Assistant integration to add panels with a QR code.
+In testing, with a single panel and no releases. Things still break freely. Next up is a Home
+Assistant integration to add panels with a QR code.
 
 ## What you need
 
