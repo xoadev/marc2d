@@ -54,7 +54,7 @@ class PanelRuntime(
 		} catch (_: EnrollmentRejectedException) {
 			"The code is not valid or has expired"
 		} catch (_: IOException) {
-			"Cannot reach Home Assistant at that address"
+			"Cannot reach Home Assistant at ${invite.url}"
 		} catch (_: IllegalArgumentException) {
 			// Includes an answer that is not JSON: a typed address may be any other server.
 			"That address is not a Home Assistant with marc2d"

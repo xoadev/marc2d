@@ -67,6 +67,8 @@ fun SettingsScreen(
 			if (onClose != null) PixelButton(PixelIcon.Close, "Close", onClose, size = CLOSE_BUTTON)
 		}
 		Text("Add this panel in Home Assistant, in the marc2d integration, and scan the code it shows.", color = SettingsGray, fontSize = 20.sp)
+		// Above the fold: after scanning, the panel returns here with the screen scrolled to the top.
+		if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 20.sp)
 		PixelTextButton("Scan QR code", onScan, Modifier.fillMaxWidth())
 		OutlinedTextField(
 			value = url,
@@ -92,7 +94,6 @@ fun SettingsScreen(
 			enabled = url.isNotBlank() && code.isNotBlank(),
 			modifier = Modifier.fillMaxWidth(),
 		)
-		if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 20.sp)
 		Text(status, color = SettingsGray, fontSize = 20.sp)
 		intercoms.forEach { (name, intercom) ->
 			Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 20.sp)
