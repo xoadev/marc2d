@@ -2,6 +2,7 @@ package dev.xoa.marc2d
 
 import android.content.Context
 import android.os.Build
+import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.minutes
@@ -39,10 +40,27 @@ class PanelRuntime(
 
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 	private val ha = HaClient()
+	private val enrollment = EnrollmentClient()
 	private val siren = PanelSiren(context) { on -> publishSiren(on) }
 	private val readings = PanelReadings(context)
 	val mqtt = PanelMqtt(scope, Build.MODEL, siren::set, { intercom, payload -> phone.doorbell(intercom, payload) }, ::setHaMood)
 	private var started = false
+
+	/** Returns what to tell the user, or nothing if the panel is now connected. */
+	suspend fun enroll(invite: EnrollmentInvite): String? =
+		try {
+			store.saveConnection(enrollment.enroll(invite))
+			null
+		} catch (_: EnrollmentRejectedException) {
+			"The code is not valid or has expired"
+		} catch (_: IOException) {
+			"Cannot reach Home Assistant at that address"
+		} catch (_: IllegalArgumentException) {
+			// Includes an answer that is not JSON: a typed address may be any other server.
+			"That address is not a Home Assistant with marc2d"
+		} catch (_: IllegalStateException) {
+			"That address is not a Home Assistant with marc2d"
+		}
 
 	fun start() {
 		if (started) return

@@ -6,10 +6,14 @@ repositories:
 dependencies:
   - $compose.material3
   - $libs.activity.compose
+  - $libs.camera.camera2
+  - $libs.camera.lifecycle
+  - $libs.camera.view
   - $libs.datastore.preferences
   - $libs.ktor.client.okhttp
   - $libs.ktor.client.websockets
   - $libs.linphone.sdk
+  - $libs.zxing.core
 
 settings:
   android:

@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a panel",
+        "data": { "panel": "Panel name" }
+      },
+      "scan": {
+        "title": "Scan this code on the panel",
+        "description": "On the panel, open Settings and tap **Scan QR code**. If it cannot read it, type the address `{url}` and the code `{code}`. The code is valid for 10 minutes and works once. Press Submit when the panel says it is connected."
+      }
+    },
+    "error": {
+      "not_scanned": "The panel has not used the code yet. If it expired, this is a new one."
+    },
+    "abort": {
+      "already_configured": "This panel already exists: remove it first to add it again.",
+      "no_internal_url": "Home Assistant has no internal URL: set one in Settings > System > Network."
+    }
+  }
+}

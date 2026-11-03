@@ -22,6 +22,12 @@ commands are green. Everything reaches `main` through a PR, from its own branch.
 ./kotlin do ktlintFormat     # fixes the formatting
 ```
 
+The integration has its own tests, in Python 3.14:
+
+```sh
+uv run --no-project --python 3.14 --with-requirements tests/requirements.txt pytest
+```
+
 The build uses Kotlin Toolchain: do not add Gradle. CI also runs markdownlint with
 `.markdownlint-cli2.yaml`.
 

@@ -21,27 +21,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val SettingsGray = Color(0xFFA0A0A0)
 
-/** The panel only needs to connect to Home Assistant: the rest of the configuration comes from there. */
+/** The panel only needs to enroll in Home Assistant: the rest of the configuration comes from there. */
 @Composable
 fun SettingsScreen(
 	initial: HaConnection?,
 	status: String,
 	intercoms: Map<String, IntercomStatus>,
-	onSave: (HaConnection) -> Unit,
+	enrollmentMessage: String?,
+	onScan: () -> Unit,
+	onEnroll: (EnrollmentInvite) -> Unit,
 	onOpenAndroidSettings: () -> Unit,
 	onLeaveKiosk: (() -> Unit)?,
 	onClose: (() -> Unit)?,
 	modifier: Modifier = Modifier,
 ) {
 	var url by rememberSaveable(initial) { mutableStateOf(initial?.url ?: "http://homeassistant.local:8123") }
-	var token by rememberSaveable(initial) { mutableStateOf(initial?.token ?: "") }
-	var panel by rememberSaveable(initial) { mutableStateOf(initial?.panel ?: HaConnection.DEFAULT_PANEL) }
+	var code by rememberSaveable { mutableStateOf("") }
 
 	val fieldColors =
 		OutlinedTextFieldDefaults.colors(
@@ -66,6 +66,8 @@ fun SettingsScreen(
 			Text("Home Assistant connection", color = PixelWhite, fontSize = 28.sp, modifier = Modifier.weight(1f))
 			if (onClose != null) PixelButton(PixelIcon.Close, "Close", onClose, size = CLOSE_BUTTON)
 		}
+		Text("Add this panel in Home Assistant, in the marc2d integration, and scan the code it shows.", color = SettingsGray, fontSize = 20.sp)
+		PixelTextButton("Scan QR code", onScan, Modifier.fillMaxWidth())
 		OutlinedTextField(
 			value = url,
 			onValueChange = { url = it },
@@ -76,30 +78,21 @@ fun SettingsScreen(
 			modifier = Modifier.fillMaxWidth(),
 		)
 		OutlinedTextField(
-			value = token,
-			onValueChange = { token = it },
-			label = { Text("Long-lived token") },
-			singleLine = true,
-			shape = RectangleShape,
-			colors = fieldColors,
-			visualTransformation = PasswordVisualTransformation(),
-			modifier = Modifier.fillMaxWidth(),
-		)
-		OutlinedTextField(
-			value = panel,
-			onValueChange = { panel = it },
-			label = { Text("Panel name") },
+			value = code,
+			onValueChange = { code = it },
+			label = { Text("Code") },
 			singleLine = true,
 			shape = RectangleShape,
 			colors = fieldColors,
 			modifier = Modifier.fillMaxWidth(),
 		)
 		PixelTextButton(
-			label = "Save",
-			onClick = { onSave(HaConnection(url, token, panel)) },
-			enabled = url.isNotBlank() && token.isNotBlank() && panel.isNotBlank(),
+			label = "Connect",
+			onClick = { onEnroll(EnrollmentInvite(url.trim(), code.trim())) },
+			enabled = url.isNotBlank() && code.isNotBlank(),
 			modifier = Modifier.fillMaxWidth(),
 		)
+		if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 20.sp)
 		Text(status, color = SettingsGray, fontSize = 20.sp)
 		intercoms.forEach { (name, intercom) ->
 			Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 20.sp)

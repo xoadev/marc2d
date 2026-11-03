@@ -144,9 +144,8 @@ decided.
 
 ## Configuration
 
-In the app you only configure the connection to HA, the URL and a long-lived token, and the panel's
-name. Each panel has its own name, such as `kitchen`, from which its MQTT topics and its
-entities come. Everything else
+In the app you only enroll the panel, which gives it its URL, token and name. Each panel has its own name, such as
+`kitchen`, from which its MQTT topics and its entities come. Everything else
 comes from HA, from the `script.marc2d_config` script, which the panel calls on connecting and every 10 minutes and
 which receives the panel's name in the `panel` variable and returns:
 
@@ -181,20 +180,21 @@ which receives the panel's name in the `panel` variable and returns:
 
 ## Home Assistant integration
 
-Planned for when the intercom is finished: our own integration, installable with HACS, in
-`custom_components/marc2d/`. It replaces the configuration script and MQTT, so that installing marc2d does not
-require Mosquitto or writing YAML.
+Our own integration, installable with HACS, in `custom_components/marc2d/`. It will replace the configuration
+script and MQTT, so that installing marc2d does not require Mosquitto or writing YAML. It requires HA 2026.10.
 
-- **Onboarding:** the panel is added in HA, which shows a QR code with the URL and a one-time code that expires in
-  minutes. The panel scans it and exchanges it for its own token. The QR code never carries the token, and removing
-  the panel in HA revokes its access.
-- **Configuration:** per-panel forms in HA: intercoms, weather, cameras and the doorbell button
+- **Enrollment (done):** the panel is added in HA, which shows a QR code with the internal URL and a one-time code
+  that expires in 10 minutes. The panel scans it with the front camera, or types both, and exchanges the code at
+  `POST /api/marc2d/enroll` for a token. The QR code never carries the token. Each panel gets its own
+  unprivileged, local-only user: removing the panel in HA removes that user and revokes its access. The endpoint has
+  no authentication, so 10 wrong codes kill every open code.
+- **Configuration (pending):** per-panel forms in HA: intercoms, weather, cameras and the doorbell button
   entity.
-- **Entities:** its own, over the WebSocket the panel already uses. If it closes, the panel becomes `unavailable`.
-- **To be decided:** the protocol between the panel and the integration, how to read the QR code without Google
-  services, and the HACS requirements for a repo that also contains the app.
+- **Entities (pending):** its own, over the WebSocket the panel already uses. If it closes, the panel becomes
+  `unavailable`.
+- **To be decided:** the protocol between the panel and the integration.
 
-MQTT stays until the integration works in a real home.
+MQTT and the script stay until the integration works in a real home.
 
 ## Decisions
 
@@ -212,6 +212,8 @@ MQTT stays until the integration works in a real home.
   Toolchain. The panel only needs QoS 0 when publishing and no TLS, because it runs on the LAN. It sits behind
   the `MqttClient` interface, so that it can be replaced by a library by touching a single class.
 - Configuration with Jetpack DataStore.
+- QR codes with CameraX and ZXing core: ML Kit depends on Google services, and CameraX spares us the camera
+  lifecycle.
 - RTSP with RootEncoder and RTSP-Server. They are maintained, but by a single author and published on
   JitPack: the camera is optional and sits behind an interface so they can be replaced.
 - TTS, audio and screen with the Android APIs, without libraries.

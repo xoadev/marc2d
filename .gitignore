@@ -1,6 +1,7 @@
 .kotlin/
 .idea/
 build/
+__pycache__/
 *.iml
 *.apk
 *.aab

@@ -15,6 +15,18 @@ jobs:
       - name: Build
         run: ./kotlin build -m app
 
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Tests
+        run: uv run --no-project --python 3.14 --with-requirements tests/requirements.txt pytest
+      - uses: home-assistant/actions/hassfest@master
+      - uses: hacs/action@main
+        with:
+          category: integration
+
   lint-markdown:
     runs-on: ubuntu-latest
     steps:

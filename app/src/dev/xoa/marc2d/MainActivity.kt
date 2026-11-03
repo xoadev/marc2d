@@ -57,12 +57,21 @@ class MainActivity : ComponentActivity() {
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
+					var scanOpen by rememberSaveable { mutableStateOf(false) }
+					var enrollmentMessage by rememberSaveable { mutableStateOf<String?>(null) }
+					val enroll = { invite: EnrollmentInvite ->
+						scope.launch {
+							enrollmentMessage = "Connecting…"
+							enrollmentMessage = runtime.enroll(invite)
+						}
+						Unit
+					}
 					val cameras by runtime.store.config
 						.map { it.cameras }
 						.collectAsState(initial = emptyList())
 
 					// The screen does not turn off during a call.
-					LocalView.current.keepScreenOn = call != null || camerasOpen
+					LocalView.current.keepScreenOn = call != null || camerasOpen || scanOpen
 
 					val activeCall = call
 					val needsSetup = haStatus == HaStatus.NotConfigured
@@ -86,13 +95,26 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
+						scanOpen -> {
+							BackHandler { scanOpen = false }
+							QrScanScreen(
+								onInvite = { invite ->
+									scanOpen = false
+									enroll(invite)
+								},
+								onClose = { scanOpen = false },
+							)
+						}
+
 						settingsOpen || needsSetup -> {
 							BackHandler(enabled = settingsOpen) { settingsOpen = false }
 							SettingsScreen(
 								initial = connection,
 								status = PanelWarnings.haStatus(haStatus),
 								intercoms = intercoms,
-								onSave = { scope.launch { runtime.store.saveConnection(it) } },
+								enrollmentMessage = enrollmentMessage,
+								onScan = { scanOpen = true },
+								onEnroll = enroll,
 								onOpenAndroidSettings = {
 									kiosk.pause()
 									startActivity(Intent(Settings.ACTION_SETTINGS))

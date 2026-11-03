@@ -7,7 +7,7 @@ object PanelWarnings {
 			HaStatus.NotConfigured -> "Not connected to Home Assistant yet"
 			HaStatus.Connecting -> "Connecting to Home Assistant…"
 			HaStatus.Connected -> "Connected to Home Assistant"
-			HaStatus.AuthFailed -> "Home Assistant rejected the token"
+			HaStatus.AuthFailed -> "Home Assistant rejected this panel: add it again"
 			HaStatus.MissingScript -> "script.marc2d_config is missing in Home Assistant"
 			is HaStatus.InvalidConfig -> "script.marc2d_config: ${status.reason}"
 			is HaStatus.Disconnected -> "No connection to Home Assistant (${status.reason})"
