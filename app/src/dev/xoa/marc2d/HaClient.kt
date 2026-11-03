@@ -10,6 +10,7 @@ import io.ktor.websocket.readText
 import java.time.Instant
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 
@@ -65,8 +66,10 @@ class HaClient {
 				if (HaProtocol.isSuccess(answer)) {
 					followConfig(onStatus, onConfig, onWeather, nextId)
 				}
-				onStatus(HaProtocol.subscribeError(answer).toStatus())
-				idleUntilNextRefresh()
+				val refusal = HaProtocol.subscribeError(answer)
+				onStatus(refusal.toStatus())
+				// Right after enrolling, the panel exists in HA only once the form is submitted there.
+				if (refusal == HaProtocol.ConfigResult.NotAdded) delay(NOT_ADDED_RETRY) else idleUntilNextRefresh()
 			}
 		}
 	}
@@ -166,5 +169,6 @@ class HaClient {
 	private companion object {
 		val PING_INTERVAL = 30.seconds
 		val REFRESH_INTERVAL = 10.minutes
+		val NOT_ADDED_RETRY = 5.seconds
 	}
 }

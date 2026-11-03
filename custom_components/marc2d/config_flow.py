@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import probatio
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     QrCodeSelector,
@@ -22,6 +22,16 @@ from .options_flow import Marc2dOptionsFlow
 from .websocket import CONF_USER_ID
 
 CONF_PANEL = "panel"
+
+
+def panel_url(hass: HomeAssistant) -> str:
+    """Prefer the IP to a `.local` name, which apps on the panel could not resolve."""
+    url = get_url(hass, allow_external=False, allow_cloud=False)
+    parts = urlsplit(url)
+    api = hass.config.api
+    if parts.hostname and parts.hostname.endswith(".local") and api and api.local_ip:
+        return f"{parts.scheme}://{api.local_ip}:{parts.port or api.port}"
+    return url
 
 
 class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -53,7 +63,7 @@ class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         try:
             # The panel lives in the home network: never send it to the external URL.
-            self._url = get_url(self.hass, allow_external=False, allow_cloud=False)
+            self._url = panel_url(self.hass)
         except NoURLAvailableError:
             return self.async_abort(reason="no_internal_url")
         return await self.async_step_scan()
