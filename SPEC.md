@@ -178,6 +178,23 @@ que recibe el nombre del panel en la variable `panel` y devuelve:
 4. Comandos de voz.
 5. Publicar la cámara.
 
+## Integración de Home Assistant
+
+Prevista para cuando el telefonillo esté cerrado: una integración propia, instalable con HACS, en
+`custom_components/marc2d/`. Sustituye al script de configuración y a MQTT, para que instalar marc2d no
+exija Mosquitto ni escribir YAML.
+
+- **Alta:** se añade el panel en HA, que muestra un QR con la URL y un código de un solo uso que caduca en
+  minutos. El panel lo escanea y lo cambia por su propio token. El QR nunca lleva el token, y quitar el
+  panel en HA revoca su acceso.
+- **Configuración:** formularios por panel en HA: telefonillos, tiempo, cámaras y la entidad del botón del
+  timbre.
+- **Entidades:** propias, por el WebSocket que ya usa el panel. Si se cierra, el panel queda `unavailable`.
+- **Por decidir:** el protocolo entre el panel y la integración, cómo leer el QR sin servicios de Google, y
+  los requisitos de HACS para un repo que también contiene la app.
+
+MQTT se queda hasta que la integración funcione en una casa real.
+
 ## Decisiones
 
 - Kotlin y Jetpack Compose con Material 3.
