@@ -7,7 +7,6 @@ import java.util.Locale
 /** How the time is presented on the main screen. */
 object ClockFormat {
 	private val time = DateTimeFormatter.ofPattern("HH:mm")
-	private val date = DateTimeFormatter.ofPattern("EEEE, MMMM d")
 
 	/** Path of the anti-burn-in shift, in dp. It moves one step every minute. */
 	private val burnInPath =
@@ -27,9 +26,10 @@ object ClockFormat {
 	fun date(
 		now: LocalDateTime,
 		locale: Locale,
+		pattern: String,
 	): String =
 		now
-			.format(date.withLocale(locale))
+			.format(DateTimeFormatter.ofPattern(pattern, locale))
 			.replaceFirstChar { it.titlecase(locale) }
 
 	fun burnInOffset(now: LocalDateTime): Pair<Int, Int> = burnInPath[now.minute % burnInPath.size]

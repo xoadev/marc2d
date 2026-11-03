@@ -17,7 +17,7 @@ class ClockFormatTest {
 
 	@Test
 	fun `the date has weekday and month and starts with a capital`() {
-		assertEquals("Monday, November 2", ClockFormat.date(now, Locale.forLanguageTag("en-US")))
+		assertEquals("Monday, November 2", ClockFormat.date(now, Locale.forLanguageTag("en-US"), "EEEE, MMMM d"))
 	}
 
 	@Test

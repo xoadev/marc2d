@@ -1,5 +1,6 @@
 package dev.xoa.marc2d
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,8 @@ fun ClockScreen(
 	onOpenMenu: () -> Unit,
 	modifier: Modifier = Modifier,
 ) {
+	// The order of day and month depends on the language: the device decides it.
+	val locale = Locale.getDefault()
 	var now by remember { mutableStateOf(LocalDateTime.now()) }
 	LaunchedEffect(Unit) {
 		while (true) {
@@ -96,7 +99,7 @@ fun ClockScreen(
 					),
 			)
 			Text(
-				text = ClockFormat.date(now, Locale.getDefault()),
+				text = ClockFormat.date(now, locale, DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")),
 				color = DateColor,
 				fontSize = 28.sp,
 				textAlign = TextAlign.Center,
