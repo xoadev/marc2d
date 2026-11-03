@@ -1,0 +1,27 @@
+product: android/app
+
+repositories:
+  - https://download.linphone.org/maven_repository
+
+dependencies:
+  - $compose.material3
+  - $libs.activity.compose
+  - $libs.datastore.preferences
+  - $libs.ktor.client.okhttp
+  - $libs.ktor.client.websockets
+  - $libs.linphone.sdk
+
+settings:
+  android:
+    namespace: dev.xoa.marc2d
+    # Android 15, el de la Pixel 3a con LineageOS 22.
+    minSdk: 35
+    versionName: 0.1.0
+    # Las dos Pixel son arm64: el resto de ABI de Linphone solo engordan la APK.
+    abiFilters: [ arm64-v8a ]
+  compose: enabled
+  kotlin:
+    serialization: json
+
+plugins:
+  ktlint: enabled
