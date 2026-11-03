@@ -25,6 +25,17 @@ class PanelMqttTest {
 	}
 
 	@Test
+	fun `discovery removes the entities that are turned off`() {
+		val topics = PanelTopics("Lounge")
+		val payload = PanelDiscovery.payload(topics, "Lounge", "Pixel 3a", sensors = false, siren = false)
+		assertFalse(topics.sirenCommand in payload)
+		assertFalse(topics.battery in payload)
+		assertTrue("""siren":{"platform":"siren"}""" in payload)
+		assertTrue("""battery":{"platform":"sensor"}""" in payload)
+		assertTrue(topics.moodCommand in payload)
+	}
+
+	@Test
 	fun `does not publish small light changes`() {
 		assertTrue(PanelReadings.isSignificant(null, 1f))
 		assertFalse(PanelReadings.isSignificant(100f, 110f))

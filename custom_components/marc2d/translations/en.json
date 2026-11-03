@@ -3,7 +3,9 @@
     "step": {
       "user": {
         "title": "Add a panel",
-        "data": { "panel": "Panel name" }
+        "data": {
+          "panel": "Panel name"
+        }
       },
       "scan": {
         "title": "Scan this code on the panel",
@@ -16,6 +18,41 @@
     "abort": {
       "already_configured": "This panel already exists: remove it first to add it again.",
       "no_internal_url": "Home Assistant has no internal URL: set one in Settings > System > Network."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Panel settings",
+        "description": "The panel applies these as soon as you save them. MQTT carries the doorbell, the sensors and the siren: without it those stop too.",
+        "data": {
+          "intercoms": "Intercoms (SIP)",
+          "cameras": "Cameras",
+          "weather_entity": "Weather entity"
+        },
+        "sections": {
+          "features": {
+            "name": "Features",
+            "data": {
+              "sip": "Intercom (SIP)",
+              "cameras": "Cameras",
+              "weather": "Weather",
+              "mqtt": "MQTT",
+              "sensors": "Publish sensors",
+              "siren": "Siren"
+            }
+          },
+          "mqtt": {
+            "name": "MQTT broker",
+            "data": {
+              "server": "Address",
+              "port": "Port",
+              "username": "User",
+              "password": "Password"
+            }
+          }
+        }
+      }
     }
   }
 }

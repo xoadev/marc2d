@@ -7,7 +7,8 @@ from urllib.parse import urlencode
 
 import probatio
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     QrCodeSelector,
@@ -17,9 +18,10 @@ from homeassistant.helpers.selector import (
 from homeassistant.util import slugify
 
 from .enrollment import DOMAIN, Enrollment, async_remove_user, get_registry
+from .options_flow import Marc2dOptionsFlow
+from .websocket import CONF_USER_ID
 
 CONF_PANEL = "panel"
-CONF_USER_ID = "user_id"
 
 
 class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -33,9 +35,13 @@ class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
         self._enrollment: Enrollment | None = None
         self._finished = False
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Configure the panel after adding it."""
+        return Marc2dOptionsFlow()
+
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Ask for the panel's name."""
         if user_input is None:
             return self.async_show_form(
@@ -52,9 +58,7 @@ class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="no_internal_url")
         return await self.async_step_scan()
 
-    async def async_step_scan(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_scan(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the code until the panel has redeemed it."""
         registry = get_registry(self.hass)
         enrollment = self._enrollment
@@ -95,6 +99,4 @@ class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
             return
         get_registry(self.hass).close(enrollment)
         if enrollment.user_id:
-            self.hass.async_create_task(
-                async_remove_user(self.hass, enrollment.user_id)
-            )
+            self.hass.async_create_task(async_remove_user(self.hass, enrollment.user_id))

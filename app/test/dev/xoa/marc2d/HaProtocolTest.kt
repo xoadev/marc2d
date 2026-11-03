@@ -14,18 +14,18 @@ class HaProtocolTest {
 	}
 
 	@Test
-	fun `reads the configuration the script returns`() {
+	fun `reads the configuration the integration pushes`() {
 		val message =
 			HaProtocol.parse(
 				"""
-				{"id":1,"type":"result","success":true,"result":{"context":{"id":"x"},"response":{
+				{"id":1,"type":"event","event":{
 				  "intercoms":[{"name":"Parking","server":"192.0.2.8","extension":"9901#1","password":"s3"}],
 				  "future":true
-				}}}
+				}}
 				""".trimIndent(),
 			)
 
-		val result = assertIs<HaProtocol.ConfigResult.Ok>(HaProtocol.configResult(message))
+		val result = assertIs<HaProtocol.ConfigResult.Ok>(HaProtocol.configEvent(message))
 
 		assertEquals(
 			"Parking",
@@ -36,21 +36,28 @@ class HaProtocolTest {
 	}
 
 	@Test
-	fun `detects that the script is missing`() {
-		val message =
-			HaProtocol.parse("""{"id":1,"type":"result","success":false,"error":{"code":"not_found","message":"x"}}""")
+	fun `what is turned off in Home Assistant does not arrive`() {
+		val message = HaProtocol.parse("""{"id":1,"type":"event","event":{"intercoms":[],"cameras":[]}}""")
 
-		assertEquals(HaProtocol.ConfigResult.MissingScript, HaProtocol.configResult(message))
+		val result = assertIs<HaProtocol.ConfigResult.Ok>(HaProtocol.configEvent(message))
+
+		assertEquals(PanelConfig(), result.config)
 	}
 
 	@Test
-	fun `a malformed response does not reveal its content`() {
-		val message =
-			HaProtocol.parse(
-				"""{"id":1,"type":"result","success":true,"result":{"response":{"intercoms":[{"password":"s3"}]}}}""",
-			)
+	fun `tells apart a panel that is not added from another error`() {
+		fun refusal(code: String) = HaProtocol.parse("""{"id":1,"type":"result","success":false,"error":{"code":"$code"}}""")
 
-		val result = assertIs<HaProtocol.ConfigResult.Invalid>(HaProtocol.configResult(message))
+		assertEquals(HaProtocol.ConfigResult.NotAdded, HaProtocol.subscribeError(refusal("not_found")))
+		assertEquals(HaProtocol.ConfigResult.NotAdded, HaProtocol.subscribeError(refusal("unknown_command")))
+		assertIs<HaProtocol.ConfigResult.Invalid>(HaProtocol.subscribeError(refusal("unauthorized")))
+	}
+
+	@Test
+	fun `a malformed configuration does not reveal its content`() {
+		val message = HaProtocol.parse("""{"id":1,"type":"event","event":{"intercoms":[{"password":"s3"}]}}""")
+
+		val result = assertIs<HaProtocol.ConfigResult.Invalid>(HaProtocol.configEvent(message))
 
 		assertFalse("s3" in result.reason)
 	}

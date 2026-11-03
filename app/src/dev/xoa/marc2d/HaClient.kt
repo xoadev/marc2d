@@ -22,7 +22,7 @@ sealed interface HaStatus {
 
 	data object AuthFailed : HaStatus
 
-	data object MissingScript : HaStatus
+	data object NotAdded : HaStatus
 
 	data class InvalidConfig(
 		val reason: String,
@@ -35,8 +35,11 @@ sealed interface HaStatus {
 
 class HaAuthException : Exception("Home Assistant rejected the token")
 
-/** Keeps a session with Home Assistant and asks for the configuration again from time to time. */
+/** Keeps a session with Home Assistant, which pushes the panel its configuration whenever it changes. */
 class HaClient {
+	private var subscription = 0
+	private var pendingConfig: JsonObject? = null
+
 	private val client =
 		HttpClient(OkHttp) {
 			install(WebSockets) { pingIntervalMillis = PING_INTERVAL.inWholeMilliseconds }
@@ -55,26 +58,48 @@ class HaClient {
 			val nextId = { ++lastId }
 			while (true) {
 				val id = nextId()
-				send(Frame.Text(HaProtocol.configRequest(id, connection.panel)))
-				when (val result = HaProtocol.configResult(awaitResult(id))) {
-					is HaProtocol.ConfigResult.Ok -> {
-						onConfig(result.config)
-						onStatus(HaStatus.Connected)
-						onWeather(result.config.weather?.let { fetchWeather(it, nextId) })
-					}
-
-					HaProtocol.ConfigResult.MissingScript -> {
-						onStatus(HaStatus.MissingScript)
-					}
-
-					is HaProtocol.ConfigResult.Invalid -> {
-						onStatus(HaStatus.InvalidConfig(result.reason))
-					}
+				subscription = id
+				pendingConfig = null
+				send(Frame.Text(HaProtocol.configSubscribe(id)))
+				val answer = awaitResult(id)
+				if (HaProtocol.isSuccess(answer)) {
+					followConfig(onStatus, onConfig, onWeather, nextId)
 				}
+				onStatus(HaProtocol.subscribeError(answer).toStatus())
 				idleUntilNextRefresh()
 			}
 		}
 	}
+
+	/** Never returns: applies each configuration as it arrives, and refreshes the weather meanwhile. */
+	private suspend fun DefaultClientWebSocketSession.followConfig(
+		onStatus: (HaStatus) -> Unit,
+		onConfig: suspend (PanelConfig) -> Unit,
+		onWeather: (WeatherReport?) -> Unit,
+		nextId: () -> Int,
+	): Nothing {
+		var weather: String? = null
+		while (true) {
+			idleUntilNextRefresh()
+			pendingConfig?.let { message ->
+				pendingConfig = null
+				val result = HaProtocol.configEvent(message)
+				if (result is HaProtocol.ConfigResult.Ok) {
+					onConfig(result.config)
+					weather = result.config.weather
+				}
+				onStatus(result.toStatus())
+			}
+			onWeather(weather?.let { fetchWeather(it, nextId) })
+		}
+	}
+
+	private fun HaProtocol.ConfigResult.toStatus(): HaStatus =
+		when (this) {
+			is HaProtocol.ConfigResult.Ok -> HaStatus.Connected
+			HaProtocol.ConfigResult.NotAdded -> HaStatus.NotAdded
+			is HaProtocol.ConfigResult.Invalid -> HaStatus.InvalidConfig(reason)
+		}
 
 	/** Subscribes only to receive the current state: each refresh also brings the forecast. */
 	private suspend fun DefaultClientWebSocketSession.fetchWeather(
@@ -116,17 +141,25 @@ class HaClient {
 		}
 	}
 
-	/** Keeps reading while it waits, to find out right away if the connection drops. */
+	/** Keeps reading while it waits, to find out right away if the connection drops. A new configuration ends the wait. */
 	private suspend fun DefaultClientWebSocketSession.idleUntilNextRefresh() {
 		withTimeoutOrNull(REFRESH_INTERVAL) {
-			while (true) receiveMessage()
+			while (pendingConfig == null) receiveMessage()
 		}
 	}
 
+	/** Configurations may arrive while waiting for anything else: none is lost. */
 	private suspend fun DefaultClientWebSocketSession.receiveMessage(): JsonObject {
 		while (true) {
 			val frame = incoming.receive()
-			if (frame is Frame.Text) return HaProtocol.parse(frame.readText())
+			if (frame is Frame.Text) {
+				val message = HaProtocol.parse(frame.readText())
+				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {
+					pendingConfig = message
+				} else {
+					return message
+				}
+			}
 		}
 	}
 

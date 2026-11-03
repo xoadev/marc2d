@@ -51,6 +51,8 @@ object PanelDiscovery {
 		topics: PanelTopics,
 		panel: String,
 		model: String,
+		sensors: Boolean = true,
+		siren: Boolean = true,
 	): String =
 		buildJsonObject {
 			putJsonObject("device") {
@@ -62,15 +64,20 @@ object PanelDiscovery {
 			putJsonObject("origin") { put("name", "marc2d") }
 			put("availability_topic", topics.availability)
 			putJsonObject("components") {
-				sensor(topics, "light", "Light", topics.light, "illuminance", "lx")
-				sensor(topics, "battery", "Battery", topics.battery, "battery", "%")
-				sensor(topics, "battery_temperature", "Battery temperature", topics.temperature, "temperature", "°C")
-				putJsonObject("charging") {
-					put("platform", "binary_sensor")
-					put("unique_id", "marc2d_${topics.id}_charging")
-					put("name", "Charging")
-					put("device_class", "battery_charging")
-					put("state_topic", topics.charging)
+				if (sensors) {
+					sensor(topics, "light", "Light", topics.light, "illuminance", "lx")
+					sensor(topics, "battery", "Battery", topics.battery, "battery", "%")
+					sensor(topics, "battery_temperature", "Battery temperature", topics.temperature, "temperature", "°C")
+					putJsonObject("charging") {
+						put("platform", "binary_sensor")
+						put("unique_id", "marc2d_${topics.id}_charging")
+						put("name", "Charging")
+						put("device_class", "battery_charging")
+						put("state_topic", topics.charging)
+					}
+				} else {
+					listOf("light" to "sensor", "battery" to "sensor", "battery_temperature" to "sensor", "charging" to "binary_sensor")
+						.forEach { (key, platform) -> removed(key, platform) }
 				}
 				putJsonObject("mood") {
 					put("platform", "select")
@@ -82,15 +89,27 @@ object PanelDiscovery {
 					put("retain", true)
 					putJsonArray("options") { HaMood.entries.forEach { add(it.label) } }
 				}
-				putJsonObject("siren") {
-					put("platform", "siren")
-					put("unique_id", "marc2d_${topics.id}_siren")
-					put("name", "Siren")
-					put("state_topic", topics.siren)
-					put("command_topic", topics.sirenCommand)
+				if (siren) {
+					putJsonObject("siren") {
+						put("platform", "siren")
+						put("unique_id", "marc2d_${topics.id}_siren")
+						put("name", "Siren")
+						put("state_topic", topics.siren)
+						put("command_topic", topics.sirenCommand)
+					}
+				} else {
+					removed("siren", "siren")
 				}
 			}
 		}.toString()
+
+	/** A component with only its platform makes HA delete an entity that a previous discovery created. */
+	private fun JsonObjectBuilder.removed(
+		key: String,
+		platform: String,
+	) {
+		putJsonObject(key) { put("platform", platform) }
+	}
 
 	private fun JsonObjectBuilder.sensor(
 		topics: PanelTopics,

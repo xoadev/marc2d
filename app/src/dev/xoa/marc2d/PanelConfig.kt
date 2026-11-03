@@ -2,7 +2,7 @@ package dev.xoa.marc2d
 
 import kotlinx.serialization.Serializable
 
-/** The panel's configuration, returned by Home Assistant's `script.marc2d_config`. */
+/** The panel's configuration, pushed by the marc2d integration. What is turned off there does not arrive. */
 @Serializable
 data class PanelConfig(
 	val intercoms: List<IntercomConfig> = emptyList(),
@@ -25,8 +25,10 @@ data class MqttConfig(
 	val port: Int = 1883,
 	val username: String,
 	val password: String,
+	val sensors: Boolean = true,
+	val siren: Boolean = true,
 ) {
-	override fun toString(): String = "MqttConfig(server=$server, port=$port, username=$username)"
+	override fun toString(): String = "MqttConfig(server=$server, port=$port, username=$username, sensors=$sensors, siren=$siren)"
 }
 
 @Serializable

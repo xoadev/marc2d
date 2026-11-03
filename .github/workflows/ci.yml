@@ -1,4 +1,8 @@
 name: ci
+
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -20,12 +24,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+      - name: Format
+        run: uv run --no-project --python 3.14 --with-requirements tests/requirements.txt ruff format --check custom_components tests
+      - name: Lint
+        run: uv run --no-project --python 3.14 --with-requirements tests/requirements.txt ruff check custom_components tests
       - name: Tests
         run: uv run --no-project --python 3.14 --with-requirements tests/requirements.txt pytest
       - uses: home-assistant/actions/hassfest@master
       - uses: hacs/action@main
         with:
           category: integration
+
+  lint-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker://rhysd/actionlint:1.7.12
 
   lint-markdown:
     runs-on: ubuntu-latest

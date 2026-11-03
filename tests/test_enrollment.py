@@ -2,12 +2,13 @@
 
 from unittest.mock import patch
 
-from homeassistant.config_entries import SOURCE_USER
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
 import pytest
 
 from custom_components.marc2d.enrollment import CODE_LIFETIME, DOMAIN, MAX_FAILURES
+from homeassistant.config_entries import SOURCE_USER
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.setup import async_setup_component
 
 URL = "/api/marc2d/enroll"
 
@@ -15,8 +16,6 @@ URL = "/api/marc2d/enroll"
 @pytest.fixture(autouse=True)
 async def setup(hass: HomeAssistant, enable_custom_integrations, hass_owner_user):
     """A home with its owner: otherwise the first user created would become the owner."""
-    from homeassistant.setup import async_setup_component
-
     hass.config.internal_url = "http://192.0.2.20:8123"
     assert await async_setup_component(hass, "http", {})
 
@@ -64,7 +63,10 @@ async def test_full_enrollment_and_revocation(hass, hass_client_no_auth) -> None
 async def test_qr_carries_url_and_code_but_no_token(hass) -> None:
     result = await start_flow(hass)
     config = result["data_schema"].schema["qr"].config
-    assert config["data"] == f"marc2d://enroll?url=http%3A%2F%2F192.0.2.20%3A8123&code={code_of(result)}"
+    assert (
+        config["data"]
+        == f"marc2d://enroll?url=http%3A%2F%2F192.0.2.20%3A8123&code={code_of(result)}"
+    )
 
 
 async def test_submit_before_scanning_keeps_waiting(hass) -> None:
@@ -78,7 +80,9 @@ async def test_expired_code_is_rejected_and_replaced(hass, hass_client_no_auth) 
     with patch("custom_components.marc2d.enrollment.time.monotonic", return_value=0.0):
         result = await start_flow(hass)
     client = await hass_client_no_auth()
-    with patch("custom_components.marc2d.enrollment.time.monotonic", return_value=CODE_LIFETIME + 1):
+    with patch(
+        "custom_components.marc2d.enrollment.time.monotonic", return_value=CODE_LIFETIME + 1
+    ):
         again = await hass.config_entries.flow.async_configure(result["flow_id"], {})
         assert code_of(again) != code_of(result)
         assert (await client.post(URL, json={"code": code_of(result)})).status == 401

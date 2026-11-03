@@ -103,9 +103,9 @@ class PanelRuntime(
 		while (true) {
 			val battery = readings.battery()
 			if (battery != null) {
-				mqtt.publish(PanelTopics::battery, battery.level.toString())
-				mqtt.publish(PanelTopics::temperature, battery.temperature.toString())
-				mqtt.publish(PanelTopics::charging, if (battery.charging) PanelTopics.ON else PanelTopics.OFF)
+				mqtt.publishReading(PanelTopics::battery, battery.level.toString())
+				mqtt.publishReading(PanelTopics::temperature, battery.temperature.toString())
+				mqtt.publishReading(PanelTopics::charging, if (battery.charging) PanelTopics.ON else PanelTopics.OFF)
 			}
 			delay(BATTERY_INTERVAL)
 		}
@@ -117,7 +117,7 @@ class PanelRuntime(
 			_dark.value = lux < DARK_LUX
 			if (PanelReadings.isSignificant(last, lux)) {
 				last = lux
-				mqtt.publish(PanelTopics::light, lux.roundToInt().toString())
+				mqtt.publishReading(PanelTopics::light, lux.roundToInt().toString())
 			}
 		}
 	}

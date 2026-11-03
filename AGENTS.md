@@ -11,25 +11,42 @@ house logic belongs in Home Assistant.
 - `DESIGN.md` is the style of the app and the droid: everything visual follows it.
 - `README.md` has the architecture diagram: update it if the pieces or their connections change.
 
+## Repository map
+
+| Path                        | What it is                                          |
+| --------------------------- | --------------------------------------------------- |
+| `app/`                      | the Android app, in Kotlin and Compose              |
+| `custom_components/marc2d/` | the Home Assistant integration, installed with HACS |
+| `tests/`                    | the integration's tests                             |
+| `plugins/ktlint/`           | our ktlint plugin for Kotlin Toolchain              |
+
 ## Work cycle
 
-Spec, change, `./kotlin check` and `./kotlin build -m app`, commit, PR. Nothing is finished until those
-commands are green. Everything reaches `main` through a PR, from its own branch.
+Spec, change, checks, commit, PR. Nothing is finished until the checks of what you touched are green, and CI runs
+them all. Everything reaches `main` through a PR, from its own branch.
 
 ```sh
+# App
 ./kotlin check               # ktlint, Compose rules and tests
 ./kotlin build -m app        # builds the APK
 ./kotlin do ktlintFormat     # fixes the formatting
+
+# Integration
+alias hapy='uv run --no-project --python 3.14 --with-requirements tests/requirements.txt'
+hapy ruff format custom_components tests
+hapy ruff check custom_components tests
+hapy pytest                  # fails below 90% coverage
 ```
 
-The integration has its own tests, in Python 3.14:
+The build uses Kotlin Toolchain: do not add Gradle. CI also runs hassfest, the HACS validation, actionlint and
+markdownlint with `.markdownlint-cli2.yaml`.
 
-```sh
-uv run --no-project --python 3.14 --with-requirements tests/requirements.txt pytest
-```
+## App and integration
 
-The build uses Kotlin Toolchain: do not add Gradle. CI also runs markdownlint with
-`.markdownlint-cli2.yaml`.
+They change together: the app has no users to keep compatible, so a protocol change goes in one PR, with a test on
+each side. What the panel does is decided in Home Assistant: a new option goes in the integration's form, and whenever
+possible turning it off just leaves it out of the configuration, instead of adding logic to the app. Secrets reach a
+panel only through `marc2d/config/subscribe`, which checks its user.
 
 ## Open project
 
@@ -60,6 +77,12 @@ repo.
 
 Tokens, passwords and the addresses of other installs are kept in the app's private storage, never in the
 repo, logs or tests. Android backups are disabled for this reason: do not re-enable them.
+
+## Tests
+
+Every behavior change comes with a test, and every bug fix with one that failed before. Test against real behavior:
+the integration's tests run a real Home Assistant, so do not mock its flows. Never put real addresses or secrets in
+tests.
 
 ## Testing with real devices
 

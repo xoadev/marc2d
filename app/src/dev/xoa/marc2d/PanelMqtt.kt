@@ -41,6 +41,7 @@ class PanelMqtt(
 		val next = config?.let { it to panel }
 		if (next == applied) return
 		applied = next
+		if (config?.siren == false) onSiren(false)
 		job?.cancel()
 		live = null
 		_status.value = if (config == null) MqttStatus.Off else MqttStatus.Connecting
@@ -53,6 +54,18 @@ class PanelMqtt(
 	) {
 		if (values.put(select, value) == value) return
 		live?.let { (session, topics) -> session.publish(select(topics), value, retain = true) }
+	}
+
+	/** Stops at the door if the sensors are turned off, and what was held is not sent again either. */
+	fun publishReading(
+		select: (PanelTopics) -> String,
+		value: String,
+	) {
+		if (applied?.first?.sensors != false) {
+			publish(select, value)
+		} else {
+			values.remove(select)
+		}
 	}
 
 	/** Tells the other panels to stop ringing. */
@@ -81,14 +94,14 @@ class PanelMqtt(
 					options = options,
 					onConnected = { session ->
 						wait = MIN_RETRY_SECONDS
-						announce(session, topics, panel)
+						announce(session, topics, panel, config)
 						live = session to topics
 						_status.value = MqttStatus.Connected
 					},
 					onMessage = { topic, payload ->
 						// It arrives on the client's thread, and these commands are handled from the panel's.
 						if (topic == topics.sirenCommand) {
-							scope.launch { onSiren(payload == PanelTopics.ON) }
+							if (config.siren) scope.launch { onSiren(payload == PanelTopics.ON) }
 						} else if (topic == topics.moodCommand) {
 							scope.launch { onMood(payload) }
 						} else if (topic.startsWith(PanelTopics.DOORBELL_PREFIX)) {
@@ -112,11 +125,12 @@ class PanelMqtt(
 		session: MqttSession,
 		topics: PanelTopics,
 		panel: String,
+		config: MqttConfig,
 	) {
-		session.subscribe(topics.sirenCommand)
+		if (config.siren) session.subscribe(topics.sirenCommand)
 		session.subscribe(topics.moodCommand)
 		session.subscribe(PanelTopics.DOORBELL_PREFIX + "+")
-		session.publish(topics.discovery, PanelDiscovery.payload(topics, panel, model), retain = true)
+		session.publish(topics.discovery, PanelDiscovery.payload(topics, panel, model, config.sensors, config.siren), retain = true)
 		session.publish(topics.availability, PanelTopics.ONLINE, retain = true)
 		values.forEach { (select, value) -> session.publish(select(topics), value, retain = true) }
 	}

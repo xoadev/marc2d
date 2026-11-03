@@ -83,7 +83,7 @@ Verified against a VTO2202F (UDP 5060), which is Asterisk inside:
 
 ## MQTT
 
-The panel connects to the broker named in the configuration and registers itself in HA, with
+The panel connects to the broker named in the configuration, if MQTT is on, and registers itself in HA, with
 device discovery (`homeassistant/device/marc2d_<panel>/config`). If it goes down, the
 MQTT last will marks it as `unavailable`. The intercom does not depend on MQTT.
 
@@ -145,26 +145,34 @@ decided.
 ## Configuration
 
 In the app you only enroll the panel, which gives it its URL, token and name. Each panel has its own name, such as
-`kitchen`, from which its MQTT topics and its entities come. Everything else
-comes from HA, from the `script.marc2d_config` script, which the panel calls on connecting and every 10 minutes and
-which receives the panel's name in the `panel` variable and returns:
+`kitchen`, from which its MQTT topics and its entities come. Everything else is set in HA, in the panel's options in
+the integration, and the panel receives it right away through `marc2d/config/subscribe`:
 
 ```json
 {
   "intercoms": [
-    { "name": "Parking", "server": "192.0.2.10", "extension": "9901#1", "password": "…" }
+    { "name": "Parking", "server": "192.0.2.10", "extension": "9901#1", "password": "…", "number": "8001" }
   ],
   "weather": "weather.home",
-  "mqtt": { "server": "192.0.2.20", "port": 1883, "username": "…", "password": "…" },
+  "mqtt": { "server": "192.0.2.20", "port": 1883, "username": "…", "password": "…", "sensors": true, "siren": true },
   "cameras": [
     { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
   ]
 }
 ```
 
-- It is a script because it is edited from the HA interface and the password does not end up in an entity, in
-  view of all users and in the history. It does appear in the script traces, for
-  administrators only.
+| Toggle          | When it is off                                                |
+| --------------- | ------------------------------------------------------------- |
+| Intercom (SIP)  | no intercoms are sent: the panel unregisters                  |
+| Cameras         | no cameras are sent: the menu hides them                      |
+| Weather         | no weather entity is sent: the panel hides it                 |
+| MQTT            | no connection: no doorbell, sensors, siren or states from HA  |
+| Publish sensors | HA deletes those entities and the panel stops publishing them |
+| Siren           | HA deletes the entity and the panel ignores the command       |
+
+- What is off is left out of the response, so the panel needs no logic for most toggles.
+- The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
+  way. Administrators can see them in the form, masked.
 - It is kept in the app's private storage, along with the connection, and never in the repo: the
   panel keeps handling calls even if HA is down.
 - The presence detector and camera publishing will be added to this response in their
@@ -180,21 +188,19 @@ which receives the panel's name in the `panel` variable and returns:
 
 ## Home Assistant integration
 
-Our own integration, installable with HACS, in `custom_components/marc2d/`. It will replace the configuration
-script and MQTT, so that installing marc2d does not require Mosquitto or writing YAML. It requires HA 2026.10.
+Our own integration, installable with HACS, in `custom_components/marc2d/`. It replaces the configuration
+script and will replace MQTT, so that installing marc2d does not require Mosquitto or writing YAML. It requires HA 2026.10.
 
 - **Enrollment (done):** the panel is added in HA, which shows a QR code with the internal URL and a one-time code
   that expires in 10 minutes. The panel scans it with the front camera, or types both, and exchanges the code at
   `POST /api/marc2d/enroll` for a token. The QR code never carries the token. Each panel gets its own
   unprivileged, local-only user: removing the panel in HA removes that user and revokes its access. The endpoint has
   no authentication, so 10 wrong codes kill every open code.
-- **Configuration (pending):** per-panel forms in HA: intercoms, weather, cameras and the doorbell button
-  entity.
+- **Configuration (done):** per-panel form in HA; see [Configuration](#configuration).
 - **Entities (pending):** its own, over the WebSocket the panel already uses. If it closes, the panel becomes
   `unavailable`.
-- **To be decided:** the protocol between the panel and the integration.
-
-MQTT and the script stay until the integration works in a real home.
+MQTT stays until the integration has its own entities and works in a real home. The doorbell button entity will
+move to the form with them.
 
 ## Decisions
 

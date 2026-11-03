@@ -22,7 +22,6 @@ import kotlinx.serialization.json.putJsonObject
 
 /** The Home Assistant WebSocket API messages the panel uses. */
 object HaProtocol {
-	private const val CONFIG_SCRIPT = "marc2d_config"
 	private val json = Json { ignoreUnknownKeys = true }
 
 	sealed interface ConfigResult {
@@ -30,7 +29,7 @@ object HaProtocol {
 			val config: PanelConfig,
 		) : ConfigResult
 
-		data object MissingScript : ConfigResult
+		data object NotAdded : ConfigResult
 
 		data class Invalid(
 			val reason: String,
@@ -54,17 +53,10 @@ object HaProtocol {
 			put("access_token", token)
 		}.toString()
 
-	fun configRequest(
-		id: Int,
-		panel: String,
-	): String =
+	fun configSubscribe(id: Int): String =
 		buildJsonObject {
 			put("id", id)
-			put("type", "call_service")
-			put("domain", "script")
-			put("service", CONFIG_SCRIPT)
-			putJsonObject("service_data") { put("panel", panel) }
-			put("return_response", true)
+			put("type", "marc2d/config/subscribe")
 		}.toString()
 
 	fun entityState(
@@ -153,26 +145,30 @@ object HaProtocol {
 
 	fun id(message: JsonObject): Int? = message["id"]?.jsonPrimitive?.int
 
-	fun configResult(message: JsonObject): ConfigResult {
-		if (message["success"]?.jsonPrimitive?.booleanOrNull != true) {
-			val error = message["error"]?.jsonObject
-			val code = error?.get("code")?.jsonPrimitive?.content
-			return if (code == "not_found" || code == "service_not_found") {
-				ConfigResult.MissingScript
-			} else {
-				ConfigResult.Invalid(code ?: "unknown error")
-			}
+	/** Why Home Assistant refused the subscription. */
+	fun subscribeError(message: JsonObject): ConfigResult {
+		val code =
+			message["error"]
+				?.jsonObject
+				?.get("code")
+				?.jsonPrimitive
+				?.content
+		return if (code == "not_found" || code == "unknown_command") {
+			ConfigResult.NotAdded
+		} else {
+			ConfigResult.Invalid(code ?: "unknown error")
 		}
-		val response =
-			message["result"]?.jsonObject?.get("response")
-				?: return ConfigResult.Invalid("the script returns nothing")
+	}
+
+	fun configEvent(message: JsonObject): ConfigResult {
+		val config = message["event"] ?: return ConfigResult.Invalid("empty configuration")
 		return try {
-			ConfigResult.Ok(json.decodeFromJsonElement<PanelConfig>(response))
+			ConfigResult.Ok(json.decodeFromJsonElement<PanelConfig>(config))
 		} catch (_: SerializationException) {
-			// The exception's message could include values from the script, such as passwords.
-			ConfigResult.Invalid("the script response does not have the expected format")
+			// The exception's message could include values from the configuration, such as passwords.
+			ConfigResult.Invalid("the configuration does not have the expected format")
 		} catch (_: IllegalArgumentException) {
-			ConfigResult.Invalid("the script response does not have the expected format")
+			ConfigResult.Invalid("the configuration does not have the expected format")
 		}
 	}
 }
