@@ -12,8 +12,8 @@ import android.content.IntentFilter
 class PanelAdminReceiver : DeviceAdminReceiver()
 
 /**
- * Modo quiosco. Solo se activa si la app es propietaria del dispositivo, algo que se configura por
- * `adb` una vez: `dpm set-device-owner dev.xoa.marc2d/.PanelAdminReceiver`.
+ * Kiosk mode. It only activates if the app is the device owner, which is set up over
+ * `adb` once: `dpm set-device-owner dev.xoa.marc2d/.PanelAdminReceiver`.
  */
 class Kiosk(
 	private val activity: Activity,
@@ -24,13 +24,13 @@ class Kiosk(
 	val isAvailable: Boolean
 		get() = policies.isDeviceOwnerApp(activity.packageName)
 
-	/** Aplica la política y fija la app. Se llama cada vez que el panel vuelve a primer plano. */
+	/** Applies the policy and pins the app. Called every time the panel returns to the foreground. */
 	fun enter() {
 		if (!isAvailable) return
 
 		policies.setLockTaskPackages(admin, arrayOf(activity.packageName))
 		policies.setLockTaskFeatures(admin, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
-		// Un panel de pared tiene que volver solo tras un corte de luz, sin que nadie lo desbloquee.
+		// A wall panel has to come back by itself after a power cut, without anyone unlocking it.
 		policies.setKeyguardDisabled(admin, true)
 		policies.setStatusBarDisabled(admin, true)
 		policies.addPersistentPreferredActivity(
@@ -49,12 +49,12 @@ class Kiosk(
 		if (manager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) activity.startLockTask()
 	}
 
-	/** Suelta la app hasta que el panel vuelva a primer plano, para abrir los ajustes de Android. */
+	/** Releases the app until the panel returns to the foreground, to open the Android settings. */
 	fun pause() {
 		if (isAvailable) activity.stopLockTask()
 	}
 
-	/** Deshace todo: la app deja de ser propietaria del dispositivo y se puede desinstalar. */
+	/** Undoes everything: the app stops being the device owner and can be uninstalled. */
 	fun remove() {
 		if (!isAvailable) return
 

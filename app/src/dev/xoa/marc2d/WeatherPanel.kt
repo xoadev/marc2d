@@ -19,8 +19,8 @@ private val PrimaryColor = Color(0xFFD8D8D8)
 private val SecondaryColor = Color(0xFFA0A0A0)
 
 /**
- * El tiempo actual y la previsión hora a hora: en columnas si hay anchura de sobra encima de la
- * hora, como en vertical, y en lista si no, como en apaisado.
+ * The current weather and the hourly forecast: in columns if there is plenty of width above the
+ * time, as in portrait, and in a list if not, as in landscape.
  */
 @Composable
 fun WeatherPanel(

@@ -33,7 +33,7 @@ import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.delay
 
-// Fondo negro y blanco atenuado: las pantallas son OLED y están encendidas muchas horas.
+// Black background and dimmed white: the screens are OLED and stay on for many hours.
 private val ClockColor = Color(0xFFD8D8D8)
 private val DateColor = Color(0xFFA0A0A0)
 private val WarningColor = Color(0xFFE0A030)
@@ -75,7 +75,7 @@ fun ClockScreen(
 					.align(Alignment.Center)
 					.fillMaxWidth()
 					.offset(offsetX.dp, offsetY.dp)
-					// En apaisado la previsión va en una lista a la derecha de la hora.
+					// In landscape the forecast goes in a list to the right of the time.
 					.padding(start = 24.dp, end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp),
 			horizontalAlignment = Alignment.CenterHorizontally,
 			verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -84,13 +84,13 @@ fun ClockScreen(
 				text = ClockFormat.time(now),
 				maxLines = 1,
 				autoSize = TextAutoSize.StepBased(minFontSize = 48.sp, maxFontSize = 320.sp),
-				// En apaisado es la altura, no la anchura, la que limita el tamaño de la hora.
+				// In landscape it is the height, not the width, that limits the size of the time.
 				modifier = Modifier.heightIn(max = clockMaxHeight),
 				style =
 					TextStyle(
 						color = ClockColor,
 						fontWeight = FontWeight.Light,
-						// Cifras de ancho fijo: la hora no baila al cambiar de minuto.
+						// Fixed-width digits: the time does not jump around when the minute changes.
 						fontFeatureSettings = "tnum",
 						textAlign = TextAlign.Center,
 					),

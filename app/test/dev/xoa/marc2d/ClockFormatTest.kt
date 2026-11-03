@@ -11,17 +11,17 @@ class ClockFormatTest {
 	private val now = LocalDateTime.of(2026, 11, 2, 7, 5, 30)
 
 	@Test
-	fun `la hora va en 24 horas con ceros`() {
+	fun `the time uses 24 hours with leading zeros`() {
 		assertEquals("07:05", ClockFormat.time(now))
 	}
 
 	@Test
-	fun `la fecha lleva dia y mes y empieza en mayuscula`() {
-		assertEquals("Lunes, 2 de noviembre", ClockFormat.date(now, Locale.forLanguageTag("es-ES")))
+	fun `the date has weekday and month and starts with a capital`() {
+		assertEquals("Monday, November 2", ClockFormat.date(now, Locale.forLanguageTag("en-US")))
 	}
 
 	@Test
-	fun `la hora cambia de sitio cada minuto sin alejarse`() {
+	fun `the time moves every minute without drifting away`() {
 		assertNotEquals(ClockFormat.burnInOffset(now), ClockFormat.burnInOffset(now.plusMinutes(1)))
 		(0..59).map { ClockFormat.burnInOffset(now.withMinute(it)) }.forEach { (x, y) ->
 			assertTrue(x in -8..8 && y in -8..8)
@@ -29,7 +29,7 @@ class ClockFormatTest {
 	}
 
 	@Test
-	fun `calcula el tiempo hasta el siguiente minuto`() {
+	fun `computes the time until the next minute`() {
 		assertEquals(30_000L, ClockFormat.millisToNextMinute(now))
 	}
 }

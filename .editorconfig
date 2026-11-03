@@ -14,7 +14,7 @@ ktlint_code_style = ktlint_official
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
 ij_kotlin_imports_layout = *,java.**,javax.**,kotlin.**,kotlinx.**
-# Los @Composable se nombran en PascalCase.
+# @Composable functions are named in PascalCase.
 ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [*.xml]

@@ -23,7 +23,7 @@ import kotlinx.coroutines.delay
 private val AUTO_CLOSE = 10.seconds
 private val MENU_BUTTON = 160.dp
 
-/** Se abre tocando la pantalla principal, y se cierra solo para no dejar nada fijo en el OLED. */
+/** Opens by tapping the main screen, and closes by itself so as not to leave anything fixed on the OLED. */
 @Composable
 fun PanelMenu(
 	onCameras: (() -> Unit)?,
@@ -47,7 +47,7 @@ fun PanelMenu(
 		PixelButton(
 			icon = PixelIcon.Close,
 			size = CLOSE_BUTTON,
-			description = "Cerrar",
+			description = "Close",
 			onClick = onClose,
 			modifier =
 				Modifier
@@ -55,8 +55,8 @@ fun PanelMenu(
 					.padding(24.dp),
 		)
 		Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-			if (onCameras != null) PixelButton(PixelIcon.Camera, "Cámaras", onCameras, size = MENU_BUTTON)
-			PixelButton(PixelIcon.Settings, "Ajustes", onSettings, size = MENU_BUTTON)
+			if (onCameras != null) PixelButton(PixelIcon.Camera, "Cameras", onCameras, size = MENU_BUTTON)
+			PixelButton(PixelIcon.Settings, "Settings", onSettings, size = MENU_BUTTON)
 		}
 	}
 }

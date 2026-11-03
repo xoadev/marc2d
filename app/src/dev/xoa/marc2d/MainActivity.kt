@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
-		// En código porque `screenOrientation` en el manifiesto no surtió efecto en la 3a.
+		// In code because `screenOrientation` in the manifest had no effect on the 3a.
 		requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
 		val runtime = (application as Marc2dApp).runtime
 
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
 						.map { it.cameras }
 						.collectAsState(initial = emptyList())
 
-					// Durante una llamada la pantalla no se apaga.
+					// The screen does not turn off during a call.
 					LocalView.current.keepScreenOn = call != null || camerasOpen
 
 					val activeCall = call
@@ -155,7 +155,7 @@ class MainActivity : ComponentActivity() {
 		if (missing.isEmpty()) startPanel() else permissions.launch(missing.toTypedArray())
 	}
 
-	/** En `onStart` Android aún no deja fijar la app: la actividad todavía no tiene el foco. */
+	/** In `onStart` Android does not yet allow pinning the app: the activity does not have focus yet. */
 	override fun onResume() {
 		super.onResume()
 		kiosk.enter()
@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
 		micGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 	}
 
-	/** El servicio es de tipo `microphone`: sin el permiso, Android no deja arrancarlo. */
+	/** The service is of type `microphone`: without the permission, Android does not let it start. */
 	private fun startPanel() {
 		if (micGranted) startForegroundService(Intent(this, PanelService::class.java))
 	}

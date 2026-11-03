@@ -24,8 +24,8 @@ data class HaConnection(
 }
 
 /**
- * Guarda en el almacenamiento privado de la app la conexión con Home Assistant y la última
- * configuración recibida, para que el panel atienda llamadas aunque Home Assistant esté caído.
+ * Keeps in the app's private storage the connection to Home Assistant and the last
+ * configuration received, so that the panel handles calls even if Home Assistant is down.
  */
 class PanelStore(
 	private val context: Context,

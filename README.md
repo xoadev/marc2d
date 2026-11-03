@@ -1,32 +1,33 @@
 # marc2d
 
 **M**óvil **A**ndroid **R**eciclado **C**omo **C**onsola **D**omótica: MAR + C² + D.
+(Spanish for "recycled Android phone as a home automation console".)
 
-App Android que convierte un móvil fijo en la pared en la consola de la casa. Atiende los telefonillos
-por SIP, muestra y ejecuta lo que le pide Home Assistant y, si se activa, ofrece su cámara a Frigate.
-La lógica de la casa sigue en Home Assistant: el panel no es la centralita.
+Android app that turns a phone fixed to the wall into the console of the house. It handles the intercoms
+over SIP, shows and carries out what Home Assistant asks of it and, if enabled, offers its camera to Frigate.
+The house logic stays in Home Assistant: the panel is not the control hub.
 
-El proyecto está en pruebas y sin usuarios. Todavía es un esqueleto: el alcance y el orden de entrega
-están en [SPEC.md](SPEC.md).
+The project is in testing and has no users. It is still a skeleton: the scope and delivery order
+are in [SPEC.md](SPEC.md).
 
-## Arquitectura
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph casa["Red de casa"]
-        subgraph panel["Panel: Pixel alimentada por PoE"]
-            ui["UI Compose<br/>hora, tiempo, llamada"]
-            svc["Servicio en primer plano"]
+    subgraph home["Home network"]
+        subgraph panel["Panel: Pixel powered by PoE"]
+            ui["Compose UI<br/>time, weather, call"]
+            svc["Foreground service"]
             sip["Linphone SDK"]
-            hac["Cliente de HA<br/>Ktor"]
-            mq["Cliente MQTT"]
-            rtsp["Servidor RTSP<br/>opcional"]
-            sys["Android<br/>TTS, audio, pantalla, cámara"]
+            hac["HA client<br/>Ktor"]
+            mq["MQTT client"]
+            rtsp["RTSP server<br/>optional"]
+            sys["Android<br/>TTS, audio, screen, camera"]
         end
-        vto["Telefonillos Dahua VTO<br/>servidor SIP"]
+        vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
         broker["Mosquitto"]
-        frigate["Frigate o similar"]
+        frigate["Frigate or similar"]
     end
 
     ui <--> svc
@@ -36,60 +37,60 @@ flowchart LR
     svc --> rtsp
     svc --> sys
     rtsp --> sys
-    sip <-- "SIP y RTP<br/>registro, llamada, audio y vídeo" --> vto
-    hac <-- "WebSocket<br/>entidades, eventos, Assist" --> ha
-    mq <-- "MQTT<br/>sensores, sirena" --> broker
+    sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
+    hac <-- "WebSocket<br/>entities, events, Assist" --> ha
+    mq <-- "MQTT<br/>sensors, siren" --> broker
     broker <--> ha
     frigate -- "RTSP" --> rtsp
 ```
 
-| Conexión  | Quién la inicia | Para qué                                                             |
-| --------- | --------------- | -------------------------------------------------------------------- |
-| SIP y RTP | los dos         | el panel se registra; el telefonillo llama; audio y vídeo            |
-| WebSocket | el panel        | configuración, `weather.*`, `binary_sensor.*`, Assist                |
-| MQTT      | el panel        | alta de entidades, sensores, sirena y disponibilidad                 |
-| RTSP      | Frigate         | leer el vídeo de la cámara del panel                                 |
+| Connection  | Who starts it | What for                                                 |
+| ----------- | ------------- | -------------------------------------------------------- |
+| SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
+| WebSocket   | the panel     | configuration, `weather.*`, `binary_sensor.*`, Assist    |
+| MQTT        | the panel     | entity creation, sensors, siren and availability         |
+| RTSP        | Frigate       | reading the video from the panel's camera                |
 
-El telefonillo solo funciona desde la red de casa: por Tailscale, el SNAT del router de subred impide que
-el telefonillo alcance al panel.
+The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
+intercom from reaching the panel.
 
 ## Stack
 
-Kotlin y Jetpack Compose sobre Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
-DataStore, RootEncoder y RTSP-Server. Los motivos están en [SPEC.md](SPEC.md#decisiones).
+Kotlin and Jetpack Compose on Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
+DataStore, RootEncoder and RTSP-Server. The reasons are in [SPEC.md](SPEC.md#decisions).
 
-## Desarrollo
+## Development
 
-El script `./kotlin` descarga lo que necesita, sin instalar nada antes.
+The `./kotlin` script downloads what it needs, with nothing to install first.
 
 ```sh
-./kotlin build -m app        # compila la APK
-./kotlin check               # ktlint, reglas de Compose y tests
-./kotlin do ktlintFormat     # corrige el formato
+./kotlin build -m app        # builds the APK
+./kotlin check               # ktlint, Compose rules and tests
+./kotlin do ktlintFormat     # fixes the formatting
 
-adb -s <serie> install -r build/tasks/_app_buildAndroidDebug/gradle-project-debug.apk
+adb -s <serial> install -r build/tasks/_app_buildAndroidDebug/gradle-project-debug.apk
 ```
 
-La CI ejecuta lo mismo y además markdownlint. Las normas de trabajo están en [AGENTS.md](AGENTS.md).
+CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS.md).
 
-## Puesta en marcha de un panel
+## Setting up a panel
 
-1. En Home Assistant, crea `script.marc2d_config` con el formato de [SPEC.md](SPEC.md#configuración) y un token de
-   larga duración.
-2. Instala la APK en un móvil sin bloqueo de pantalla ni cuentas, y actívale el modo quiosco:
+1. In Home Assistant, create `script.marc2d_config` with the format in [SPEC.md](SPEC.md#configuration) and a
+   long-lived token.
+2. Install the APK on a phone with no screen lock or accounts, and enable kiosk mode on it:
 
    ```sh
-   adb -s <serie> shell dpm set-device-owner dev.xoa.marc2d/.PanelAdminReceiver
+   adb -s <serial> shell dpm set-device-owner dev.xoa.marc2d/.PanelAdminReceiver
    ```
 
-3. En LineageOS con la red restringida activada, las apps nuevas no tienen red. Ve a Ajustes, Aplicaciones, marc2d,
-   **Uso de datos con Wi-Fi** y activa **Permitir acceso a la red**. Si no, la app falla con `UnknownHostException` o
-   `SocketTimeoutException` aunque el móvil llegue a Home Assistant.
-4. Abre la app e introduce la URL de Home Assistant y el token.
+3. On LineageOS with restricted networking enabled, new apps have no network. Go to Settings, Apps, marc2d,
+   **Wi-Fi data usage** and enable **Allow network access**. Otherwise the app fails with `UnknownHostException` or
+   `SocketTimeoutException` even though the phone can reach Home Assistant.
+4. Open the app and enter the Home Assistant URL and the token.
 
-Mientras la app sea propietaria del dispositivo, Android no deja desinstalarla. Para deshacerlo: pulsación larga en
-el reloj y **Salir del modo quiosco**.
+While the app is the device owner, Android will not let you uninstall it. To undo this: long-press the
+clock and choose **Exit kiosk mode**.
 
-## Licencia
+## License
 
 [GPLv3](LICENSE).

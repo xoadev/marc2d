@@ -65,8 +65,8 @@ private val BASES =
 	)
 
 /**
- * El droide de la pantalla principal. Se mueve a saltos para no quemar el OLED, y al cambiar de estado
- * se queda donde esté. Dormido, cada 20 minutos anda hasta otro sitio y vuelve a dormirse.
+ * The droid on the main screen. It moves in jumps so as not to burn the OLED, and when its state changes
+ * it stays where it is. Asleep, every 20 minutes it walks to another spot and goes back to sleep.
  */
 @Composable
 fun BoxWithConstraintsScope.DroidSprite(
@@ -143,7 +143,7 @@ fun BoxWithConstraintsScope.DroidSprite(
 				.offset(x = track * position)
 				.size(size),
 	) {
-		// Tamaño entero: con decimales aparecen líneas entre los píxeles.
+		// Whole-number size: with decimals, lines appear between the pixels.
 		val pixel = floor(this.size.width / SPRITE_PIXELS).coerceAtLeast(1f)
 		val base = if (moving) BASES[1 + frame % 2] else BASES[0]
 		(HEAD + base).forEachIndexed { y, row ->
@@ -209,7 +209,7 @@ private fun DrawScope.eye(
 	}
 }
 
-/** El brillo mira hacia donde va. */
+/** The glint looks where it is going. */
 private fun DrawScope.openEye(
 	pixel: Float,
 	direction: Int,

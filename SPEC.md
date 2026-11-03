@@ -1,221 +1,222 @@
 # marc2d
 
 **M**óvil **A**ndroid **R**eciclado **C**omo **C**onsola **D**omótica: MAR + C² + D.
+(Spanish for "recycled Android phone as a home automation console".)
 
-App Android para un panel de pared: un móvil fijo, alimentado por PoE, que hace de consola de la
-casa. No es la centralita: la lógica vive en Home Assistant (HA) y en los telefonillos, y el panel
-se conecta a ellos y expone sus funciones:
+Android app for a wall panel: a fixed phone, powered by PoE, that acts as the console of the
+house. It is not the control hub: the logic lives in Home Assistant (HA) and the intercoms, and the panel
+connects to them and exposes their functions:
 
-- A Home Assistant, por su API WebSocket: muestra sus datos y atiende sus eventos.
-- A los telefonillos, por SIP: atiende sus llamadas.
-- Opcionalmente, ofrece su cámara a Frigate o a un sistema similar.
+- To Home Assistant, through its WebSocket API: it shows its data and handles its events.
+- To the intercoms, over SIP: it handles their calls.
+- Optionally, it offers its camera to Frigate or a similar system.
 
-El diagrama de arquitectura está en el [README](README.md#arquitectura).
+The architecture diagram is in the [README](README.md#architecture).
 
-El proyecto está en pruebas y sin usuarios: se rompe lo que haga falta.
+The project is in testing and has no users: break whatever needs breaking.
 
-## Pantalla principal
+## Main screen
 
-- La hora en grande y la fecha.
-- En la esquina superior derecha, el tiempo actual y la previsión de las próximas 8 horas, en blanco
-  y gris, en una lista junto a la hora. Salen de la entidad
-  `weather.*` que indica la configuración, no de un servicio propio. Se actualizan cada 10 minutos y
-  se ocultan si el dato tiene más de una hora.
-- Abajo, un aviso solo si algo falla: HA, el registro en un telefonillo o el permiso del micrófono.
-- Tocar en cualquier sitio abre el menú, con **Cámaras** y **Ajustes**.
+- The time in large type and the date.
+- In the top right corner, the current weather and the forecast for the next 8 hours, in white
+  and gray, in a list next to the time. They come from the `weather.*` entity
+  named in the configuration, not from a service of our own. They update every 10 minutes and
+  are hidden if the data is more than an hour old.
+- At the bottom, a warning only if something fails: HA, registration with an intercom or the microphone permission.
+- Tapping anywhere opens the menu, with **Cameras** and **Settings**.
 
-### Cámaras
+### Cameras
 
-Salen de `cameras` en la configuración, con su entidad `camera.*` de HA, que da el vídeo por MJPEG con el
-token del panel, sin credenciales nuevas. Se pasa de una a otra deslizando, y solo se descarga la que se
-ve. Si tiene `intercom`, muestra **Hablar**, que llama a ese telefonillo. Otro panel aparecerá aquí
-cuando publique su cámara y esté en HA: hablar con él queda por decidir.
+They come from `cameras` in the configuration, with their HA `camera.*` entity, which provides the video as MJPEG
+using the panel's token, with no new credentials. You swipe from one to the next, and only the visible one is
+downloaded. If it has `intercom`, it shows **Talk**, which calls that intercom. Another panel will appear here
+once it publishes its camera and is in HA: talking to it is still to be decided.
 
-### Droide
+### Droid
 
-Un sprite de 16×16 en blanco y negro pasea a saltos por la franja de abajo: evita quemar el OLED, y el
-color del ojo solo aparece cuando algo importa. Al cambiar de estado se queda donde esté. Dormido, cada
-20 minutos anda hasta otro sitio y vuelve a dormirse.
+A 16×16 black and white sprite walks in jumps along the bottom strip: it avoids burning the OLED, and the
+eye color only appears when something matters. When its state changes it stays where it is. Asleep, every
+20 minutes it walks to another spot and goes back to sleep.
 
-| Estado       | Ojo                  | Quién lo activa                                         |
-| ------------ | -------------------- | ------------------------------------------------------- |
-| Intruso      | franja roja          | HA, con `select.*_estado`                               |
-| Alarma       | amarillo             | HA, con `select.*_estado`                               |
-| Grabando     | objetivo rojo        | HA, con `select.*_estado`                               |
-| Sin conexión | una X                | el panel, si hay algún aviso en pantalla                |
-| Durmiendo    | cerrado              | el panel, por debajo de 5 lx                            |
-| Paseo        | mira hacia donde va  | el panel, si no hay nada más                            |
+| State     | Eye                     | What triggers it                             |
+| --------- | ----------------------- | -------------------------------------------- |
+| Intruder  | red band                | HA, with `select.*_state`                   |
+| Alarm     | yellow                  | HA, with `select.*_state`                   |
+| Recording | red lens                | HA, with `select.*_state`                   |
+| Offline   | an X                    | the panel, if there is any warning on screen |
+| Sleeping  | closed                  | the panel, below 5 lx                        |
+| Walking   | looks where it is going | the panel, if nothing else applies           |
 
-El orden de la tabla es la prioridad. Lo que manda HA se retiene en MQTT: al reiniciarse, el panel
-recupera la alarma que estuviera activa.
+The table order is the priority. What HA commands is retained in MQTT: on restart, the panel
+recovers whatever alarm was active.
 
-## Telefonillo
+## Intercom
 
-- El panel se registra como extensión SIP en el telefonillo, que hace de servidor SIP.
-- HA detecta la pulsación con la integración de Dahua y publica `RING` en
-  `marc2d/doorbell/<telefonillo>`, sin retener. Todos los paneles suenan, aunque la app esté en
-  segundo plano, y dejan de sonar a los 45 segundos.
-- Al descolgar, el panel publica `ANSWERED`, los demás dejan de sonar, y llama por SIP al número del
-  telefonillo (`number`, por defecto `8001`). El VTO descuelga solo y da audio en los dos sentidos y
-  vídeo. Si cae HA o Mosquitto, los paneles no suenan, pero DMSS sigue funcionando.
-- También se atiende una llamada SIP entrante a la extensión.
-- Desde su cámara, **Hablar** llama al telefonillo sin que hayan pulsado el timbre.
-- Solo en la red de casa. Desde fuera, por Tailscale, el router de subred hace SNAT y el
-  telefonillo no alcanza el `Contact` del panel.
-- Fuera de esta versión: abrir la puerta.
+- The panel registers as a SIP extension on the intercom, which acts as the SIP server.
+- HA detects the button press with the Dahua integration and publishes `RING` to
+  `marc2d/doorbell/<intercom>`, not retained. All panels ring, even if the app is in the
+  background, and stop ringing after 45 seconds.
+- On answering, the panel publishes `ANSWERED`, the others stop ringing, and it calls the intercom's
+  number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
+  video. If HA or Mosquitto goes down, the panels do not ring, but DMSS keeps working.
+- An incoming SIP call to the extension is also handled.
+- From its camera, **Talk** calls the intercom without the doorbell having been pressed.
+- Home network only. From outside, over Tailscale, the subnet router does SNAT and the
+  intercom cannot reach the panel's `Contact`.
+- Outside this version: opening the door.
 
 ### Dahua VTO
 
-Comprobado contra un VTO2202F (UDP 5060), que por dentro es un Asterisk:
+Verified against a VTO2202F (UDP 5060), which is Asterisk inside:
 
-- La extensión `9901#1` se registra (`200 OK`) con la URI `sip:9901%231@<vto>`, con la
-  `#` escapada, y el usuario de Digest `9901#1`, literal.
-- El reto es `realm="asterisk"`, MD5 y sin `qop`.
-- El botón llama al grupo `9901`, y ninguna extensión recibe ese `INVITE`: el servidor se queda en
-  `100 Trying`. Las llamadas directas a una extensión sí llegan. No se cambia el número del botón
-  para no arriesgar DMSS, que recibe el timbre por otra vía.
-- El VTO acepta llamadas a `8001`: audio PCMU en los dos sentidos y vídeo H.264 hacia el panel. Justo
-  tras una pulsación no contesta, mientras dura su propia llamada al grupo: el panel reintenta cada 2
-  segundos, hasta 45.
-- Un equipo que llega al VTO por la ruta de subred de Tailscale (`--accept-routes`) sale con SNAT
-  y el resultado no vale: la prueba se hace desde la LAN directa.
+- Extension `9901#1` registers (`200 OK`) with the URI `sip:9901%231@<vto>`, with the
+  `#` escaped, and the Digest user `9901#1`, literal.
+- The challenge is `realm="asterisk"`, MD5 and without `qop`.
+- The button calls group `9901`, and no extension receives that `INVITE`: the server stays at
+  `100 Trying`. Direct calls to an extension do arrive. The button number is not changed
+  so as not to risk DMSS, which receives the doorbell by another route.
+- The VTO accepts calls to `8001`: two-way PCMU audio and H.264 video to the panel. Right
+  after a button press it does not answer, while its own group call lasts: the panel retries every 2
+  seconds, for up to 45.
+- A device that reaches the VTO through the Tailscale subnet route (`--accept-routes`) leaves with SNAT
+  and the result is not valid: test from the direct LAN.
 
 ## MQTT
 
-El panel se conecta al broker que indica la configuración y se da de alta solo en HA, con el
-autodescubrimiento de dispositivos (`homeassistant/device/marc2d_<panel>/config`). Si se cae, el
-testamento de MQTT lo deja como `unavailable`. El telefonillo no depende de MQTT.
+The panel connects to the broker named in the configuration and registers itself in HA, with
+device discovery (`homeassistant/device/marc2d_<panel>/config`). If it goes down, the
+MQTT last will marks it as `unavailable`. The intercom does not depend on MQTT.
 
-| Entidad                    | Dato                  | Cuándo se publica                 |
-| -------------------------- | --------------------- | --------------------------------- |
-| `sensor.*_luz`             | luz ambiente, en lux  | si cambia al menos 2 lx y un 20 % |
-| `sensor.*_bateria`         | nivel, en %           | si cambia, se mira cada minuto    |
-| `sensor.*_temperatura...`  | batería, en °C        | si cambia, se mira cada minuto    |
-| `binary_sensor.*_cargando` | carga o no            | si cambia, se mira cada minuto    |
-| `siren.*_sirena`           | enciende y apaga      | al cambiar                        |
-| `select.*_estado`          | estado del droide     | al cambiar                        |
+| Entity                     | Data                  | When it is published                   |
+| -------------------------- | --------------------- | -------------------------------------- |
+| `sensor.*_light`             | ambient light, in lux | if it changes by at least 2 lx and 20% |
+| `sensor.*_battery`         | level, in %           | if it changes, checked every minute    |
+| `sensor.*_battery_temperature`  | battery, in °C        | if it changes, checked every minute    |
+| `binary_sensor.*_charging` | charging or not       | if it changes, checked every minute    |
+| `siren.*_siren`           | turns on and off      | on change                              |
+| `select.*_state`          | droid state           | on change                              |
 
-La sirena suena a todo volumen en el canal de alarma y se para sola a los 10 minutos, porque si se
-pierde la conexión HA ya no podría apagarla.
+The siren sounds at full volume on the alarm channel and stops by itself after 10 minutes, because if the
+connection is lost HA could no longer turn it off.
 
-## Altavoz
+## Speaker
 
-Falta: HA pedirá leer un mensaje en voz alta con el TTS del sistema, también por MQTT.
+Still missing: HA will ask for a message to be read aloud with the system TTS, also over MQTT.
 
-Comandos de voz: el panel es un satélite de Assist. Se activa con un botón en pantalla, manda el
-audio del micrófono a la pipeline de HA (`assist_pipeline/run`) y reproduce la respuesta. La
-palabra de activación queda fuera de esta versión.
+Voice commands: the panel is an Assist satellite. It is activated with an on-screen button, sends the
+microphone audio to the HA pipeline (`assist_pipeline/run`) and plays the response. The
+wake word is outside this version.
 
-## Presencia
+## Presence
 
-El panel enciende la pantalla cuando el detector de presencia de su estancia ve a alguien, y la
-apaga cuando deja de verlo. El detector es una entidad `binary_sensor.*` de HA que se elige en la
-configuración; el panel no usa sus propios sensores.
+The panel turns the screen on when the presence detector in its room sees someone, and
+turns it off when it stops seeing them. The detector is an HA `binary_sensor.*` entity chosen in the
+configuration; the panel does not use its own sensors.
 
-## Cámara
+## Camera
 
-El panel puede publicar su cámara como flujo RTSP en la red de casa, para que la consuma Frigate o
-un sistema similar. Viene desactivado y se activa en la configuración. El panel solo publica el
-vídeo: la detección y la grabación son cosa de quien lo consume. La autenticación del flujo está por
-decidir.
+The panel can publish its camera as an RTSP stream on the home network, to be consumed by Frigate or
+a similar system. It is disabled by default and enabled in the configuration. The panel only publishes the
+video: detection and recording are up to whoever consumes it. Stream authentication is still to be
+decided.
 
-## Dispositivo
+## Device
 
-- Una Pixel 3a y, después, una Pixel 4a, alimentadas por PoE y con LineageOS. `minSdk` es 35: la 3a
-  lleva LineageOS 22.2, con Android 15.
-- LineageOS va sin servicios de Google: la app no puede depender de ellos. Tampoco trae motor de
-  TTS: `marc2d_say` necesita uno, que está por elegir.
-- LineageOS bloquea la red de las apps nuevas si tiene activada la red restringida: el panel necesita
-  **Permitir acceso a la red** en sus ajustes de Android.
-- Enchufado, Android no entra en Doze: el servicio en primer plano basta para no perder llamadas.
-- La app es la pantalla de inicio y arranca sola al encender el móvil, sin bloqueo de pantalla. Es
-  ella quien lanza el servicio, de tipo `microphone`: Android 15 no deja arrancar ese tipo desde
-  `BOOT_COMPLETED`. El servicio se reconecta solo a HA y a los telefonillos.
-- Modo quiosco: la app es propietaria del dispositivo (Device Owner) y usa Lock Task, así que no se
-  puede salir a otras apps. Desde la configuración se pueden abrir los ajustes de Android, y el
-  quiosco vuelve al regresar, o salir de él por completo.
-- El panel va siempre en horizontal, aunque se gire el móvil.
-- Las dos pantallas son OLED: con la pantalla encendida, la hora se desplaza unos píxeles de vez
-  en cuando para no quemarla.
-- Se instala LineageOS, entre otras cosas, para limitar la carga de la batería al 80 %: siempre al
-  100 % podría hincharse. Al llegar al límite, Android indica que no carga aunque esté alimentado: es
-  normal que `binary_sensor.*_cargando` esté apagado. Aun así, se revisa de tanto en tanto.
+- A Pixel 3a and, later, a Pixel 4a, powered by PoE and running LineageOS. `minSdk` is 35: the 3a
+  runs LineageOS 22.2, with Android 15.
+- LineageOS runs without Google services: the app cannot depend on them. It has no TTS engine
+  either: `marc2d_say` needs one, still to be chosen.
+- LineageOS blocks the network for new apps if restricted networking is enabled: the panel needs
+  **Allow network access** in its Android settings.
+- When plugged in, Android does not enter Doze: the foreground service is enough not to miss calls.
+- The app is the home screen and starts by itself when the phone is turned on, with no screen lock. It is
+  the app that launches the service, of type `microphone`: Android 15 does not allow that type to start from
+  `BOOT_COMPLETED`. The service reconnects to HA and the intercoms by itself.
+- Kiosk mode: the app is the Device Owner and uses Lock Task, so you cannot leave for other apps.
+  From the configuration you can open the Android settings, and the kiosk comes back on
+  return, or leave it completely.
+- The panel is always in landscape, even if the phone is rotated.
+- Both screens are OLED: with the screen on, the time shifts a few pixels now and
+  then to avoid burning it.
+- LineageOS is installed, among other reasons, to limit battery charging to 80%: always at
+  100% it could swell. At the limit, Android reports that it is not charging even though it has power: it is
+  normal for `binary_sensor.*_charging` to be off. Even so, check on it from time to time.
 
-## Configuración
+## Configuration
 
-En la app solo se configura la conexión con HA, la URL y un token de larga duración, y el nombre
-del panel. Cada panel tiene su propio nombre, como `salon`, del que salen sus temas MQTT y sus
-entidades. Todo lo demás
-sale de HA, del script `script.marc2d_config`, que el panel llama al conectarse y cada 10 minutos y
-que recibe el nombre del panel en la variable `panel` y devuelve:
+In the app you only configure the connection to HA, the URL and a long-lived token, and the panel's
+name. Each panel has its own name, such as `kitchen`, from which its MQTT topics and its
+entities come. Everything else
+comes from HA, from the `script.marc2d_config` script, which the panel calls on connecting and every 10 minutes and
+which receives the panel's name in the `panel` variable and returns:
 
 ```json
 {
   "intercoms": [
     { "name": "Parking", "server": "192.0.2.10", "extension": "9901#1", "password": "…" }
   ],
-  "weather": "weather.casa",
+  "weather": "weather.home",
   "mqtt": { "server": "192.0.2.20", "port": 1883, "username": "…", "password": "…" },
   "cameras": [
-    { "entity": "camera.portero", "name": "Parking", "intercom": "Parking" }
+    { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
   ]
 }
 ```
 
-- Es un script porque se edita desde la interfaz de HA y la contraseña no acaba en una entidad, a la
-  vista de todos los usuarios y en el historial. Sí aparece en las trazas del script, solo para
-  administradores.
-- Se guarda en el almacenamiento privado de la app, junto con la conexión, y nunca en el repo: el
-  panel sigue atendiendo llamadas aunque HA esté caído.
-- El detector de presencia y la publicación de la cámara se añadirán a esta respuesta en sus
-  entregas.
+- It is a script because it is edited from the HA interface and the password does not end up in an entity, in
+  view of all users and in the history. It does appear in the script traces, for
+  administrators only.
+- It is kept in the app's private storage, along with the connection, and never in the repo: the
+  panel keeps handling calls even if HA is down.
+- The presence detector and camera publishing will be added to this response in their
+  deliveries.
 
-## Orden de entrega
+## Delivery order
 
-1. Hora, fecha, tiempo, modo quiosco y descolgar el telefonillo.
-2. Mensajes y sirena.
-3. Encender la pantalla con presencia.
-4. Comandos de voz.
-5. Publicar la cámara.
+1. Time, date, weather, kiosk mode and answering the intercom.
+2. Messages and siren.
+3. Turning the screen on with presence.
+4. Voice commands.
+5. Publishing the camera.
 
-## Integración de Home Assistant
+## Home Assistant integration
 
-Prevista para cuando el telefonillo esté cerrado: una integración propia, instalable con HACS, en
-`custom_components/marc2d/`. Sustituye al script de configuración y a MQTT, para que instalar marc2d no
-exija Mosquitto ni escribir YAML.
+Planned for when the intercom is finished: our own integration, installable with HACS, in
+`custom_components/marc2d/`. It replaces the configuration script and MQTT, so that installing marc2d does not
+require Mosquitto or writing YAML.
 
-- **Alta:** se añade el panel en HA, que muestra un QR con la URL y un código de un solo uso que caduca en
-  minutos. El panel lo escanea y lo cambia por su propio token. El QR nunca lleva el token, y quitar el
-  panel en HA revoca su acceso.
-- **Configuración:** formularios por panel en HA: telefonillos, tiempo, cámaras y la entidad del botón del
-  timbre.
-- **Entidades:** propias, por el WebSocket que ya usa el panel. Si se cierra, el panel queda `unavailable`.
-- **Por decidir:** el protocolo entre el panel y la integración, cómo leer el QR sin servicios de Google, y
-  los requisitos de HACS para un repo que también contiene la app.
+- **Onboarding:** the panel is added in HA, which shows a QR code with the URL and a one-time code that expires in
+  minutes. The panel scans it and exchanges it for its own token. The QR code never carries the token, and removing
+  the panel in HA revokes its access.
+- **Configuration:** per-panel forms in HA: intercoms, weather, cameras and the doorbell button
+  entity.
+- **Entities:** its own, over the WebSocket the panel already uses. If it closes, the panel becomes `unavailable`.
+- **To be decided:** the protocol between the panel and the integration, how to read the QR code without Google
+  services, and the HACS requirements for a repo that also contains the app.
 
-MQTT se queda hasta que la integración funcione en una casa real.
+MQTT stays until the integration works in a real home.
 
-## Decisiones
+## Decisions
 
-- Kotlin y Jetpack Compose con Material 3.
-- Se compila con Kotlin Toolchain, sin Gradle.
-- Linter: ktlint con las reglas de Compose, mediante un plugin propio en `plugins/ktlint`, porque
-  el Toolchain no trae ninguno. detekt queda fuera mientras la 2.0 siga en alfa. El Toolchain no
-  ejecuta Android Lint.
-- SIP con Linphone SDK. Es GPLv3: vale para uso propio; para darla a terceros hace falta su
-  licencia comercial.
-- HA con Ktor Client, motor OkHttp y kotlinx.serialization: WebSocket y JSON sobre corrutinas.
-- MQTT con un cliente 3.1.1 propio sobre `Socket`: una sola conexión crea las entidades del panel,
-  publica sus lecturas, recibe órdenes y avisa a HA si el panel se cae. Paho no publica versiones
-  desde 2020, y HiveMQ arrastra Netty, cuyos `META-INF` duplicados no se pueden excluir con el
-  Toolchain. El panel solo necesita QoS 0 al publicar y sin TLS, porque va por la LAN. Va detrás de
-  la interfaz `MqttClient`, para poder sustituirlo por una librería tocando una sola clase.
-- Configuración con Jetpack DataStore.
-- RTSP con RootEncoder y RTSP-Server. Están mantenidas, pero por un solo autor y se publican en
-  JitPack: la cámara es opcional y va detrás de una interfaz para poder sustituirlas.
-- TTS, audio y pantalla con las API de Android, sin librerías.
-- Sin framework de inyección de dependencias: el servicio crea y conecta las piezas a mano.
-- Un servicio en primer plano mantiene el registro SIP y la conexión con HA, porque el telefonillo
-  no manda push.
-- Solo se usan versiones estables de librerías con publicaciones recientes. Las versiones están en
-  `libs.versions.toml` y las librerías entran en el catálogo cuando se usan por primera vez.
+- Kotlin and Jetpack Compose with Material 3.
+- Built with Kotlin Toolchain, without Gradle.
+- Linter: ktlint with the Compose rules, through our own plugin in `plugins/ktlint`, because
+  the Toolchain does not include one. detekt stays out while 2.0 is still in alpha. The Toolchain does not
+  run Android Lint.
+- SIP with Linphone SDK. It is GPLv3: fine for personal use; distributing it to third parties requires its
+  commercial license.
+- HA with Ktor Client, OkHttp engine and kotlinx.serialization: WebSocket and JSON over coroutines.
+- MQTT with our own 3.1.1 client over `Socket`: a single connection creates the panel's entities,
+  publishes its readings, receives commands and tells HA if the panel goes down. Paho has not published releases
+  since 2020, and HiveMQ pulls in Netty, whose duplicate `META-INF` files cannot be excluded with the
+  Toolchain. The panel only needs QoS 0 when publishing and no TLS, because it runs on the LAN. It sits behind
+  the `MqttClient` interface, so that it can be replaced by a library by touching a single class.
+- Configuration with Jetpack DataStore.
+- RTSP with RootEncoder and RTSP-Server. They are maintained, but by a single author and published on
+  JitPack: the camera is optional and sits behind an interface so they can be replaced.
+- TTS, audio and screen with the Android APIs, without libraries.
+- No dependency injection framework: the service creates and connects the pieces by hand.
+- A foreground service keeps the SIP registration and the connection to HA, because the intercom
+  does not send push.
+- Only stable versions of libraries with recent releases are used. The versions are in
+  `libs.versions.toml` and libraries enter the catalog when first used.

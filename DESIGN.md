@@ -1,71 +1,71 @@
-# Diseño de marc2d
+# marc2d design
 
-Cómo debe verse y comportarse la app. El alcance está en [SPEC.md](SPEC.md); si un cambio contradice este
-documento, se actualiza en el mismo commit.
+How the app should look and behave. The scope is in [SPEC.md](SPEC.md); if a change contradicts this
+document, update it in the same commit.
 
-## Principios
+## Principles
 
-- **Es un mueble, no un móvil.** El panel está en la pared todo el día: no debe llamar la atención hasta
-  que algo importe.
-- **Se entiende de un vistazo y a distancia.** Letra grande, pocos elementos y botones anchos.
-- **El OLED manda.** Fondo negro puro, y nada fijo en pantalla durante mucho tiempo.
-- **Inspiración:** los sprites y las recreativas de los años 90, sin nostalgia decorativa.
+- **It is furniture, not a phone.** The panel is on the wall all day: it should not draw attention until
+  something matters.
+- **It reads at a glance and from a distance.** Large type, few elements and wide buttons.
+- **The OLED rules.** Pure black background, and nothing fixed on screen for long.
+- **Inspiration:** 90s sprites and arcade machines, without decorative nostalgia.
 
 ## Color
 
-| Uso                 | Color     | Valor     |
-| ------------------- | --------- | --------- |
-| Fondo               | negro     | `#000000` |
-| Hora, cabeza        | blanco    | `#D8D8D8` |
-| Fecha, base, textos | gris      | `#A0A0A0` |
-| Aviso               | amarillo  | `#F0C020` |
-| Peligro, grabación  | rojo      | `#E02020` |
+| Use               | Color  | Value     |
+| ----------------- | ------ | --------- |
+| Background        | black  | `#000000` |
+| Time, head        | white  | `#D8D8D8` |
+| Date, base, text  | gray   | `#A0A0A0` |
+| Warning           | yellow | `#F0C020` |
+| Danger, recording | red    | `#E02020` |
 
-El color significa algo: el amarillo y el rojo solo aparecen en un aviso o un peligro. Nada de color para
-decorar. Los símbolos del tiempo van en monocromo, nunca como emojis de color.
+Color means something: yellow and red only appear for a warning or a danger. No color for
+decoration. Weather symbols are monochrome, never color emoji.
 
-## El droide
+## The droid
 
-Es la mascota y el indicador de estado de la app, además de su icono. Es un sprite de 16×16 píxeles, con
-cabeza blanca, base gris compacta y un ojo.
+It is the app's mascot and status indicator, as well as its icon. It is a 16×16 pixel sprite, with a
+white head, a compact gray base and one eye.
 
-- **Se dibuja a píxeles:** sin suavizado, degradados ni rotaciones.
-- **Se mueve a saltos:** un paso cada medio segundo, con dos fotogramas de base. Nada de animación fluida.
-- **Ocupa el 10 % del ancho** de la pantalla y pasea por la franja de abajo.
-- **Se queda donde esté** al cambiar de estado: el estado se lee en el ojo, no en la posición.
-- **Dormido** no se mueve, salvo cada 20 minutos, cuando anda hasta otro sitio y vuelve a dormirse.
-- **Es propio:** recuerda a un droide de recreativa, pero no debe parecerse a ningún personaje conocido.
+- **Drawn in pixels:** no antialiasing, gradients or rotations.
+- **Moves in jumps:** one step every half second, with two base frames. No smooth animation.
+- **Takes up 10% of the width** of the screen and walks along the bottom strip.
+- **Stays where it is** when its state changes: the state is read from the eye, not the position.
+- **Asleep** it does not move, except every 20 minutes, when it walks to another spot and goes back to sleep.
+- **It is original:** it recalls an arcade droid, but must not look like any known character.
 
-Los estados y quién los activa están en [SPEC.md](SPEC.md#droide).
+The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 
-| Estado       | Ojo                                   | Movimiento      |
-| ------------ | ------------------------------------- | --------------- |
-| Paseo        | negro con brillo, mira hacia donde va | anda y parpadea |
-| Durmiendo    | línea cerrada                         | quieto          |
-| Sin conexión | una X                                 | quieto          |
-| Alarma       | amarillo                              | parpadea        |
-| Intruso      | franja roja                           | parpadea        |
-| Grabando     | objetivo con centro rojo              | parpadea        |
+| State     | Eye                                         | Movement         |
+| --------- | ------------------------------------------- | ---------------- |
+| Walking   | black with a glint, looks where it is going | walks and blinks |
+| Sleeping  | closed line                                 | still            |
+| Offline   | an X                                        | still            |
+| Alarm     | yellow                                      | blinks           |
+| Intruder  | red band                                    | blinks           |
+| Recording | lens with a red center                      | blinks           |
 
-## Botones
+## Buttons
 
-Cuadrados, de borde recto y fondo negro, con un icono de 12×12 píxeles, de la misma familia que el droide.
-Nada de botones redondeados de Material. Solo se usa icono si se entiende sin texto: si no, se dibuja otro
-mejor, o se añade una palabra. Son blancos, y el rojo queda para **Colgar**.
+Square, with straight edges and a black background, with a 12×12 pixel icon from the same family as the droid.
+No rounded Material buttons. Use an icon only if it is clear without text: if not, draw a better one,
+or add a word. They are white, and red is reserved for **Hang up**.
 
-## Pantallas
+## Screens
 
-- **Principal:** hora, fecha, tiempo y droide, sin botones. Tocar en cualquier sitio abre el menú.
-- **Menú:** botones grandes sobre negro. Se cierra con la X, tocando fuera, y solo a los 10 segundos.
-- **Ajustes:** fondo negro, campos de borde recto y botones de texto con la misma forma que los demás. Se
-  cierra con la X.
-- **Cámaras:** a pantalla completa, y se pasa de una a otra deslizando. Si una se puede llamar, muestra
-  **Hablar**. Se sale con la X, tocando la imagen, y sola a los 2 minutos.
-- **Llamada:** el vídeo ocupa toda la pantalla. **Colgar** nunca cambia de sitio y está en la esquina
-  opuesta a **Descolgar**, para que una doble pulsación no corte la llamada.
-- **Orientación:** siempre en horizontal.
+- **Main:** time, date, weather and droid, with no buttons. Tapping anywhere opens the menu.
+- **Menu:** large buttons on black. It closes with the X, by tapping outside, and on its own after 10 seconds.
+- **Settings:** black background, straight-edged fields and text buttons with the same shape as the rest. It
+  closes with the X.
+- **Cameras:** full screen, swiping from one to the next. If one can be called, it shows
+  **Talk**. Exit with the X, by tapping the image, or automatically after 2 minutes.
+- **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
+  opposite **Answer**, so that a double tap does not end the call.
+- **Orientation:** always landscape.
 
-## Texto
+## Text
 
-En castellano, con frases cortas y sin tecnicismos en pantalla: "Sin conexión con MQTT" es el límite. El
-detalle técnico va en los ajustes, no en la pantalla principal.
+In English, with short sentences and no technical jargon on screen: "No connection to MQTT" is the limit. Technical
+detail goes in the settings, not on the main screen.

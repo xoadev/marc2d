@@ -2,7 +2,7 @@ package dev.xoa.marc2d
 
 import kotlinx.serialization.Serializable
 
-/** La configuración del panel, que devuelve `script.marc2d_config` de Home Assistant. */
+/** The panel's configuration, returned by Home Assistant's `script.marc2d_config`. */
 @Serializable
 data class PanelConfig(
 	val intercoms: List<IntercomConfig> = emptyList(),
@@ -15,7 +15,7 @@ data class PanelConfig(
 data class CameraConfig(
 	val entity: String,
 	val name: String,
-	/** El telefonillo al que llama Hablar, si se puede hablar con esta cámara. */
+	/** The intercom that Talk calls, if this camera can be talked to. */
 	val intercom: String? = null,
 )
 
@@ -35,10 +35,10 @@ data class IntercomConfig(
 	val server: String,
 	val extension: String,
 	val password: String,
-	/** El número del propio telefonillo: se le llama al descolgar. */
+	/** The intercom's own number: it is called on answering. */
 	val number: String = "8001",
 ) {
-	/** Dahua usa extensiones como `9901#1`: la `#` va escapada en la URI y literal en el Digest. */
+	/** Dahua uses extensions like `9901#1`: the `#` is escaped in the URI and literal in the Digest. */
 	val sipIdentity: String
 		get() = "sip:${extension.replace("#", "%23")}@$server"
 

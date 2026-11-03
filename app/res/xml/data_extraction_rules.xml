@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- La configuración guarda tokens y contraseñas: no sale del dispositivo. -->
+<!-- The configuration holds tokens and passwords: it does not leave the device. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" />

@@ -11,7 +11,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.time.Duration.Companion.minutes
 
-/** Hace sonar la sirena en el canal de alarma, a todo volumen. */
+/** Sounds the siren on the alarm channel, at full volume. */
 class PanelSiren(
 	context: Context,
 	private val onChange: (Boolean) -> Unit,
@@ -21,7 +21,7 @@ class PanelSiren(
 	private var track: AudioTrack? = null
 	private var previousVolume = 0
 
-	// Si se pierde la conexión mientras suena, HA ya no podría apagarla.
+	// If the connection is lost while it sounds, HA could no longer turn it off.
 	private val safetyStop = Runnable { set(false) }
 
 	fun set(on: Boolean) {
@@ -74,7 +74,7 @@ class PanelSiren(
 		audio.setStreamVolume(AudioManager.STREAM_ALARM, previousVolume, 0)
 	}
 
-	/** Medio segundo en cada tono, sin librerías ni ficheros de audio. */
+	/** Half a second on each tone, with no libraries or audio files. */
 	private fun tone(): ShortArray =
 		ShortArray(SAMPLE_RATE) { i ->
 			val frequency = if (i < SAMPLE_RATE / 2) LOW_HZ else HIGH_HZ

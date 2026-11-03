@@ -15,7 +15,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Cliente MQTT 3.1.1 sobre un `Socket`, sin TLS: el panel solo habla con un broker de la LAN. */
+/** MQTT 3.1.1 client over a `Socket`, without TLS: the panel only talks to a broker on the LAN. */
 class SocketMqttClient : MqttClient {
 	override suspend fun run(
 		options: MqttOptions,
@@ -30,13 +30,13 @@ class SocketMqttClient : MqttClient {
 				val output = socket.getOutputStream()
 				output.write(MqttCodec.connect(options.clientId, options.username, options.password, KEEP_ALIVE_SECONDS, options.will))
 				val ack = MqttCodec.read(input)
-				check(ack.type == MqttCodec.CONNACK && MqttCodec.connackCode(ack) == 0) { "El broker ha rechazado la conexión" }
+				check(ack.type == MqttCodec.CONNACK && MqttCodec.connackCode(ack) == 0) { "The broker rejected the connection" }
 
 				val outgoing = Channel<ByteArray>(Channel.UNLIMITED)
 				onConnected(ChannelSession(outgoing))
 				coroutineScope {
 					launch {
-						// Cancelar no interrumpe una lectura bloqueante: hay que cerrar el socket.
+						// Cancelling does not interrupt a blocking read: the socket has to be closed.
 						try {
 							awaitCancellation()
 						} finally {
@@ -67,7 +67,7 @@ class SocketMqttClient : MqttClient {
 			}
 		}
 
-	/** Al cancelar se cierra el socket, y su error no debe confundirse con una conexión perdida. */
+	/** Cancelling closes the socket, and its error must not be mistaken for a lost connection. */
 	private suspend fun closingOnCancel(block: suspend () -> Unit) {
 		try {
 			block()

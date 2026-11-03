@@ -23,13 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.floor
 
-/** La X pesa menos que los botones de acción: salir no es lo importante de la pantalla. */
+/** The X weighs less than the action buttons: leaving is not what matters on the screen. */
 val CLOSE_BUTTON = 64.dp
 val PixelWhite = Color(0xFFD8D8D8)
 val PixelRed = Color(0xFFE02020)
 val PixelDisabled = Color(0xFF505050)
 
-/** Los iconos de 12×12, dibujados a píxeles como el droide. */
+/** The 12×12 icons, drawn in pixels like the droid. */
 enum class PixelIcon(
 	val rows: List<String>,
 ) {
@@ -115,7 +115,7 @@ enum class PixelIcon(
 	),
 }
 
-/** Para lo que un icono no explicaría bien, con la misma forma que los demás botones. */
+/** For what an icon would not explain well, with the same shape as the other buttons. */
 @Composable
 fun PixelTextButton(
 	label: String,
@@ -138,7 +138,7 @@ fun PixelTextButton(
 	}
 }
 
-/** Botón cuadrado de borde recto, con un icono a píxeles. La descripción la lee la accesibilidad. */
+/** Square straight-edged button with a pixel icon. The description is read by accessibility services. */
 @Composable
 fun PixelButton(
 	icon: PixelIcon,
@@ -163,7 +163,7 @@ fun PixelButton(
 				.padding(size / 5)
 				.size(size * 3 / 5),
 		) {
-			// Tamaño entero: con decimales aparecen líneas entre los píxeles.
+			// Whole-number size: with decimals, lines appear between the pixels.
 			val pixel = floor(this.size.width / icon.rows.size).coerceAtLeast(1f)
 			val start = (this.size.width - pixel * icon.rows.size) / 2
 			icon.rows.forEachIndexed { y, row ->

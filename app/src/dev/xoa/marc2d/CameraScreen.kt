@@ -48,7 +48,7 @@ private val RETRY = 3.seconds
 private val AUTO_CLOSE = 2.minutes
 private const val BUFFER_BYTES = 16 * 1024
 
-/** Las cámaras de la configuración, a pantalla completa: se pasa de una a otra deslizando. */
+/** The cameras from the configuration, full screen: swipe to go from one to the next. */
 @Composable
 fun CameraScreen(
 	cameras: List<CameraConfig>,
@@ -86,7 +86,7 @@ fun CameraScreen(
 		current?.intercom?.let { intercom ->
 			PixelButton(
 				icon = PixelIcon.Talk,
-				description = "Hablar",
+				description = "Talk",
 				onClick = { onTalk(intercom) },
 				modifier =
 					Modifier
@@ -97,7 +97,7 @@ fun CameraScreen(
 		PixelButton(
 			icon = PixelIcon.Close,
 			size = CLOSE_BUTTON,
-			description = "Salir",
+			description = "Exit",
 			onClick = onClose,
 			modifier =
 				Modifier
@@ -131,14 +131,14 @@ private fun CameraView(
 	active: Boolean,
 ) {
 	var image by remember { mutableStateOf<Bitmap?>(null) }
-	// Solo se descarga la que se ve: cada flujo gasta red y a la cámara.
+	// Only the visible one is downloaded: each stream uses up network and strains the camera.
 	LaunchedEffect(camera, connection, active) {
 		if (active) streamFrames(camera, connection) { image = it }
 	}
 	Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
 		val current = image
 		if (current == null) {
-			Text("Conectando…", color = Color.Gray, fontSize = 20.sp)
+			Text("Connecting…", color = Color.Gray, fontSize = 20.sp)
 		} else {
 			Image(current.asImageBitmap(), camera.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
 		}
@@ -172,7 +172,7 @@ private suspend fun streamFrames(
 		} catch (e: CancellationException) {
 			throw e
 		} catch (_: Exception) {
-			// La cámara o HA pueden no estar: se sigue mostrando la última imagen y se reintenta.
+			// The camera or HA may be away: keep showing the last image and retry.
 		}
 		delay(RETRY)
 	}

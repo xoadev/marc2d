@@ -7,20 +7,20 @@ import kotlin.test.assertIs
 
 class HaProtocolTest {
 	@Test
-	fun `convierte la URL de Home Assistant en la del WebSocket`() {
+	fun `converts the Home Assistant URL into the WebSocket one`() {
 		assertEquals("ws://ha.local:8123/api/websocket", HaProtocol.webSocketUrl("http://ha.local:8123/"))
 		assertEquals("wss://ha.example/api/websocket", HaProtocol.webSocketUrl(" https://ha.example "))
 		assertEquals("ws://192.168.1.2:8123/api/websocket", HaProtocol.webSocketUrl("192.168.1.2:8123"))
 	}
 
 	@Test
-	fun `lee la configuracion que devuelve el script`() {
+	fun `reads the configuration the script returns`() {
 		val message =
 			HaProtocol.parse(
 				"""
 				{"id":1,"type":"result","success":true,"result":{"context":{"id":"x"},"response":{
 				  "intercoms":[{"name":"Parking","server":"192.0.2.8","extension":"9901#1","password":"s3"}],
-				  "futuro":true
+				  "future":true
 				}}}
 				""".trimIndent(),
 			)
@@ -36,7 +36,7 @@ class HaProtocolTest {
 	}
 
 	@Test
-	fun `detecta que falta el script`() {
+	fun `detects that the script is missing`() {
 		val message =
 			HaProtocol.parse("""{"id":1,"type":"result","success":false,"error":{"code":"not_found","message":"x"}}""")
 
@@ -44,7 +44,7 @@ class HaProtocolTest {
 	}
 
 	@Test
-	fun `una respuesta sin formato no revela su contenido`() {
+	fun `a malformed response does not reveal its content`() {
 		val message =
 			HaProtocol.parse(
 				"""{"id":1,"type":"result","success":true,"result":{"response":{"intercoms":[{"password":"s3"}]}}}""",

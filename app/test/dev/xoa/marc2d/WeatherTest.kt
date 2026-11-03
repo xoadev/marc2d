@@ -16,14 +16,14 @@ class WeatherTest {
 	private val state =
 		HaProtocol.parse(
 			"""
-			{"id":2,"type":"event","event":{"a":{"weather.casa":{"s":"sunny","a":{"temperature":17.3,"humidity":63}}}}}
+			{"id":2,"type":"event","event":{"a":{"weather.home":{"s":"sunny","a":{"temperature":17.3,"humidity":63}}}}}
 			""".trimIndent(),
 		)
 
 	private val forecast =
 		HaProtocol.parse(
 			"""
-			{"id":3,"type":"result","success":true,"result":{"response":{"weather.casa":{"forecast":[
+			{"id":3,"type":"result","success":true,"result":{"response":{"weather.home":{"forecast":[
 			  {"condition":"partlycloudy","datetime":"2026-11-02T17:00:00+00:00","temperature":15},
 			  {"condition":"clear-night","datetime":"2026-11-02T18:00:00+00:00","temperature":12.9}
 			]}}}}
@@ -31,8 +31,8 @@ class WeatherTest {
 		)
 
 	@Test
-	fun `lee el estado y la prevision de Home Assistant`() {
-		val report = assertNotNull(HaProtocol.weather("weather.casa", state, forecast, now))
+	fun `reads the state and forecast from Home Assistant`() {
+		val report = assertNotNull(HaProtocol.weather("weather.home", state, forecast, now))
 
 		assertEquals("sunny", report.condition)
 		assertEquals(17.3, report.temperature)
@@ -40,21 +40,21 @@ class WeatherTest {
 	}
 
 	@Test
-	fun `una entidad que no existe no da informe`() {
-		assertNull(HaProtocol.weather("weather.otra", state, forecast, now))
+	fun `an entity that does not exist gives no report`() {
+		assertNull(HaProtocol.weather("weather.other", state, forecast, now))
 	}
 
 	@Test
-	fun `una prevision vacia no impide mostrar el tiempo actual`() {
+	fun `an empty forecast does not prevent showing the current weather`() {
 		val empty = HaProtocol.parse("""{"id":3,"type":"result","success":false,"error":{"code":"x"}}""")
 
-		val report = assertNotNull(HaProtocol.weather("weather.casa", state, empty, now))
+		val report = assertNotNull(HaProtocol.weather("weather.home", state, empty, now))
 
 		assertTrue(report.forecast.isEmpty())
 	}
 
 	@Test
-	fun `la prevision son las proximas 8 horas sin la que ya ha empezado`() {
+	fun `the forecast is the next 8 hours without the one already started`() {
 		val hours =
 			(0L..12L).map {
 				HourForecast(Instant.parse("2026-11-02T17:00:00Z").plus(Duration.ofHours(it)), "sunny", 10.0)
@@ -66,7 +66,7 @@ class WeatherTest {
 	}
 
 	@Test
-	fun `un informe de hace mas de una hora deja de mostrarse`() {
+	fun `a report over an hour old stops being shown`() {
 		val report = WeatherReport("sunny", 10.0, emptyList(), now)
 
 		assertTrue(report.isFresh(now.plus(Duration.ofMinutes(59))))
@@ -74,7 +74,7 @@ class WeatherTest {
 	}
 
 	@Test
-	fun `presenta temperatura y hora locales`() {
+	fun `presents local temperature and time`() {
 		assertEquals("13°", WeatherFormat.temperature(12.9))
 		assertEquals("19", WeatherFormat.hour(Instant.parse("2026-11-02T18:00:00Z"), ZoneId.of("Europe/Madrid")))
 	}

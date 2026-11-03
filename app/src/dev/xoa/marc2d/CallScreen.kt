@@ -34,7 +34,7 @@ fun CallScreen(
 			modifier = Modifier.fillMaxSize(),
 		)
 		Text(
-			text = if (call.answered) call.name else "Llaman desde ${call.name}",
+			text = if (call.answered) call.name else "Call from ${call.name}",
 			color = Color.White,
 			fontSize = 28.sp,
 			modifier =
@@ -45,7 +45,7 @@ fun CallScreen(
 		if (!call.answered) {
 			PixelButton(
 				icon = PixelIcon.Talk,
-				description = "Descolgar",
+				description = "Answer",
 				onClick = onAnswer,
 				modifier =
 					Modifier
@@ -53,10 +53,10 @@ fun CallScreen(
 						.padding(32.dp),
 			)
 		}
-		// Colgar no cambia de sitio y está lejos de Descolgar: una doble pulsación no corta la llamada.
+		// Hang up never moves and is far from Answer: a double tap does not end the call.
 		PixelButton(
 			icon = PixelIcon.HangUp,
-			description = "Colgar",
+			description = "Hang up",
 			onClick = onHangUp,
 			color = PixelRed,
 			modifier =

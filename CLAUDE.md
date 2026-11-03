@@ -1,3 +1,3 @@
 # CLAUDE.md
 
-Lee y cumple `AGENTS.md`: es el contrato de trabajo de este repositorio.
+Read and follow `AGENTS.md`: it is the working contract of this repository.

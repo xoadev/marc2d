@@ -4,12 +4,12 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Cómo se presenta la hora en la pantalla principal. */
+/** How the time is presented on the main screen. */
 object ClockFormat {
 	private val time = DateTimeFormatter.ofPattern("HH:mm")
-	private val date = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM")
+	private val date = DateTimeFormatter.ofPattern("EEEE, MMMM d")
 
-	/** Recorrido del desplazamiento antiquemado, en dp. Se mueve un paso cada minuto. */
+	/** Path of the anti-burn-in shift, in dp. It moves one step every minute. */
 	private val burnInPath =
 		listOf(
 			0 to 0,
@@ -34,6 +34,6 @@ object ClockFormat {
 
 	fun burnInOffset(now: LocalDateTime): Pair<Int, Int> = burnInPath[now.minute % burnInPath.size]
 
-	/** Milisegundos que faltan para el siguiente minuto. */
+	/** Milliseconds left until the next minute. */
 	fun millisToNextMinute(now: LocalDateTime): Long = 60_000L - now.second * 1_000L - now.nano / 1_000_000L
 }

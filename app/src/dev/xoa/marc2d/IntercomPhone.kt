@@ -29,8 +29,8 @@ data class IntercomCall(
 )
 
 /**
- * Registra el panel en los telefonillos y atiende sus llamadas con Linphone. Todo se llama desde el
- * hilo principal, en el que Linphone itera y entrega sus eventos.
+ * Registers the panel on the intercoms and handles their calls with Linphone. Everything is called from the
+ * main thread, on which Linphone iterates and delivers its events.
  */
 class IntercomPhone(
 	private val context: Context,
@@ -44,13 +44,13 @@ class IntercomPhone(
 	private var applied: PanelConfig? = null
 	private var activeCall: Call? = null
 
-	/** El telefonillo cuyo timbre está sonando, avisado por MQTT: aún no hay llamada SIP. */
+	/** The intercom whose doorbell is ringing, notified over MQTT: there is no SIP call yet. */
 	private var ringing: IntercomConfig? = null
 	private var ringer: Ringtone? = null
 	private val main = Handler(Looper.getMainLooper())
 	private val ringTimeout = Runnable { stopDoorbell() }
 
-	/** A quien se está llamando tras descolgar, hasta que el VTO conteste. */
+	/** Who is being called after answering, until the VTO picks up. */
 	private var dialing: IntercomConfig? = null
 	private var dialDeadline = 0L
 	private val redial = Runnable { dialing?.let(::placeCall) }
@@ -59,7 +59,7 @@ class IntercomPhone(
 
 	private val core: Core =
 		Factory.instance().createCore(null, null, context).apply {
-			// El panel no tiene servicios de Google, y los telefonillos no mandan push.
+			// The panel has no Google services, and the intercoms do not send push.
 			isPushNotificationEnabled = false
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
@@ -73,7 +73,7 @@ class IntercomPhone(
 		}
 
 	fun apply(config: PanelConfig) {
-		// Otros cambios de configuración, como el tiempo, no deben cortar el registro ni una llamada.
+		// Other configuration changes, such as the weather, must not interrupt registration or a call.
 		if (config.intercoms == applied?.intercoms) {
 			applied = config
 			return
@@ -145,7 +145,7 @@ class IntercomPhone(
 		if (activeCall == null) _call.value = null
 	}
 
-	/** El VTO descuelga solo y da audio y vídeo: la llamada la inicia el panel al descolgar. */
+	/** The VTO picks up by itself and provides audio and video: the panel starts the call on answering. */
 	private fun dial(intercom: IntercomConfig) {
 		silence()
 		onDoorbellAnswered(PanelTopics.slug(intercom.name))
@@ -166,7 +166,7 @@ class IntercomPhone(
 		if (activeCall == null) retryOrEnd()
 	}
 
-	/** Tras una pulsación, el VTO no atiende mientras dura su propia llamada al grupo: hay que insistir. */
+	/** After a button press, the VTO does not answer while its own group call lasts: keep trying. */
 	private fun retryOrEnd() {
 		if (dialing != null && SystemClock.elapsedRealtime() < dialDeadline) {
 			main.postDelayed(redial, REDIAL_DELAY_MILLIS)
@@ -176,7 +176,7 @@ class IntercomPhone(
 		}
 	}
 
-	/** Para hablar por el telefonillo sin que hayan llamado. */
+	/** To talk through the intercom without anyone having rung. */
 	fun callIntercom(name: String) {
 		if (activeCall != null || dialing != null) return
 		applied?.intercoms?.firstOrNull { it.name == name }?.let(::dial)
@@ -190,7 +190,7 @@ class IntercomPhone(
 		val call = activeCall ?: return
 		val params = core.createCallParams(call) ?: return
 		params.isVideoEnabled = true
-		// Se ve al portero, pero el panel no envía imagen.
+		// The door station is visible, but the panel sends no image.
 		params.videoDirection = MediaDirection.RecvOnly
 		call.acceptWithParams(params)
 	}
@@ -269,13 +269,13 @@ class IntercomPhone(
 		}
 
 	private companion object {
-		// Lo mismo que deja sonar el VTO.
+		// The same time the VTO lets it ring.
 		const val RING_TIMEOUT_MILLIS = 45_000L
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
 	}
 
-	/** En la pared no hay auricular: siempre por el altavoz. */
+	/** There is no earpiece on the wall: always use the speaker. */
 	private fun routeToSpeaker(call: Call) {
 		core.audioDevices
 			.firstOrNull { it.type == AudioDevice.Type.Speaker }
@@ -291,6 +291,6 @@ class IntercomPhone(
 		val server = call.remoteAddress.domain
 		return applied?.intercoms?.firstOrNull { it.server == server }?.name
 			?: call.remoteAddress.displayName
-			?: "Telefonillo"
+			?: "Intercom"
 	}
 }

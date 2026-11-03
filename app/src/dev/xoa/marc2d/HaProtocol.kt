@@ -20,7 +20,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
-/** Los mensajes de la API WebSocket de Home Assistant que usa el panel. */
+/** The Home Assistant WebSocket API messages the panel uses. */
 object HaProtocol {
 	private const val CONFIG_SCRIPT = "marc2d_config"
 	private val json = Json { ignoreUnknownKeys = true }
@@ -103,7 +103,7 @@ object HaProtocol {
 
 	fun isSuccess(message: JsonObject): Boolean = message["success"]?.jsonPrimitive?.booleanOrNull == true
 
-	/** Sin estado no hay informe. Sin previsión, sí: se muestra al menos el tiempo actual. */
+	/** No state means no report. No forecast still gives one: at least the current weather is shown. */
 	fun weather(
 		entity: String,
 		state: JsonObject,
@@ -160,19 +160,19 @@ object HaProtocol {
 			return if (code == "not_found" || code == "service_not_found") {
 				ConfigResult.MissingScript
 			} else {
-				ConfigResult.Invalid(code ?: "error desconocido")
+				ConfigResult.Invalid(code ?: "unknown error")
 			}
 		}
 		val response =
 			message["result"]?.jsonObject?.get("response")
-				?: return ConfigResult.Invalid("el script no devuelve nada")
+				?: return ConfigResult.Invalid("the script returns nothing")
 		return try {
 			ConfigResult.Ok(json.decodeFromJsonElement<PanelConfig>(response))
 		} catch (_: SerializationException) {
-			// El mensaje de la excepción podría incluir valores del script, como contraseñas.
-			ConfigResult.Invalid("la respuesta del script no tiene el formato esperado")
+			// The exception's message could include values from the script, such as passwords.
+			ConfigResult.Invalid("the script response does not have the expected format")
 		} catch (_: IllegalArgumentException) {
-			ConfigResult.Invalid("la respuesta del script no tiene el formato esperado")
+			ConfigResult.Invalid("the script response does not have the expected format")
 		}
 	}
 }

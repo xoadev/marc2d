@@ -8,12 +8,12 @@ import java.nio.file.Path
 import kotlin.io.path.isDirectory
 
 /**
- * El Kotlin Toolchain no trae linter: se ejecuta la CLI de ktlint, con las reglas de Compose en su
- * classpath para que las cargue el ServiceLoader. El formato sale del `.editorconfig` de la raíz.
+ * Kotlin Toolchain has no linter: this runs the ktlint CLI, with the Compose rules on its
+ * classpath so that ServiceLoader picks them up. The format comes from the root `.editorconfig`.
  *
- * Recibe la raíz del módulo, para revisar también los tests, y no `ModuleSources`, que en la 0.13
- * llega vacío en módulos Android. Falla si la ruta no existe: un linter que no encuentra código no
- * puede dar el visto bueno.
+ * It receives the module root, so that tests are checked too, and not `ModuleSources`, which in 0.13
+ * arrives empty in Android modules. It fails if the path does not exist: a linter that finds no code
+ * must not give its approval.
  */
 @TaskAction
 fun ktlint(
@@ -21,13 +21,13 @@ fun ktlint(
 	@Input tool: Classpath,
 	format: Boolean,
 ) {
-	check(sourceDir.isDirectory()) { "ktlint: no existe $sourceDir" }
+	check(sourceDir.isDirectory()) { "ktlint: $sourceDir does not exist" }
 
 	val java = File(System.getProperty("java.home"), "bin/java").path
 	val command =
 		buildList {
 			add(java)
-			// ktlint usa reflexión sobre el JDK.
+			// ktlint uses reflection on the JDK.
 			add("--add-opens=java.base/java.lang=ALL-UNNAMED")
 			add("-cp")
 			add(tool.resolvedFiles.joinToString(File.pathSeparator))
@@ -40,5 +40,5 @@ fun ktlint(
 			.inheritIO()
 			.start()
 			.waitFor()
-	check(exit == 0) { "ktlint ha encontrado errores" }
+	check(exit == 0) { "ktlint found errors" }
 }

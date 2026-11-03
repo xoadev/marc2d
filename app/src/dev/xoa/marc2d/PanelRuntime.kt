@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-/** Conecta las piezas del panel. Vive lo que el proceso; el servicio solo lo mantiene en marcha. */
+/** Connects the panel's pieces. It lives as long as the process; the service only keeps it running. */
 class PanelRuntime(
 	context: Context,
 ) {
@@ -106,7 +106,7 @@ class PanelRuntime(
 
 	private suspend fun keepConnected(connection: HaConnection) {
 		var wait = MIN_RETRY
-		// Solo al principio: durante los reintentos se mantiene el aviso de la última desconexión.
+		// Only at the start: during retries the warning from the last disconnection stays.
 		_haStatus.value = HaStatus.Connecting
 		while (true) {
 			try {
@@ -122,7 +122,7 @@ class PanelRuntime(
 			} catch (e: CancellationException) {
 				throw e
 			} catch (_: HaAuthException) {
-				// Reintentar no arregla un token malo: se espera a que cambie la configuración.
+				// Retrying does not fix a bad token: wait for the configuration to change.
 				_haStatus.value = HaStatus.AuthFailed
 				return
 			} catch (e: Exception) {

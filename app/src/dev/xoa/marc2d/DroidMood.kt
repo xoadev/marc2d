@@ -1,16 +1,16 @@
 package dev.xoa.marc2d
 
-/** Lo que muestra el droide de la pantalla principal. */
+/** What the droid on the main screen shows. */
 enum class DroidMood { Walking, Sleeping, Offline, Recording, Alarm, Intruder }
 
-/** Los estados que HA manda por MQTT, con la entidad `select.*_estado`. */
+/** The states HA sends over MQTT, with the `select.*_state` entity. */
 enum class HaMood(
 	val label: String,
 ) {
 	Normal("Normal"),
-	Alarm("Alarma"),
-	Intruder("Intruso"),
-	Recording("Grabando"),
+	Alarm("Alarm"),
+	Intruder("Intruder"),
+	Recording("Recording"),
 	;
 
 	companion object {
@@ -19,7 +19,7 @@ enum class HaMood(
 }
 
 object DroidMoods {
-	/** Lo que dice HA manda sobre lo que el panel deduce solo: una alarma no se oculta por un fallo. */
+	/** What HA says overrides what the panel works out by itself: a failure does not hide an alarm. */
 	fun resolve(
 		ha: HaMood,
 		hasProblem: Boolean,

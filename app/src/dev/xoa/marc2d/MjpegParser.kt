@@ -2,7 +2,7 @@ package dev.xoa.marc2d
 
 import java.io.ByteArrayOutputStream
 
-/** Saca los JPEG de un flujo MJPEG sin leer sus cabeceras: basta con las marcas de inicio y fin. */
+/** Extracts the JPEGs from an MJPEG stream without reading its headers: the start and end markers are enough. */
 class MjpegParser {
 	private val frame = ByteArrayOutputStream()
 	private var inFrame = false
@@ -40,7 +40,7 @@ class MjpegParser {
 		const val START = 0xD8
 		const val END = 0xD9
 
-		// Un flujo corrupto no debe agotar la memoria.
+		// A corrupt stream must not exhaust memory.
 		const val MAX_FRAME_BYTES = 8 * 1024 * 1024
 	}
 }

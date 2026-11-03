@@ -1,19 +1,19 @@
 package dev.xoa.marc2d
 
-/** Los textos de estado del panel. */
+/** The panel's status texts. */
 object PanelWarnings {
 	fun haStatus(status: HaStatus): String =
 		when (status) {
-			HaStatus.NotConfigured -> "Falta conectar con Home Assistant"
-			HaStatus.Connecting -> "Conectando con Home Assistant…"
-			HaStatus.Connected -> "Conectado a Home Assistant"
-			HaStatus.AuthFailed -> "Home Assistant ha rechazado el token"
-			HaStatus.MissingScript -> "Falta script.marc2d_config en Home Assistant"
+			HaStatus.NotConfigured -> "Not connected to Home Assistant yet"
+			HaStatus.Connecting -> "Connecting to Home Assistant…"
+			HaStatus.Connected -> "Connected to Home Assistant"
+			HaStatus.AuthFailed -> "Home Assistant rejected the token"
+			HaStatus.MissingScript -> "script.marc2d_config is missing in Home Assistant"
 			is HaStatus.InvalidConfig -> "script.marc2d_config: ${status.reason}"
-			is HaStatus.Disconnected -> "Sin conexión con Home Assistant (${status.reason})"
+			is HaStatus.Disconnected -> "No connection to Home Assistant (${status.reason})"
 		}
 
-	/** El aviso de la pantalla principal, o nada si todo funciona. */
+	/** The warning on the main screen, or nothing if everything works. */
 	fun warning(
 		ha: HaStatus,
 		intercoms: Map<String, IntercomStatus>,
@@ -22,13 +22,13 @@ object PanelWarnings {
 	): String? {
 		val lines =
 			buildList {
-				if (!micGranted) add("Falta el permiso del micrófono")
+				if (!micGranted) add("Microphone permission is missing")
 				if (ha != HaStatus.Connected && ha != HaStatus.Connecting) add(haStatus(ha))
-				if (mqtt == MqttStatus.Connecting) add("Sin conexión con MQTT")
+				if (mqtt == MqttStatus.Connecting) add("No connection to MQTT")
 				intercoms
 					.filterValues { it != IntercomStatus.Registered }
 					.keys
-					.forEach { add("$it: sin registrar") }
+					.forEach { add("$it: not registered") }
 			}
 		return lines.joinToString("\n").ifEmpty { null }
 	}

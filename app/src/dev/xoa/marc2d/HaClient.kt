@@ -33,16 +33,16 @@ sealed interface HaStatus {
 	) : HaStatus
 }
 
-class HaAuthException : Exception("Home Assistant ha rechazado el token")
+class HaAuthException : Exception("Home Assistant rejected the token")
 
-/** Mantiene una sesión con Home Assistant y vuelve a pedir la configuración de vez en cuando. */
+/** Keeps a session with Home Assistant and asks for the configuration again from time to time. */
 class HaClient {
 	private val client =
 		HttpClient(OkHttp) {
 			install(WebSockets) { pingIntervalMillis = PING_INTERVAL.inWholeMilliseconds }
 		}
 
-	/** Termina al perder la conexión, con una excepción. */
+	/** Ends with an exception when the connection is lost. */
 	suspend fun run(
 		connection: HaConnection,
 		onStatus: (HaStatus) -> Unit,
@@ -76,7 +76,7 @@ class HaClient {
 		}
 	}
 
-	/** Se suscribe solo para recibir el estado actual: cada refresco trae también la previsión. */
+	/** Subscribes only to receive the current state: each refresh also brings the forecast. */
 	private suspend fun DefaultClientWebSocketSession.fetchWeather(
 		entity: String,
 		nextId: () -> Int,
@@ -116,7 +116,7 @@ class HaClient {
 		}
 	}
 
-	/** Sigue leyendo durante la espera para enterarse enseguida si se cae la conexión. */
+	/** Keeps reading while it waits, to find out right away if the connection drops. */
 	private suspend fun DefaultClientWebSocketSession.idleUntilNextRefresh() {
 		withTimeoutOrNull(REFRESH_INTERVAL) {
 			while (true) receiveMessage()

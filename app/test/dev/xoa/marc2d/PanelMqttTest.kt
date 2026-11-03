@@ -11,21 +11,21 @@ import kotlinx.coroutines.cancel
 
 class PanelMqttTest {
 	@Test
-	fun `normaliza el nombre del panel para los temas`() {
-		assertEquals("cocina_baja", PanelTopics("Cocina Baja").id)
-		assertEquals("panel", PanelTopics("¡¡¡").id)
+	fun `normalizes the panel name for the topics`() {
+		assertEquals("upper_kitchen", PanelTopics("Upper Kitchen").id)
+		assertEquals("panel", PanelTopics("!!!").id)
 	}
 
 	@Test
-	fun `el descubrimiento incluye disponibilidad y sirena`() {
-		val topics = PanelTopics("Salon")
-		val payload = PanelDiscovery.payload(topics, "Salon", "Pixel 3a")
+	fun `discovery includes availability and siren`() {
+		val topics = PanelTopics("Lounge")
+		val payload = PanelDiscovery.payload(topics, "Lounge", "Pixel 3a")
 		assertTrue(topics.availability in payload)
 		assertTrue(topics.sirenCommand in payload)
 	}
 
 	@Test
-	fun `no publica cambios de luz pequeños`() {
+	fun `does not publish small light changes`() {
 		assertTrue(PanelReadings.isSignificant(null, 1f))
 		assertFalse(PanelReadings.isSignificant(100f, 110f))
 		assertTrue(PanelReadings.isSignificant(100f, 130f))
@@ -33,14 +33,14 @@ class PanelMqttTest {
 	}
 
 	@Test
-	fun `no muestra la contraseña de MQTT`() {
+	fun `does not show the MQTT password`() {
 		assertFalse("s3cr3t" in MqttConfig("192.0.2.8", username = "u", password = "s3cr3t").toString())
 	}
 }
 
 class MqttCodecTest {
 	@Test
-	fun `codifica una longitud de varios bytes`() {
+	fun `encodes a multi-byte length`() {
 		val packet = MqttCodec.publish("t", "x".repeat(200), retain = true)
 		val read = MqttCodec.read(packet.inputStream())
 		val publish = MqttCodec.parsePublish(read)
@@ -52,7 +52,7 @@ class MqttCodecTest {
 	}
 
 	@Test
-	fun `lee el identificador de un mensaje con QoS 1`() {
+	fun `reads the identifier of a QoS 1 message`() {
 		val body = byteArrayOf(0, 1, 't'.code.toByte(), 0, 7, 'O'.code.toByte(), 'N'.code.toByte())
 		val publish = MqttCodec.parsePublish(MqttPacket(MqttCodec.PUBLISH, 2, body))
 		assertEquals(7, publish.packetId)
@@ -60,7 +60,7 @@ class MqttCodecTest {
 	}
 
 	@Test
-	fun `un paquete cortado no se da por bueno`() {
+	fun `a truncated packet is not accepted`() {
 		val packet = MqttCodec.pingreq().copyOf(1)
 		assertTrue(runCatching { MqttCodec.read(packet.inputStream()) }.isFailure)
 	}
@@ -85,10 +85,10 @@ class PanelMqttClientTest {
 	}
 
 	private val config = MqttConfig("192.0.2.8", username = "u", password = "p")
-	private val topics = PanelTopics("Salon")
+	private val topics = PanelTopics("Lounge")
 
 	@Test
-	fun `al conectar se anuncia y envia lo leido antes`() {
+	fun `on connecting it announces itself and sends what was read earlier`() {
 		val session = FakeSession()
 		val sirens = mutableListOf<Boolean>()
 		val doorbells = mutableListOf<Pair<String, String>>()
@@ -110,7 +110,7 @@ class PanelMqttClientTest {
 			)
 		mqtt.publish(PanelTopics::battery, "80")
 
-		mqtt.apply(config, "Salon")
+		mqtt.apply(config, "Lounge")
 
 		assertEquals(MqttStatus.Connected, mqtt.status.value)
 		assertEquals(listOf(topics.sirenCommand, topics.moodCommand, "marc2d/doorbell/+"), session.subscribed)
@@ -122,11 +122,11 @@ class PanelMqttClientTest {
 		assertEquals(1, session.published.count { it.first == topics.battery })
 
 		message?.invoke(topics.sirenCommand, PanelTopics.ON)
-		message?.invoke("otro/tema", PanelTopics.OFF)
+		message?.invoke("other/topic", PanelTopics.OFF)
 		assertEquals(listOf(true), sirens)
 
-		message?.invoke(topics.moodCommand, "Alarma")
-		assertEquals(listOf("Alarma"), moods)
+		message?.invoke(topics.moodCommand, "Alarm")
+		assertEquals(listOf("Alarm"), moods)
 		message?.invoke("marc2d/doorbell/parking", PanelTopics.RING)
 		assertEquals(listOf("parking" to PanelTopics.RING), doorbells)
 		mqtt.doorbellAnswered("parking")
@@ -137,21 +137,21 @@ class PanelMqttClientTest {
 
 class DroidMoodTest {
 	@Test
-	fun `lo que manda HA tiene prioridad`() {
+	fun `what HA commands takes priority`() {
 		assertEquals(DroidMood.Intruder, DroidMoods.resolve(HaMood.Intruder, hasProblem = true, dark = true))
 		assertEquals(DroidMood.Alarm, DroidMoods.resolve(HaMood.Alarm, hasProblem = true, dark = false))
 	}
 
 	@Test
-	fun `el panel deduce solo los demas estados`() {
+	fun `the panel works out the other states by itself`() {
 		assertEquals(DroidMood.Offline, DroidMoods.resolve(HaMood.Normal, hasProblem = true, dark = true))
 		assertEquals(DroidMood.Sleeping, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = true))
 		assertEquals(DroidMood.Walking, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false))
 	}
 
 	@Test
-	fun `ignora un estado desconocido`() {
-		assertEquals(null, HaMood.fromLabel("Fiesta"))
+	fun `ignores an unknown state`() {
+		assertEquals(null, HaMood.fromLabel("Party"))
 	}
 }
 
@@ -159,7 +159,7 @@ class MjpegParserTest {
 	private fun bytes(vararg values: Int) = ByteArray(values.size) { values[it].toByte() }
 
 	@Test
-	fun `saca imagenes aunque lleguen partidas`() {
+	fun `extracts images even if they arrive split`() {
 		val frames = mutableListOf<List<Byte>>()
 		val parser = MjpegParser()
 		val first = bytes(0x2D, 0xFF, 0xD8, 0x01)

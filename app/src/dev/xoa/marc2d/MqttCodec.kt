@@ -16,7 +16,7 @@ data class MqttPublish(
 	val packetId: Int?,
 )
 
-/** Los paquetes de MQTT 3.1.1 que usa el panel. Se publica con QoS 0: TCP basta en la LAN. */
+/** The MQTT 3.1.1 packets the panel uses. It publishes with QoS 0: TCP is enough on the LAN. */
 object MqttCodec {
 	const val CONNACK = 2
 	const val PUBLISH = 3
@@ -102,12 +102,12 @@ object MqttCodec {
 			length = length or ((byte and LENGTH_MASK) shl (LENGTH_BITS * count))
 			count++
 			if (byte and LENGTH_CONTINUES == 0) break
-			if (count == MAX_LENGTH_BYTES) throw IllegalStateException("Longitud MQTT no válida")
+			if (count == MAX_LENGTH_BYTES) throw IllegalStateException("Invalid MQTT length")
 		}
 		return MqttPacket(first shr TYPE_SHIFT, first and FLAGS_MASK, input.readNBytes(length).also { if (it.size < length) throw EOFException() })
 	}
 
-	/** El código de retorno de un CONNACK: 0 es aceptado. */
+	/** The return code of a CONNACK: 0 means accepted. */
 	fun connackCode(packet: MqttPacket): Int = packet.body[1].toInt()
 
 	fun parsePublish(packet: MqttPacket): MqttPublish {

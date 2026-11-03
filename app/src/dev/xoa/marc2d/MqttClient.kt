@@ -16,7 +16,7 @@ data class MqttOptions(
 	override fun toString(): String = "MqttOptions(server=$server, port=$port, clientId=$clientId, username=$username)"
 }
 
-/** Lo que se puede hacer con una conexión abierta. No bloquea: se puede llamar desde el hilo principal. */
+/** What can be done with an open connection. It does not block: it can be called from the main thread. */
 interface MqttSession {
 	fun publish(
 		topic: String,
@@ -28,13 +28,13 @@ interface MqttSession {
 }
 
 /**
- * Lo único que el panel necesita de MQTT. Para cambiar de implementación, como una librería, basta
- * con otra clase que cumpla este contrato: nada fuera de ella conoce el protocolo.
+ * All the panel needs from MQTT. To change the implementation, for example to a library, all it takes
+ * is another class that meets this contract: nothing outside it knows the protocol.
  */
 fun interface MqttClient {
 	/**
-	 * Abre una conexión con sesión limpia y dura lo que ella: termina con una excepción al perderla, y
-	 * al cancelarla se corta sin despedirse, para que el broker publique el testamento.
+	 * Opens a clean-session connection and lasts as long as it does: it ends with an exception when the connection is lost, and
+	 * on cancellation it cuts off without saying goodbye, so that the broker publishes the last will.
 	 */
 	suspend fun run(
 		options: MqttOptions,

@@ -16,9 +16,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Mantiene el registro SIP y la conexión con Home Assistant, porque el telefonillo no manda push.
- * Es de tipo `microphone` y lo arranca la pantalla de inicio: Android 15 no deja lanzar este tipo
- * desde `BOOT_COMPLETED`.
+ * Keeps the SIP registration and the connection to Home Assistant, because the intercom does not send push.
+ * It is of type `microphone` and the home screen starts it: Android 15 does not allow launching this type
+ * from `BOOT_COMPLETED`.
  */
 class PanelService : Service() {
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -29,11 +29,11 @@ class PanelService : Service() {
 		super.onCreate()
 		val manager = getSystemService(NotificationManager::class.java)
 		manager.createNotificationChannel(
-			NotificationChannel(CHANNEL_RUNNING, "Panel en marcha", NotificationManager.IMPORTANCE_MIN),
+			NotificationChannel(CHANNEL_RUNNING, "Panel running", NotificationManager.IMPORTANCE_MIN),
 		)
 		manager.createNotificationChannel(
-			NotificationChannel(CHANNEL_CALL, "Llamadas del telefonillo", NotificationManager.IMPORTANCE_HIGH).apply {
-				// El tono lo pone Linphone.
+			NotificationChannel(CHANNEL_CALL, "Intercom calls", NotificationManager.IMPORTANCE_HIGH).apply {
+				// Linphone provides the ringtone.
 				setSound(null, null)
 			},
 		)
@@ -41,7 +41,7 @@ class PanelService : Service() {
 		try {
 			startForeground(NOTIFICATION_RUNNING, runningNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
 		} catch (_: ForegroundServiceStartNotAllowedException) {
-			// La pantalla de inicio lo volverá a arrancar cuando esté visible.
+			// The home screen will start it again when it is visible.
 			stopSelf()
 			return
 		}
@@ -87,12 +87,12 @@ class PanelService : Service() {
 			.setOngoing(true)
 			.build()
 
-	/** Si el panel no está delante, la intención a pantalla completa lo trae. */
+	/** If the panel is not in front, the full-screen intent brings it. */
 	private fun callNotification(call: IntercomCall): Notification =
 		Notification
 			.Builder(this, CHANNEL_CALL)
 			.setSmallIcon(R.drawable.ic_launcher)
-			.setContentTitle("Llaman desde ${call.name}")
+			.setContentTitle("Call from ${call.name}")
 			.setCategory(Notification.CATEGORY_CALL)
 			.setFullScreenIntent(openPanel(), true)
 			.setOngoing(true)

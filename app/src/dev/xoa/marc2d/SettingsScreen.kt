@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 
 private val SettingsGray = Color(0xFFA0A0A0)
 
-/** El panel solo necesita conectar con Home Assistant: el resto de la configuración sale de allí. */
+/** The panel only needs to connect to Home Assistant: the rest of the configuration comes from there. */
 @Composable
 fun SettingsScreen(
 	initial: HaConnection?,
@@ -63,8 +63,8 @@ fun SettingsScreen(
 		verticalArrangement = Arrangement.spacedBy(16.dp),
 	) {
 		Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-			Text("Conexión con Home Assistant", color = PixelWhite, fontSize = 28.sp, modifier = Modifier.weight(1f))
-			if (onClose != null) PixelButton(PixelIcon.Close, "Cerrar", onClose, size = CLOSE_BUTTON)
+			Text("Home Assistant connection", color = PixelWhite, fontSize = 28.sp, modifier = Modifier.weight(1f))
+			if (onClose != null) PixelButton(PixelIcon.Close, "Close", onClose, size = CLOSE_BUTTON)
 		}
 		OutlinedTextField(
 			value = url,
@@ -78,7 +78,7 @@ fun SettingsScreen(
 		OutlinedTextField(
 			value = token,
 			onValueChange = { token = it },
-			label = { Text("Token de larga duración") },
+			label = { Text("Long-lived token") },
 			singleLine = true,
 			shape = RectangleShape,
 			colors = fieldColors,
@@ -88,14 +88,14 @@ fun SettingsScreen(
 		OutlinedTextField(
 			value = panel,
 			onValueChange = { panel = it },
-			label = { Text("Nombre del panel") },
+			label = { Text("Panel name") },
 			singleLine = true,
 			shape = RectangleShape,
 			colors = fieldColors,
 			modifier = Modifier.fillMaxWidth(),
 		)
 		PixelTextButton(
-			label = "Guardar",
+			label = "Save",
 			onClick = { onSave(HaConnection(url, token, panel)) },
 			enabled = url.isNotBlank() && token.isNotBlank() && panel.isNotBlank(),
 			modifier = Modifier.fillMaxWidth(),
@@ -104,9 +104,9 @@ fun SettingsScreen(
 		intercoms.forEach { (name, intercom) ->
 			Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 20.sp)
 		}
-		PixelTextButton("Ajustes de Android", onOpenAndroidSettings, Modifier.fillMaxWidth())
+		PixelTextButton("Android settings", onOpenAndroidSettings, Modifier.fillMaxWidth())
 		if (onLeaveKiosk != null) {
-			PixelTextButton("Salir del modo quiosco", onLeaveKiosk, Modifier.fillMaxWidth())
+			PixelTextButton("Exit kiosk mode", onLeaveKiosk, Modifier.fillMaxWidth())
 		}
 	}
 }
@@ -114,7 +114,7 @@ fun SettingsScreen(
 private val IntercomStatus.label: String
 	get() =
 		when (this) {
-			IntercomStatus.Registering -> "registrando"
-			IntercomStatus.Registered -> "registrado"
-			IntercomStatus.Failed -> "error de registro"
+			IntercomStatus.Registering -> "registering"
+			IntercomStatus.Registered -> "registered"
+			IntercomStatus.Failed -> "registration error"
 		}

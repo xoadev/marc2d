@@ -14,10 +14,10 @@ dependencies:
 settings:
   android:
     namespace: dev.xoa.marc2d
-    # Android 15, el de la Pixel 3a con LineageOS 22.
+    # Android 15, the version on the Pixel 3a with LineageOS 22.
     minSdk: 35
     versionName: 0.1.0
-    # Las dos Pixel son arm64: el resto de ABI de Linphone solo engordan la APK.
+    # Both Pixels are arm64: Linphone's other ABIs only bloat the APK.
     abiFilters: [ arm64-v8a ]
   compose: enabled
   kotlin:

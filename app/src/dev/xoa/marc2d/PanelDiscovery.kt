@@ -7,7 +7,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
-/** Los temas MQTT de un panel. Cada lectura va en el suyo para que HA no necesite plantillas. */
+/** A panel's MQTT topics. Each reading has its own so that HA needs no templates. */
 class PanelTopics(
 	panel: String,
 ) {
@@ -31,7 +31,7 @@ class PanelTopics(
 		const val ON = "ON"
 		const val OFF = "OFF"
 
-		/** Común a todos los paneles: `marc2d/doorbell/<telefonillo>`. No se retiene: un timbre antiguo no debe sonar. */
+		/** Common to all panels: `marc2d/doorbell/<intercom>`. Not retained: an old doorbell press must not ring. */
 		const val DOORBELL_PREFIX = "marc2d/doorbell/"
 		const val RING = "RING"
 		const val ANSWERED = "ANSWERED"
@@ -45,7 +45,7 @@ class PanelTopics(
 	}
 }
 
-/** El autodescubrimiento de HA: un solo mensaje crea el dispositivo y todas sus entidades. */
+/** HA discovery: a single message creates the device and all its entities. */
 object PanelDiscovery {
 	fun payload(
 		topics: PanelTopics,
@@ -62,30 +62,30 @@ object PanelDiscovery {
 			putJsonObject("origin") { put("name", "marc2d") }
 			put("availability_topic", topics.availability)
 			putJsonObject("components") {
-				sensor(topics, "light", "Luz", topics.light, "illuminance", "lx")
-				sensor(topics, "battery", "Batería", topics.battery, "battery", "%")
-				sensor(topics, "battery_temperature", "Temperatura de la batería", topics.temperature, "temperature", "°C")
+				sensor(topics, "light", "Light", topics.light, "illuminance", "lx")
+				sensor(topics, "battery", "Battery", topics.battery, "battery", "%")
+				sensor(topics, "battery_temperature", "Battery temperature", topics.temperature, "temperature", "°C")
 				putJsonObject("charging") {
 					put("platform", "binary_sensor")
 					put("unique_id", "marc2d_${topics.id}_charging")
-					put("name", "Cargando")
+					put("name", "Charging")
 					put("device_class", "battery_charging")
 					put("state_topic", topics.charging)
 				}
 				putJsonObject("mood") {
 					put("platform", "select")
 					put("unique_id", "marc2d_${topics.id}_mood")
-					put("name", "Estado")
+					put("name", "State")
 					put("state_topic", topics.mood)
 					put("command_topic", topics.moodCommand)
-					// Retenido: al reiniciarse, el panel recupera la alarma que estuviera activa.
+					// Retained: on restart, the panel recovers whatever alarm was active.
 					put("retain", true)
 					putJsonArray("options") { HaMood.entries.forEach { add(it.label) } }
 				}
 				putJsonObject("siren") {
 					put("platform", "siren")
 					put("unique_id", "marc2d_${topics.id}_siren")
-					put("name", "Sirena")
+					put("name", "Siren")
 					put("state_topic", topics.siren)
 					put("command_topic", topics.sirenCommand)
 				}

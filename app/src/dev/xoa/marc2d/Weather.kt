@@ -18,7 +18,7 @@ data class WeatherReport(
 	val forecast: List<HourForecast>,
 	val fetchedAt: Instant,
 ) {
-	/** Un dato viejo se oculta: mejor no mostrar nada que un tiempo que ya no es el actual. */
+	/** Old data is hidden: better to show nothing than weather that is no longer current. */
 	fun isFresh(now: Instant): Boolean = Duration.between(fetchedAt, now) <= MAX_AGE
 
 	fun upcoming(now: Instant): List<HourForecast> = forecast.filter { it.time > now }.take(FORECAST_HOURS)
@@ -29,7 +29,7 @@ data class WeatherReport(
 	}
 }
 
-/** Cómo se presenta el tiempo en la pantalla principal. */
+/** How the weather is presented on the main screen. */
 object WeatherFormat {
 	private val hour = DateTimeFormatter.ofPattern("HH")
 
@@ -40,27 +40,27 @@ object WeatherFormat {
 		zone: ZoneId,
 	): String = time.atZone(zone).format(hour)
 
-	/** La condición en texto. Las que no conocemos se muestran tal cual llegan de Home Assistant. */
+	/** The condition as text. Unknown ones are shown just as they arrive from Home Assistant. */
 	fun label(condition: String): String =
 		when (condition) {
-			"clear-night" -> "Despejado"
-			"cloudy" -> "Nublado"
-			"exceptional" -> "Excepcional"
-			"fog" -> "Niebla"
-			"hail" -> "Granizo"
-			"lightning" -> "Tormenta"
-			"lightning-rainy" -> "Tormenta con lluvia"
-			"partlycloudy" -> "Parcialmente nublado"
-			"pouring" -> "Lluvia intensa"
-			"rainy" -> "Lluvia"
-			"snowy" -> "Nieve"
-			"snowy-rainy" -> "Aguanieve"
-			"sunny" -> "Soleado"
-			"windy", "windy-variant" -> "Viento"
+			"clear-night" -> "Clear"
+			"cloudy" -> "Cloudy"
+			"exceptional" -> "Exceptional"
+			"fog" -> "Fog"
+			"hail" -> "Hail"
+			"lightning" -> "Thunderstorm"
+			"lightning-rainy" -> "Thunderstorm with rain"
+			"partlycloudy" -> "Partly cloudy"
+			"pouring" -> "Heavy rain"
+			"rainy" -> "Rain"
+			"snowy" -> "Snow"
+			"snowy-rainy" -> "Sleet"
+			"sunny" -> "Sunny"
+			"windy", "windy-variant" -> "Windy"
 			else -> condition
 		}
 
-	/** Símbolo monocromo: el selector U+FE0E evita que Android lo pinte como un emoji en color. */
+	/** Monochrome symbol: the U+FE0E selector stops Android from drawing it as a color emoji. */
 	fun symbol(condition: String): String =
 		when (condition) {
 			"clear-night" -> "☾︎"

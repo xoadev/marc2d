@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: ktlint, reglas de Compose y tests
+      - name: ktlint, Compose rules and tests
         run: ./kotlin check
-      - name: Compilación
+      - name: Build
         run: ./kotlin build -m app
 
   lint-markdown:

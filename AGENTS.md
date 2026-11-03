@@ -1,69 +1,68 @@
-# Instrucciones para agentes
+# Instructions for agents
 
-marc2d es una app Android que convierte un móvil fijo en la pared en la consola de la casa. Se conecta
-a Home Assistant y a los telefonillos, y expone sus funciones. No es la centralita: si algo es lógica de
-la casa, va en Home Assistant.
+marc2d is an Android app that turns a phone fixed to the wall into the console of the house. It connects
+to Home Assistant and the intercoms, and exposes their functions. It is not the control hub: anything that is
+house logic belongs in Home Assistant.
 
-## Documentos
+## Documents
 
-- `SPEC.md` es la fuente de verdad del alcance, el orden de entrega y las decisiones. Si un cambio la
-  contradice, se actualiza en el mismo commit.
-- `DESIGN.md` es el estilo de la app y del droide: lo visual se ajusta a él.
-- `README.md` tiene el diagrama de arquitectura: se actualiza si cambian las piezas o sus conexiones.
+- `SPEC.md` is the source of truth for scope, delivery order and decisions. If a change contradicts it,
+  update it in the same commit.
+- `DESIGN.md` is the style of the app and the droid: everything visual follows it.
+- `README.md` has the architecture diagram: update it if the pieces or their connections change.
 
-## Ciclo de trabajo
+## Work cycle
 
-Spec, cambio, `./kotlin check` y `./kotlin build -m app`, commit, PR. No se da nada por terminado sin
-esos comandos en verde. Todo entra en `main` por PR, desde una rama propia.
+Spec, change, `./kotlin check` and `./kotlin build -m app`, commit, PR. Nothing is finished until those
+commands are green. Everything reaches `main` through a PR, from its own branch.
 
 ```sh
-./kotlin check               # ktlint, reglas de Compose y tests
-./kotlin build -m app        # compila la APK
-./kotlin do ktlintFormat     # corrige el formato
+./kotlin check               # ktlint, Compose rules and tests
+./kotlin build -m app        # builds the APK
+./kotlin do ktlintFormat     # fixes the formatting
 ```
 
-Se compila con Kotlin Toolchain: no se añade Gradle. La CI también ejecuta markdownlint con
+The build uses Kotlin Toolchain: do not add Gradle. CI also runs markdownlint with
 `.markdownlint-cli2.yaml`.
 
-## Proyecto abierto
+## Open project
 
-El repo es para cualquiera: nada de una instalación concreta, como IP, entidades reales o nombres de paneles.
-Los ejemplos usan direcciones de documentación (`192.0.2.x`). La configuración de cada casa va en su propio
+The repo is for anyone: nothing from a specific install, such as IPs, real entities or panel names.
+Examples use documentation addresses (`192.0.2.x`). Each home's configuration lives in its own
 repo.
 
-## Convenciones
+## Conventions
 
-- **Kotlin:** tabuladores, comas finales y 160 columnas como máximo; el detalle está en `.editorconfig`.
-- **Paquete:** todo el código cuelga de `dev.xoa.marc2d`.
-- **Documentación y comentarios:** en castellano. Los comentarios explican el porqué, no el qué.
-- **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
-- **Linter:** se corrige la causa; desactivar una regla requiere un comentario con el motivo. Un cambio
-  en `plugins/ktlint` se prueba con un fichero que incumpla las reglas: tiene que fallar.
-- **Sin compatibilidad hacia atrás:** el proyecto no tiene usuarios, se rompe lo que haga falta.
+- **Kotlin:** tabs, trailing commas and 160 columns at most; the details are in `.editorconfig`.
+- **Package:** all code lives under `dev.xoa.marc2d`.
+- **Documentation and comments:** in English. Comments explain why, not what.
+- **Commits:** in English, with Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
+- **Linter:** fix the cause; disabling a rule requires a comment with the reason. Test a change in
+  `plugins/ktlint` with a file that breaks the rules: it has to fail.
+- **No backward compatibility:** the project has no users, so break whatever needs breaking.
 
-## Dependencias
+## Dependencies
 
-- Solo versiones estables de librerías con publicaciones recientes: nada de alfas, betas ni librerías
-  abandonadas.
-- Todas las versiones van en `libs.versions.toml`, y una librería entra cuando se usa por primera vez.
-  La excepción son ktlint y sus reglas, que están en `plugins/ktlint/plugin.yaml`.
-- Nada puede depender de los servicios de Google: los paneles llevan LineageOS sin ellos.
-- Una librería nueva se justifica en `SPEC.md`, en Decisiones. Si basta la API de Android, no se añade.
+- Only stable versions of libraries with recent releases: no alphas, betas or abandoned
+  libraries.
+- All versions go in `libs.versions.toml`, and a library is added when it is first used.
+  The exception is ktlint and its rules, which are in `plugins/ktlint/plugin.yaml`.
+- Nothing can depend on Google services: the panels run LineageOS without them.
+- A new library is justified in `SPEC.md`, under Decisions. If the Android API is enough, do not add it.
 
-## Secretos
+## Secrets
 
-Los tokens, las contraseñas y las direcciones de otras instalaciones se guardan en el almacenamiento
-privado de la app, nunca en el repo, los logs ni los tests. Las copias de seguridad de Android están
-desactivadas por este motivo: no se reactivan.
+Tokens, passwords and the addresses of other installs are kept in the app's private storage, never in the
+repo, logs or tests. Android backups are disabled for this reason: do not re-enable them.
 
-## Pruebas con dispositivos reales
+## Testing with real devices
 
-- `adb` siempre con `-s <serie>`: puede haber otros móviles conectados, incluidos los personales. Hay
-  que comprobar el modelo antes de instalar nada.
-- Con el modo quiosco, `am force-stop` no cierra la app. Para reiniciarla, `run-as dev.xoa.marc2d kill <pid>`.
-- Las pruebas contra un telefonillo se hacen desde la LAN directa. Por la ruta de subred de Tailscale
-  sale con SNAT y el resultado no vale.
-- Los detalles comprobados del VTO están en `SPEC.md`: no se cambian sin volver a comprobarlos contra
-  el equipo.
-- Sonar la sirena, hablar por los altavoces o llamar a servicios de Home Assistant afecta a una casa con
-  gente dentro: se pide permiso antes de hacerlo.
+- Always use `adb` with `-s <serial>`: other phones may be connected, including personal ones. Check the
+  model before installing anything.
+- In kiosk mode, `am force-stop` does not close the app. To restart it, use `run-as dev.xoa.marc2d kill <pid>`.
+- Tests against an intercom are done from the direct LAN. Over the Tailscale subnet route the traffic
+  leaves with SNAT and the result is not valid.
+- The verified VTO details are in `SPEC.md`: do not change them without checking again against the
+  device.
+- Sounding the siren, speaking through the speakers or calling Home Assistant services affects a house with
+  people inside: ask for permission first.

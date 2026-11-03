@@ -22,7 +22,7 @@ data class BatteryReading(
 	val charging: Boolean,
 )
 
-/** Lee los sensores del móvil que el panel publica en Home Assistant. */
+/** Reads the phone's sensors that the panel publishes to Home Assistant. */
 class PanelReadings(
 	private val context: Context,
 ) {
@@ -34,7 +34,7 @@ class PanelReadings(
 		val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
 		return BatteryReading(
 			level = level * PERCENT / scale,
-			// Android la da en décimas de grado.
+			// Android gives it in tenths of a degree.
 			temperature = (intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / TENTHS).roundToInt(),
 			charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
 		)
@@ -66,7 +66,7 @@ class PanelReadings(
 		private const val MIN_LUX_CHANGE = 2f
 		private const val MIN_RELATIVE_CHANGE = 0.2f
 
-		/** Un cambio pequeño no se publica: el sensor oscila mucho y llenaría el historial de HA. */
+		/** A small change is not published: the sensor fluctuates a lot and would fill HA's history. */
 		fun isSignificant(
 			last: Float?,
 			lux: Float,

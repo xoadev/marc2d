@@ -8,12 +8,12 @@ class PanelConfigTest {
 	private val intercom = IntercomConfig("Parking", "192.0.2.8", "9901#1", "s3cr3t")
 
 	@Test
-	fun `escapa la almohadilla de la extension en la URI`() {
+	fun `escapes the hash of the extension in the URI`() {
 		assertEquals("sip:9901%231@192.0.2.8", intercom.sipIdentity)
 	}
 
 	@Test
-	fun `la contrasena no sale en los logs`() {
+	fun `the password does not appear in logs`() {
 		assertFalse("s3cr3t" in intercom.toString())
 		assertFalse("s3cr3t" in PanelConfig(listOf(intercom)).toString())
 		assertFalse("t0ken" in HaConnection("http://ha", "t0ken").toString())
