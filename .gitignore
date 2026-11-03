@@ -1,0 +1,10 @@
+.kotlin/
+.idea/
+build/
+__pycache__/
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+keystore.properties

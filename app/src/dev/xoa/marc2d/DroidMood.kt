@@ -1,0 +1,36 @@
+package dev.xoa.marc2d
+
+/** What the droid on the main screen shows. */
+enum class DroidMood { Walking, Sleeping, Offline, Recording, Alarm, Intruder }
+
+/** The states HA sends over MQTT, with the `select.*_state` entity. */
+enum class HaMood(
+	val label: String,
+) {
+	Normal("Normal"),
+	Alarm("Alarm"),
+	Intruder("Intruder"),
+	Recording("Recording"),
+	;
+
+	companion object {
+		fun fromLabel(label: String): HaMood? = entries.firstOrNull { it.label == label }
+	}
+}
+
+object DroidMoods {
+	/** What HA says overrides what the panel works out by itself: a failure does not hide an alarm. */
+	fun resolve(
+		ha: HaMood,
+		hasProblem: Boolean,
+		dark: Boolean,
+	): DroidMood =
+		when {
+			ha == HaMood.Intruder -> DroidMood.Intruder
+			ha == HaMood.Alarm -> DroidMood.Alarm
+			ha == HaMood.Recording -> DroidMood.Recording
+			hasProblem -> DroidMood.Offline
+			dark -> DroidMood.Sleeping
+			else -> DroidMood.Walking
+		}
+}

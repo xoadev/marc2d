@@ -1,0 +1,12 @@
+{
+  "domain": "marc2d",
+  "name": "marc2d",
+  "codeowners": ["@xoadev"],
+  "config_flow": true,
+  "dependencies": ["http", "websocket_api"],
+  "documentation": "https://github.com/xoadev/marc2d",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/xoadev/marc2d/issues",
+  "version": "0.1.0"
+}
