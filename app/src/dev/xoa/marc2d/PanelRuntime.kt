@@ -1,6 +1,7 @@
 package dev.xoa.marc2d
 
 import android.content.Context
+import android.util.Log
 import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -43,7 +44,12 @@ class PanelRuntime(
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
 	private val link = PanelLink()
-	private val speaker = PanelSpeaker { link.report(PanelLink.PLAYING, JsonPrimitive(it)) }
+	private val speaker =
+		PanelSpeaker(
+			context,
+			{ link.report(PanelLink.PLAYING, JsonPrimitive(it)) },
+			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
+		)
 	private var config = PanelConfig()
 	private var started = false
 
@@ -104,12 +110,14 @@ class PanelRuntime(
 	}
 
 	private fun handle(command: HaProtocol.PanelEvent) {
+		Log.i("marc2d", "Command: ${command::class.simpleName}")
 		when (command) {
 			is HaProtocol.PanelEvent.Siren -> if (config.siren) siren.set(command.on)
 			is HaProtocol.PanelEvent.Mood -> HaMood.fromLabel(command.value)?.let { _haMood.value = it }
 			is HaProtocol.PanelEvent.Doorbell -> phone.doorbell(command.intercom, command.payload)
 			is HaProtocol.PanelEvent.Play -> if (config.speaker) speaker.play(command.url)
 			HaProtocol.PanelEvent.Stop -> speaker.stop()
+			is HaProtocol.PanelEvent.Volume -> speaker.setVolume(command.level)
 			is HaProtocol.PanelEvent.Config -> Unit
 		}
 	}

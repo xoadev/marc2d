@@ -54,6 +54,13 @@ class HaProtocolTest {
 	}
 
 	@Test
+	fun `reads the audio commands`() {
+		assertEquals(HaProtocol.PanelEvent.Play("http://x/a.mp3"), HaProtocol.panelEvent(event("""{"kind":"play","url":"http://x/a.mp3"}""")))
+		assertEquals(HaProtocol.PanelEvent.Stop, HaProtocol.panelEvent(event("""{"kind":"stop"}""")))
+		assertEquals(HaProtocol.PanelEvent.Volume(0.5), HaProtocol.panelEvent(event("""{"kind":"volume","level":0.5}""")))
+	}
+
+	@Test
 	fun `ignores what it does not know`() {
 		assertNull(HaProtocol.panelEvent(event("""{"kind":"future"}""")))
 		assertNull(HaProtocol.panelEvent(event("""{"kind":"siren"}""")))

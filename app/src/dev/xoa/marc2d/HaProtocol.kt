@@ -44,6 +44,10 @@ object HaProtocol {
 
 		data object Stop : PanelEvent
 
+		data class Volume(
+			val level: Double,
+		) : PanelEvent
+
 		data class Doorbell(
 			val intercom: String,
 			val payload: String,
@@ -227,6 +231,18 @@ object HaProtocol {
 
 			"mood" -> {
 				text("value")?.let { PanelEvent.Mood(it) }
+			}
+
+			"play" -> {
+				text("url")?.let { PanelEvent.Play(it) }
+			}
+
+			"stop" -> {
+				PanelEvent.Stop
+			}
+
+			"volume" -> {
+				event["level"]?.jsonPrimitive?.doubleOrNull?.let { PanelEvent.Volume(it) }
 			}
 
 			"doorbell" -> {

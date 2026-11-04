@@ -172,3 +172,15 @@ async def test_speaker_plays_what_it_is_sent(hass, panel) -> None:
         "media_player", "media_stop", {"entity_id": "media_player.kitchen_speaker"}, blocking=True
     )
     assert (await panel.receive_json())["event"] == {"kind": "stop"}
+
+
+async def test_volume_is_set_from_home_assistant(hass, panel) -> None:
+    speaker = "media_player.kitchen_speaker"
+    await hass.services.async_call(
+        "media_player", "volume_set", {"entity_id": speaker, "volume_level": 0.5}, blocking=True
+    )
+    assert (await panel.receive_json())["event"] == {"kind": "volume", "level": 0.5}
+    await panel.send_json({"id": 2, "type": "marc2d/state", "values": {"volume": 0.5}})
+    await panel.receive_json()
+    await hass.async_block_till_done()
+    assert hass.states.get(speaker).attributes["volume_level"] == 0.5

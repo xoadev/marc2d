@@ -107,7 +107,8 @@ connection is lost HA could no longer turn it off.
 ## Speaker
 
 The panel is a `media_player.*_speaker`: `tts.speak` targets it like any other speaker. HA generates the speech and the
-panel plays the URL it receives, so it needs no TTS engine, which LineageOS lacks.
+panel plays the URL it receives, so it needs no TTS engine, which LineageOS lacks. Its volume is set from HA, with
+`media_player.volume_set`.
 
 Voice commands: the panel is an Assist satellite. It is activated with an on-screen button, sends the
 microphone audio to the HA pipeline (`assist_pipeline/run`) and plays the response. The

@@ -19,7 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SPEAKER, is_enabled
-from .panel_hub import KEY_PLAYING, get_hub
+from .panel_hub import KEY_PLAYING, KEY_VOLUME, get_hub
 
 
 async def async_setup_entry(
@@ -40,6 +40,7 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.MEDIA_ANNOUNCE
         | MediaPlayerEntityFeature.BROWSE_MEDIA
         | MediaPlayerEntityFeature.STOP
+        | MediaPlayerEntityFeature.VOLUME_SET
     )
 
     @property
@@ -48,6 +49,15 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
         return (
             MediaPlayerState.PLAYING if self._hub.values.get(self._key) else MediaPlayerState.IDLE
         )
+
+    @property
+    def volume_level(self) -> float | None:
+        """Return the volume that the panel reports, from 0 to 1."""
+        return self._hub.values.get(KEY_VOLUME)
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        """Change the panel's volume."""
+        self._hub.send({"kind": "volume", "level": volume})
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs: Any) -> None:
         """Send the panel a URL it can download by itself."""

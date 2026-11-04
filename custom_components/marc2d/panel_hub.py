@@ -13,8 +13,9 @@ DATA_HUBS = f"{DOMAIN}_hubs"
 
 KEY_SIREN = "siren"
 KEY_PLAYING = "playing"
+KEY_VOLUME = "volume"
 SENSOR_KEYS = ("light", "battery", "temperature", "charging")
-REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING)
+REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING, KEY_VOLUME)
 
 MOOD_NORMAL = "Normal"
 MOODS = [MOOD_NORMAL, "Alarm", "Intruder", "Recording"]
