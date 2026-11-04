@@ -42,35 +42,29 @@ flowchart LR
             svc["Foreground service"]
             sip["Linphone SDK"]
             hac["HA client<br/>Ktor"]
-            mq["MQTT client"]
             rtsp["RTSP server<br/>optional"]
             sys["Android<br/>TTS, audio, screen, camera"]
         end
         vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
-        broker["Mosquitto"]
         frigate["Frigate or similar"]
     end
 
     ui <--> svc
     svc --> sip
     svc --> hac
-    svc --> mq
     svc --> rtsp
     svc --> sys
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
-    hac <-- "WebSocket<br/>entities, events, Assist" --> ha
-    mq <-- "MQTT<br/>sensors, siren" --> broker
-    broker <--> ha
+    hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
     frigate -- "RTSP" --> rtsp
 ```
 
 | Connection  | Who starts it | What for                                                 |
 | ----------- | ------------- | -------------------------------------------------------- |
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
-| WebSocket   | the panel     | configuration, `weather.*`, `binary_sensor.*`, Assist    |
-| MQTT        | the panel     | entity creation, sensors, siren and availability         |
+| WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
 | RTSP        | Frigate       | reading the video from the panel's camera                |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the

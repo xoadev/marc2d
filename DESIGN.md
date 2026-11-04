@@ -67,5 +67,5 @@ or add a word. They are white, and red is reserved for **Hang up**.
 
 ## Text
 
-In English, with short sentences and no technical jargon on screen: "No connection to MQTT" is the limit. Technical
+In English, with short sentences and no technical jargon on screen: "No connection to Home Assistant" is the limit. Technical
 detail goes in the settings, not on the main screen.

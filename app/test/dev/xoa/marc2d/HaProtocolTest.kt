@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlinx.serialization.json.JsonPrimitive
 
 class HaProtocolTest {
 	@Test
@@ -13,19 +15,23 @@ class HaProtocolTest {
 		assertEquals("ws://192.168.1.2:8123/api/websocket", HaProtocol.webSocketUrl("192.168.1.2:8123"))
 	}
 
+	private fun event(body: String) = HaProtocol.parse("""{"id":1,"type":"event","event":$body}""")
+
 	@Test
 	fun `reads the configuration the integration pushes`() {
 		val message =
-			HaProtocol.parse(
+			event(
 				"""
-				{"id":1,"type":"event","event":{
+				{"kind":"config","config":{
 				  "intercoms":[{"name":"Parking","server":"192.0.2.8","extension":"9901#1","password":"s3"}],
+				  "sensors":false,
 				  "future":true
 				}}
 				""".trimIndent(),
 			)
 
-		val result = assertIs<HaProtocol.ConfigResult.Ok>(HaProtocol.configEvent(message))
+		val config = assertIs<HaProtocol.PanelEvent.Config>(HaProtocol.panelEvent(message))
+		val result = assertIs<HaProtocol.ConfigResult.Ok>(config.result)
 
 		assertEquals(
 			"Parking",
@@ -33,15 +39,29 @@ class HaProtocolTest {
 				.single()
 				.name,
 		)
+		assertFalse(result.config.sensors)
 	}
 
 	@Test
-	fun `what is turned off in Home Assistant does not arrive`() {
-		val message = HaProtocol.parse("""{"id":1,"type":"event","event":{"intercoms":[],"cameras":[]}}""")
+	fun `reads the commands`() {
+		assertEquals(HaProtocol.PanelEvent.Siren(true), HaProtocol.panelEvent(event("""{"kind":"siren","on":true}""")))
+		assertEquals(HaProtocol.PanelEvent.Mood("Alarm"), HaProtocol.panelEvent(event("""{"kind":"mood","value":"Alarm"}""")))
+		assertEquals(
+			HaProtocol.PanelEvent.Doorbell("Parking", "RING"),
+			HaProtocol.panelEvent(event("""{"kind":"doorbell","intercom":"Parking","payload":"RING"}""")),
+		)
+	}
 
-		val result = assertIs<HaProtocol.ConfigResult.Ok>(HaProtocol.configEvent(message))
+	@Test
+	fun `ignores what it does not know`() {
+		assertNull(HaProtocol.panelEvent(event("""{"kind":"future"}""")))
+		assertNull(HaProtocol.panelEvent(event("""{"kind":"siren"}""")))
+	}
 
-		assertEquals(PanelConfig(), result.config)
+	@Test
+	fun `reports its values`() {
+		val message = HaProtocol.panelState(3, mapOf("battery" to JsonPrimitive(80), "charging" to JsonPrimitive(true)))
+		assertEquals("""{"id":3,"type":"marc2d/state","values":{"battery":80,"charging":true}}""", message)
 	}
 
 	@Test
@@ -55,9 +75,10 @@ class HaProtocolTest {
 
 	@Test
 	fun `a malformed configuration does not reveal its content`() {
-		val message = HaProtocol.parse("""{"id":1,"type":"event","event":{"intercoms":[{"password":"s3"}]}}""")
+		val message = event("""{"kind":"config","config":{"intercoms":[{"password":"s3"}]}}""")
 
-		val result = assertIs<HaProtocol.ConfigResult.Invalid>(HaProtocol.configEvent(message))
+		val config = assertIs<HaProtocol.PanelEvent.Config>(HaProtocol.panelEvent(message))
+		val result = assertIs<HaProtocol.ConfigResult.Invalid>(config.result)
 
 		assertFalse("s3" in result.reason)
 	}

@@ -7,6 +7,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
@@ -23,6 +24,25 @@ import kotlinx.serialization.json.putJsonObject
 /** The Home Assistant WebSocket API messages the panel uses. */
 object HaProtocol {
 	private val json = Json { ignoreUnknownKeys = true }
+
+	sealed interface PanelEvent {
+		data class Config(
+			val result: ConfigResult,
+		) : PanelEvent
+
+		data class Siren(
+			val on: Boolean,
+		) : PanelEvent
+
+		data class Mood(
+			val value: String,
+		) : PanelEvent
+
+		data class Doorbell(
+			val intercom: String,
+			val payload: String,
+		) : PanelEvent
+	}
 
 	sealed interface ConfigResult {
 		data class Ok(
@@ -53,10 +73,30 @@ object HaProtocol {
 			put("access_token", token)
 		}.toString()
 
-	fun configSubscribe(id: Int): String =
+	fun panelSubscribe(id: Int): String =
 		buildJsonObject {
 			put("id", id)
-			put("type", "marc2d/config/subscribe")
+			put("type", "marc2d/subscribe")
+		}.toString()
+
+	fun panelState(
+		id: Int,
+		values: Map<String, JsonPrimitive>,
+	): String =
+		buildJsonObject {
+			put("id", id)
+			put("type", "marc2d/state")
+			put("values", JsonObject(values))
+		}.toString()
+
+	fun doorbellAnswered(
+		id: Int,
+		intercom: String,
+	): String =
+		buildJsonObject {
+			put("id", id)
+			put("type", "marc2d/doorbell/answered")
+			put("intercom", intercom)
 		}.toString()
 
 	fun entityState(
@@ -160,8 +200,38 @@ object HaProtocol {
 		}
 	}
 
-	fun configEvent(message: JsonObject): ConfigResult {
-		val config = message["event"] ?: return ConfigResult.Invalid("empty configuration")
+	/** Nothing for a kind that this version does not know. */
+	fun panelEvent(message: JsonObject): PanelEvent? {
+		val event = message["event"] as? JsonObject ?: return null
+
+		fun text(key: String) = event[key]?.jsonPrimitive?.contentOrNull
+		return when (text("kind")) {
+			"config" -> {
+				PanelEvent.Config(config(event))
+			}
+
+			"siren" -> {
+				event["on"]?.jsonPrimitive?.booleanOrNull?.let { PanelEvent.Siren(it) }
+			}
+
+			"mood" -> {
+				text("value")?.let { PanelEvent.Mood(it) }
+			}
+
+			"doorbell" -> {
+				val intercom = text("intercom")
+				val payload = text("payload")
+				if (intercom != null && payload != null) PanelEvent.Doorbell(intercom, payload) else null
+			}
+
+			else -> {
+				null
+			}
+		}
+	}
+
+	private fun config(event: JsonObject): ConfigResult {
+		val config = event["config"] ?: return ConfigResult.Invalid("empty configuration")
 		return try {
 			ConfigResult.Ok(json.decodeFromJsonElement<PanelConfig>(config))
 		} catch (_: SerializationException) {

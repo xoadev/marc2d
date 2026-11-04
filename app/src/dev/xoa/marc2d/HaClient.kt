@@ -8,9 +8,12 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 
@@ -39,7 +42,8 @@ class HaAuthException : Exception("Home Assistant rejected the token")
 /** Keeps a session with Home Assistant, which pushes the panel its configuration whenever it changes. */
 class HaClient {
 	private var subscription = 0
-	private var pendingConfig: JsonObject? = null
+	private var pendingConfig: HaProtocol.ConfigResult? = null
+	private var onCommand: (HaProtocol.PanelEvent) -> Unit = {}
 
 	private val client =
 		HttpClient(OkHttp) {
@@ -49,22 +53,29 @@ class HaClient {
 	/** Ends with an exception when the connection is lost. */
 	suspend fun run(
 		connection: HaConnection,
+		link: PanelLink,
 		onStatus: (HaStatus) -> Unit,
 		onConfig: suspend (PanelConfig) -> Unit,
 		onWeather: (WeatherReport?) -> Unit,
+		onCommand: (HaProtocol.PanelEvent) -> Unit,
 	) {
+		this.onCommand = onCommand
 		client.webSocket(HaProtocol.webSocketUrl(connection.url)) {
 			authenticate(connection.token)
-			var lastId = 0
-			val nextId = { ++lastId }
+			val ids = AtomicInteger()
+			val nextId = { ids.incrementAndGet() }
 			while (true) {
 				val id = nextId()
 				subscription = id
 				pendingConfig = null
-				send(Frame.Text(HaProtocol.configSubscribe(id)))
+				send(Frame.Text(HaProtocol.panelSubscribe(id)))
 				val answer = awaitResult(id)
 				if (HaProtocol.isSuccess(answer)) {
-					followConfig(onStatus, onConfig, onWeather, nextId)
+					coroutineScope {
+						launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
+						launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
+						followConfig(onStatus, onConfig, onWeather, nextId)
+					}
 				}
 				val refusal = HaProtocol.subscribeError(answer)
 				onStatus(refusal.toStatus())
@@ -84,9 +95,8 @@ class HaClient {
 		var weather: String? = null
 		while (true) {
 			idleUntilNextRefresh()
-			pendingConfig?.let { message ->
+			pendingConfig?.let { result ->
 				pendingConfig = null
-				val result = HaProtocol.configEvent(message)
 				if (result is HaProtocol.ConfigResult.Ok) {
 					onConfig(result.config)
 					weather = result.config.weather
@@ -157,7 +167,13 @@ class HaClient {
 			val frame = incoming.receive()
 			if (frame is Frame.Text) {
 				val message = HaProtocol.parse(frame.readText())
-				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) pendingConfig = message
+				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {
+					when (val event = HaProtocol.panelEvent(message)) {
+						is HaProtocol.PanelEvent.Config -> pendingConfig = event.result
+						null -> Unit
+						else -> onCommand(event)
+					}
+				}
 				return message
 			}
 		}

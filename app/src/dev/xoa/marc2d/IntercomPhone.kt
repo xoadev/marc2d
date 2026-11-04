@@ -113,14 +113,14 @@ class IntercomPhone(
 		payload: String,
 	) {
 		when (payload) {
-			PanelTopics.RING -> ring(intercom)
-			PanelTopics.ANSWERED -> if (ringing?.let { PanelTopics.slug(it.name) } == intercom) stopDoorbell()
+			RING -> ring(intercom)
+			ANSWERED -> if (ringing?.name == intercom) stopDoorbell()
 		}
 	}
 
-	private fun ring(slug: String) {
+	private fun ring(name: String) {
 		if (activeCall != null || ringing != null) return
-		val intercom = applied?.intercoms?.firstOrNull { PanelTopics.slug(it.name) == slug } ?: return
+		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
 		_call.value = IntercomCall(intercom.name, answered = false)
 		ringer =
@@ -148,7 +148,7 @@ class IntercomPhone(
 	/** The VTO picks up by itself and provides audio and video: the panel starts the call on answering. */
 	private fun dial(intercom: IntercomConfig) {
 		silence()
-		onDoorbellAnswered(PanelTopics.slug(intercom.name))
+		onDoorbellAnswered(intercom.name)
 		_call.value = IntercomCall(intercom.name, answered = true)
 		dialing = intercom
 		dialDeadline = SystemClock.elapsedRealtime() + DIAL_TIMEOUT_MILLIS
@@ -269,6 +269,10 @@ class IntercomPhone(
 		}
 
 	private companion object {
+		const val RING = "RING"
+
+		const val ANSWERED = "ANSWERED"
+
 		// The same time the VTO lets it ring.
 		const val RING_TIMEOUT_MILLIS = 45_000L
 		const val DIAL_TIMEOUT_MILLIS = 45_000L

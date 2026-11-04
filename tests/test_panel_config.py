@@ -16,12 +16,10 @@ INTERCOM = {
     "password": "s3cr3t",
 }
 CAMERA = {"entity": "camera.door", "name": "Parking", "intercom": ""}
-MQTT = {"server": "192.0.2.20", "port": 1883.0, "username": "u", "password": "p"}
 OPTIONS = {
     "intercoms": [INTERCOM],
     "cameras": [CAMERA],
     "weather_entity": "weather.home",
-    "mqtt": MQTT,
 }
 
 
@@ -30,12 +28,16 @@ def test_everything_on_by_default() -> None:
     assert config["intercoms"] == [{**INTERCOM, "number": "8001"}]
     assert config["cameras"] == [{"entity": "camera.door", "name": "Parking"}]
     assert config["weather"] == "weather.home"
-    assert config["mqtt"]["port"] == 1883
-    assert config["mqtt"]["sensors"] is True
+    assert config["sensors"] is True
 
 
 def test_a_new_panel_receives_an_empty_configuration() -> None:
-    assert build_panel_config({}) == {"intercoms": [], "cameras": []}
+    assert build_panel_config({}) == {
+        "intercoms": [],
+        "cameras": [],
+        "sensors": True,
+        "siren": True,
+    }
 
 
 @pytest.mark.parametrize(
@@ -44,12 +46,18 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
         ("sip", lambda c: c["intercoms"] == []),
         ("cameras", lambda c: c["cameras"] == []),
         ("weather", lambda c: "weather" not in c),
-        ("mqtt", lambda c: "mqtt" not in c),
+        ("sensors", lambda c: c["sensors"] is False),
+        ("siren", lambda c: c["siren"] is False),
     ],
 )
 def test_each_toggle_turns_off_only_its_part(feature, check) -> None:
     config = build_panel_config({**OPTIONS, "features": {feature: False}})
     assert check(config)
+
+
+def test_the_doorbell_button_stays_in_home_assistant() -> None:
+    config = build_panel_config({"intercoms": [{**INTERCOM, "doorbell": "binary_sensor.x"}]})
+    assert "doorbell" not in config["intercoms"][0]
 
 
 @pytest.fixture
@@ -73,14 +81,6 @@ async def panel_token(hass: HomeAssistant, entry) -> str:
     return hass.auth.async_create_access_token(refresh)
 
 
-@pytest.mark.parametrize("key", ["sensors", "siren"])
-def test_sensors_and_siren_belong_to_mqtt(key) -> None:
-    config = build_panel_config({**OPTIONS, "mqtt": {**MQTT, key: False}})
-    assert config["mqtt"][key] is False
-    off = build_panel_config({**OPTIONS, "mqtt": {**MQTT, key: False}, "features": {"mqtt": False}})
-    assert "mqtt" not in off
-
-
 async def open_page(hass, entry, page):
     options = hass.config_entries.options
     menu = await options.async_init(entry.entry_id)
@@ -88,16 +88,12 @@ async def open_page(hass, entry, page):
     return await options.async_configure(menu["flow_id"], {"next_step_id": page})
 
 
-async def test_menu_carries_its_labels(hass, entry) -> None:
-    menu = await hass.config_entries.options.async_init(entry.entry_id)
-    assert menu["menu_options"]["weather"] == "Weather"
-
-
 async def test_saving_a_page_reaches_the_panel_at_once(hass, entry, hass_ws_client) -> None:
     client = await hass_ws_client(hass, await panel_token(hass, entry))
-    await client.send_json({"id": 1, "type": "marc2d/config/subscribe"})
+    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
     assert (await client.receive_json())["success"] is True
-    assert (await client.receive_json())["event"] == {"intercoms": [], "cameras": []}
+    assert (await client.receive_json())["event"]["kind"] == "config"
+    assert (await client.receive_json())["event"]["kind"] == "mood"
 
     page = await open_page(hass, entry, "intercoms")
     done = await hass.config_entries.options.async_configure(
@@ -106,7 +102,10 @@ async def test_saving_a_page_reaches_the_panel_at_once(hass, entry, hass_ws_clie
     assert done["type"] == "create_entry"
     await hass.async_block_till_done()
 
-    assert (await client.receive_json())["event"]["intercoms"][0]["password"] == "s3cr3t"
+    event = (await client.receive_json())["event"]
+    while event["kind"] != "config":
+        event = (await client.receive_json())["event"]
+    assert event["config"]["intercoms"][0]["password"] == "s3cr3t"
 
 
 @pytest.mark.parametrize("page", ["intercoms", "cameras"])
@@ -128,24 +127,22 @@ async def test_cameras_work_without_intercoms(hass, entry) -> None:
     assert "intercom" not in form["data_schema"].schema["cameras"].config["fields"]
 
 
-@pytest.mark.parametrize(("page", "field"), [("weather", "weather_entity"), ("mqtt", "server")])
-async def test_data_is_needed_only_while_on(hass, entry, page, field) -> None:
+async def test_weather_entity_is_needed_only_while_on(hass, entry) -> None:
+    field = "weather_entity"
     options = hass.config_entries.options
-    form = await open_page(hass, entry, page)
+    form = await open_page(hass, entry, "weather")
     again = await options.async_configure(form["flow_id"], {"enabled": True})
     assert again["errors"] == {field: "required"}
     done = await options.async_configure(form["flow_id"], {"enabled": False})
     assert done["type"] == "create_entry"
 
 
-async def test_mqtt_keeps_its_options_apart_from_the_switch(hass, entry) -> None:
-    form = await open_page(hass, entry, "mqtt")
+async def test_entities_page_saves_its_switches(hass, entry) -> None:
+    form = await open_page(hass, entry, "entities")
     done = await hass.config_entries.options.async_configure(
-        form["flow_id"],
-        {"enabled": True, "server": "192.0.2.20", "port": 1883, "sensors": False, "siren": True},
+        form["flow_id"], {"sensors": False, "siren": True}
     )
-    assert "enabled" not in done["data"]["mqtt"]
-    assert build_panel_config(done["data"])["mqtt"]["sensors"] is False
+    assert build_panel_config(done["data"])["sensors"] is False
 
 
 async def test_saving_a_page_keeps_the_others(hass, entry) -> None:
@@ -191,7 +188,7 @@ async def test_another_user_cannot_read_a_panel_secrets(hass, entry, hass_ws_cli
     hass.config_entries.async_update_entry(entry, options={"intercoms": [INTERCOM]})
     # The default client is an administrator: not even that one gets them here.
     client = await hass_ws_client(hass)
-    await client.send_json({"id": 1, "type": "marc2d/config/subscribe"})
+    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
     answer = await client.receive_json()
     assert answer["success"] is False
     assert answer["error"]["code"] == "not_found"

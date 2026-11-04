@@ -7,8 +7,9 @@ import kotlinx.serialization.Serializable
 data class PanelConfig(
 	val intercoms: List<IntercomConfig> = emptyList(),
 	val weather: String? = null,
-	val mqtt: MqttConfig? = null,
 	val cameras: List<CameraConfig> = emptyList(),
+	val sensors: Boolean = true,
+	val siren: Boolean = true,
 )
 
 @Serializable
@@ -18,18 +19,6 @@ data class CameraConfig(
 	/** The intercom that Talk calls, if this camera can be talked to. */
 	val intercom: String? = null,
 )
-
-@Serializable
-data class MqttConfig(
-	val server: String,
-	val port: Int = 1883,
-	val username: String,
-	val password: String,
-	val sensors: Boolean = true,
-	val siren: Boolean = true,
-) {
-	override fun toString(): String = "MqttConfig(server=$server, port=$port, username=$username, sensors=$sensors, siren=$siren)"
-}
 
 @Serializable
 data class IntercomConfig(

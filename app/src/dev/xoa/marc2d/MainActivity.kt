@@ -47,7 +47,6 @@ class MainActivity : ComponentActivity() {
 				Surface {
 					val connection by runtime.store.connection.collectAsState(initial = null)
 					val haStatus by runtime.haStatus.collectAsState()
-					val mqttStatus by runtime.mqtt.status.collectAsState()
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
 					val weather by runtime.weather.collectAsState()
@@ -153,7 +152,7 @@ class MainActivity : ComponentActivity() {
 						}
 
 						else -> {
-							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted, mqttStatus)
+							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
 								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark),

@@ -42,7 +42,7 @@ class PanelStore(
 		context.dataStore.data
 			.map { prefs -> prefs[CONFIG] }
 			.distinctUntilChanged()
-			.map { json -> json?.let { Json.decodeFromString<PanelConfig>(it) } ?: PanelConfig() }
+			.map { json -> json?.let { STORED.decodeFromString<PanelConfig>(it) } ?: PanelConfig() }
 
 	suspend fun saveConnection(connection: HaConnection) {
 		context.dataStore.edit { prefs ->
@@ -57,6 +57,8 @@ class PanelStore(
 	}
 
 	private companion object {
+		// A version of the app may have stored fields that this one no longer has.
+		val STORED = Json { ignoreUnknownKeys = true }
 		val URL = stringPreferencesKey("ha_url")
 		val TOKEN = stringPreferencesKey("ha_token")
 		val PANEL = stringPreferencesKey("panel")

@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.os.Build
 import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -16,8 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Connects the panel's pieces. It lives as long as the process; the service only keeps it running. */
 class PanelRuntime(
@@ -41,9 +40,10 @@ class PanelRuntime(
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 	private val ha = HaClient()
 	private val enrollment = EnrollmentClient()
-	private val siren = PanelSiren(context) { on -> publishSiren(on) }
+	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
-	val mqtt = PanelMqtt(scope, Build.MODEL, siren::set, { intercom, payload -> phone.doorbell(intercom, payload) }, ::setHaMood)
+	private val link = PanelLink()
+	private var config = PanelConfig()
 	private var started = false
 
 	/** Returns what to tell the user, or nothing if the panel is now connected. */
@@ -79,15 +79,15 @@ class PanelRuntime(
 		started = true
 
 		scope.launch {
-			store.config.collect { phone.apply(it) }
+			store.config.collect {
+				config = it
+				phone.apply(it)
+				if (!it.siren) siren.set(false)
+				if (!it.sensors) PanelLink.SENSORS.forEach(link::forget)
+			}
 		}
-		scope.launch {
-			combine(store.config, store.connection) { config, connection -> config.mqtt to connection?.panel }
-				.collect { (config, panel) -> mqtt.apply(config.takeIf { panel != null }, panel.orEmpty()) }
-		}
-		phone.onDoorbellAnswered = mqtt::doorbellAnswered
-		publishSiren(false)
-		mqtt.publish(PanelTopics::mood, HaMood.Normal.label)
+		phone.onDoorbellAnswered = link::answer
+		link.report(PanelLink.SIREN, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
 		scope.launch {
@@ -101,23 +101,29 @@ class PanelRuntime(
 		}
 	}
 
-	private fun setHaMood(label: String) {
-		val mood = HaMood.fromLabel(label) ?: return
-		_haMood.value = mood
-		mqtt.publish(PanelTopics::mood, mood.label)
+	private fun handle(command: HaProtocol.PanelEvent) {
+		when (command) {
+			is HaProtocol.PanelEvent.Siren -> if (config.siren) siren.set(command.on)
+			is HaProtocol.PanelEvent.Mood -> HaMood.fromLabel(command.value)?.let { _haMood.value = it }
+			is HaProtocol.PanelEvent.Doorbell -> phone.doorbell(command.intercom, command.payload)
+			is HaProtocol.PanelEvent.Config -> Unit
+		}
 	}
 
-	private fun publishSiren(on: Boolean) {
-		mqtt.publish(PanelTopics::siren, if (on) PanelTopics.ON else PanelTopics.OFF)
+	private fun reportReading(
+		key: String,
+		value: JsonPrimitive,
+	) {
+		if (config.sensors) link.report(key, value)
 	}
 
 	private suspend fun publishBattery() {
 		while (true) {
 			val battery = readings.battery()
 			if (battery != null) {
-				mqtt.publishReading(PanelTopics::battery, battery.level.toString())
-				mqtt.publishReading(PanelTopics::temperature, battery.temperature.toString())
-				mqtt.publishReading(PanelTopics::charging, if (battery.charging) PanelTopics.ON else PanelTopics.OFF)
+				reportReading("battery", JsonPrimitive(battery.level))
+				reportReading("temperature", JsonPrimitive(battery.temperature))
+				reportReading("charging", JsonPrimitive(battery.charging))
 			}
 			delay(BATTERY_INTERVAL)
 		}
@@ -129,7 +135,7 @@ class PanelRuntime(
 			_dark.value = lux < DARK_LUX
 			if (PanelReadings.isSignificant(last, lux)) {
 				last = lux
-				mqtt.publishReading(PanelTopics::light, lux.roundToInt().toString())
+				reportReading("light", JsonPrimitive(lux.roundToInt()))
 			}
 		}
 	}
@@ -142,6 +148,8 @@ class PanelRuntime(
 			try {
 				ha.run(
 					connection = connection,
+					link = link,
+					onCommand = ::handle,
 					onStatus = { status ->
 						_haStatus.value = status
 						wait = MIN_RETRY

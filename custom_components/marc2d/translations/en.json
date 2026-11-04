@@ -30,7 +30,7 @@
           "intercoms": "Intercoms"
         },
         "data_description": {
-          "intercoms": "The name must match the last part of the marc2d/doorbell topic that the doorbell automation publishes to."
+          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed."
         }
       },
       "cameras": {
@@ -52,15 +52,14 @@
           "weather_entity": "Weather entity"
         }
       },
-      "mqtt": {
-        "title": "Doorbell, sensors and siren (MQTT)",
-        "description": "The broker carries the doorbell ring, the droid's state, the sensors and the siren. Turned off, all of those stop.",
+      "init": {
+        "title": "Panel settings",
+        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
+      },
+      "entities": {
+        "title": "Sensors and siren",
+        "description": "What this panel exposes in Home Assistant.",
         "data": {
-          "enabled": "On",
-          "server": "Broker address",
-          "port": "Port",
-          "username": "User",
-          "password": "Password",
           "sensors": "Publish sensors",
           "siren": "Siren"
         },
@@ -68,10 +67,6 @@
           "sensors": "Light, battery, battery temperature and charging. Off: Home Assistant removes those entities.",
           "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command."
         }
-      },
-      "init": {
-        "title": "Panel settings",
-        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
       }
     },
     "error": {

@@ -3,7 +3,7 @@ package dev.xoa.marc2d
 /** What the droid on the main screen shows. */
 enum class DroidMood { Walking, Sleeping, Offline, Recording, Alarm, Intruder }
 
-/** The states HA sends over MQTT, with the `select.*_state` entity. */
+/** The states HA sends, with the `select.*_state` entity. */
 enum class HaMood(
 	val label: String,
 ) {

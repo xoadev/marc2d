@@ -47,18 +47,17 @@ eye color only appears when something matters. When its state changes it stays w
 | Sleeping  | closed                  | the panel, below 5 lx                        |
 | Walking   | looks where it is going | the panel, if nothing else applies           |
 
-The table order is the priority. What HA commands is retained in MQTT: on restart, the panel
-recovers whatever alarm was active.
+The table order is the priority. HA restores what it commanded: on restart, the panel recovers
+whatever alarm was active.
 
 ## Intercom
 
 - The panel registers as a SIP extension on the intercom, which acts as the SIP server.
-- HA detects the button press with the Dahua integration and publishes `RING` to
-  `marc2d/doorbell/<intercom>`, not retained. All panels ring, even if the app is in the
-  background, and stop ringing after 45 seconds.
-- On answering, the panel publishes `ANSWERED`, the others stop ringing, and it calls the intercom's
+- Each intercom has its doorbell button entity in the form. When it fires, the integration tells every panel with that
+  intercom to ring, even if the app is in the background, and they stop ringing after 45 seconds.
+- On answering, the panel tells the integration, the others stop ringing, and it calls the intercom's
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
-  video. If HA or Mosquitto goes down, the panels do not ring, but DMSS keeps working.
+  video. If HA goes down, the panels do not ring, but DMSS keeps working.
 - An incoming SIP call to the extension is also handled.
 - From its camera, **Talk** calls the intercom without the doorbell having been pressed.
 - Home network only. From outside, over Tailscale, the subnet router does SNAT and the
@@ -81,27 +80,30 @@ Verified against a VTO2202F (UDP 5060), which is Asterisk inside:
 - A device that reaches the VTO through the Tailscale subnet route (`--accept-routes`) leaves with SNAT
   and the result is not valid: test from the direct LAN.
 
-## MQTT
+## Entities
 
-The panel connects to the broker named in the configuration, if MQTT is on, and registers itself in HA, with
-device discovery (`homeassistant/device/marc2d_<panel>/config`). If it goes down, the
-MQTT last will marks it as `unavailable`. The intercom does not depend on MQTT.
+The panel connects to HA with its enrollment token and needs nothing else: no broker and no extra user. The integration
+creates its device and entities. They are `unavailable` while the panel's connection is closed. The intercom does not
+depend on this connection once registered.
 
-| Entity                         | Data                  | When it is published                   |
+| Entity                         | Data                  | When it is reported                    |
 | ------------------------------ | --------------------- | -------------------------------------- |
 | `sensor.*_light`               | ambient light, in lux | if it changes by at least 2 lx and 20% |
 | `sensor.*_battery`             | level, in %           | if it changes, checked every minute    |
 | `sensor.*_battery_temperature` | battery, in °C        | if it changes, checked every minute    |
 | `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
 | `siren.*_siren`                | turns on and off      | on change                              |
-| `select.*_state`               | droid state           | on change                              |
+| `select.*_state`               | droid state           | on change, decided by HA               |
+
+The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
+identify it by its user.
 
 The siren sounds at full volume on the alarm channel and stops by itself after 10 minutes, because if the
 connection is lost HA could no longer turn it off.
 
 ## Speaker
 
-Still missing: HA will ask for a message to be read aloud with the system TTS, also over MQTT.
+Still missing: HA will ask for a message to be read aloud with the system TTS.
 
 Voice commands: the panel is an Assist satellite. It is activated with an on-screen button, sends the
 microphone audio to the HA pipeline (`assist_pipeline/run`) and plays the response. The
@@ -145,8 +147,8 @@ decided.
 ## Configuration
 
 In the app you only enroll the panel, which gives it its URL, token and name. Each panel has its own name, such as
-`kitchen`, from which its MQTT topics and its entities come. Everything else is set in HA, in the panel's options in
-the integration, and the panel receives it right away through `marc2d/config/subscribe`:
+`kitchen`, from which its entities come. Everything else is set in HA, in the panel's options in
+the integration, and the panel receives it right away through `marc2d/subscribe`:
 
 ```json
 {
@@ -154,26 +156,25 @@ the integration, and the panel receives it right away through `marc2d/config/sub
     { "name": "Parking", "server": "192.0.2.10", "extension": "9901#1", "password": "…", "number": "8001" }
   ],
   "weather": "weather.home",
-  "mqtt": { "server": "192.0.2.20", "port": 1883, "username": "…", "password": "…", "sensors": true, "siren": true },
   "cameras": [
     { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
-  ]
+  ],
+  "sensors": true,
+  "siren": true
 }
 ```
 
 The form is a menu that links to a page per feature, and submitting a page saves it right away. HA forms cannot show fields
-depending on another field, so each page has its switch and its data. Lists can stay empty; the weather entity and the
-broker are needed only while they are on, and what a turned-off feature had is kept.
+depending on another field, so each page has its switch and its data. Lists can stay empty; the weather entity is needed
+only while it is on, and what a turned-off feature had is kept.
 
 | Feature  | When it is off                                               |
 | -------- | ------------------------------------------------------------ |
-| Intercom | no intercoms are sent: the panel unregisters                 |
+| Intercom | no intercoms are sent: the panel unregisters, does not ring  |
 | Cameras  | no cameras are sent: the menu hides them                     |
 | Weather  | no weather entity is sent: the panel hides it                |
-| MQTT     | no connection: no doorbell, sensors, siren or states from HA |
-
-Sensors and siren need MQTT, so they are options of its page. Turned off, HA deletes those entities: the panel stops
-publishing the sensors and ignores the siren command.
+| Sensors  | HA deletes those entities and the panel stops reporting them |
+| Siren    | HA deletes the entity and the panel ignores the command      |
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
@@ -193,19 +194,16 @@ publishing the sensors and ignores the siren command.
 
 ## Home Assistant integration
 
-Our own integration, installable with HACS, in `custom_components/marc2d/`. It replaces the configuration
-script and will replace MQTT, so that installing marc2d does not require Mosquitto or writing YAML. It requires HA 2026.10.
+Our own integration, installable with HACS, in `custom_components/marc2d/`, so that installing marc2d does not require
+a broker or writing YAML. It requires HA 2026.10.
 
-- **Enrollment (done):** the panel is added in HA, which shows a QR code with the internal URL and a one-time code
-  that expires in 10 minutes. The panel scans it with the front camera, or types both, and exchanges the code at
-  `POST /api/marc2d/enroll` for a token. The QR code never carries the token. Each panel gets its own
-  unprivileged, local-only user: removing the panel in HA removes that user and revokes its access. The endpoint has
-  no authentication, so 10 wrong codes kill every open code.
-- **Configuration (done):** per-panel form in HA; see [Configuration](#configuration).
-- **Entities (pending):** its own, over the WebSocket the panel already uses. If it closes, the panel becomes
-  `unavailable`.
-MQTT stays until the integration has its own entities and works in a real home. The doorbell button entity will
-move to the form with them.
+- **Enrollment:** the panel is added in HA, which shows a QR code with the internal URL and a one-time code that expires
+  in 10 minutes. The panel scans it with the camera, or types both, and exchanges the code at `POST /api/marc2d/enroll`
+  for a token. The QR code never carries the token. Each panel gets its own unprivileged, local-only user: removing the
+  panel in HA removes that user and revokes its access. The endpoint has no authentication, so 10 wrong codes kill every
+  open code.
+- **Configuration:** a per-panel form in HA; see [Configuration](#configuration).
+- **Entities and doorbell:** see [Entities](#entities) and [Intercom](#intercom).
 
 ## Decisions
 
@@ -217,11 +215,6 @@ move to the form with them.
 - SIP with Linphone SDK. It is GPLv3: fine for personal use; distributing it to third parties requires its
   commercial license.
 - HA with Ktor Client, OkHttp engine and kotlinx.serialization: WebSocket and JSON over coroutines.
-- MQTT with our own 3.1.1 client over `Socket`: a single connection creates the panel's entities,
-  publishes its readings, receives commands and tells HA if the panel goes down. Paho has not published releases
-  since 2020, and HiveMQ pulls in Netty, whose duplicate `META-INF` files cannot be excluded with the
-  Toolchain. The panel only needs QoS 0 when publishing and no TLS, because it runs on the LAN. It sits behind
-  the `MqttClient` interface, so that it can be replaced by a library by touching a single class.
 - Configuration with Jetpack DataStore.
 - QR codes with CameraX and ZXing core: ML Kit depends on Google services, and CameraX spares us the camera
   lifecycle.

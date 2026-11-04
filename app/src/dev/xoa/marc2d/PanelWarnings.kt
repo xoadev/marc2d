@@ -18,13 +18,11 @@ object PanelWarnings {
 		ha: HaStatus,
 		intercoms: Map<String, IntercomStatus>,
 		micGranted: Boolean,
-		mqtt: MqttStatus = MqttStatus.Off,
 	): String? {
 		val lines =
 			buildList {
 				if (!micGranted) add("Microphone permission is missing")
 				if (ha != HaStatus.Connected && ha != HaStatus.Connecting) add(haStatus(ha))
-				if (mqtt == MqttStatus.Connecting) add("No connection to MQTT")
 				intercoms
 					.filterValues { it != IntercomStatus.Registered }
 					.keys

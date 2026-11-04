@@ -11,27 +11,20 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
     ObjectSelector,
     ObjectSelectorConfig,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
 )
 
 from .panel_config import (
     CONF_CAMERAS,
     CONF_INTERCOMS,
     CONF_WEATHER_ENTITY,
-    DEFAULT_MQTT_PORT,
     FEATURE_CAMERAS,
-    FEATURE_MQTT,
+    FEATURE_SENSORS,
     FEATURE_SIP,
+    FEATURE_SIREN,
     FEATURE_WEATHER,
     SECTION_FEATURES,
-    SECTION_MQTT,
     is_enabled,
 )
 
@@ -42,7 +35,7 @@ MENU = {
     "intercoms": "Intercoms",
     "cameras": "Cameras",
     "weather": "Weather",
-    "mqtt": "Doorbell, sensors and siren (MQTT)",
+    "entities": "Sensors and siren",
 }
 
 
@@ -56,6 +49,11 @@ INTERCOM_FIELDS = {
     "extension": _field("Panel extension", {"text": {}}),
     "password": _field("Extension password", {"text": {"type": "password"}}),
     "number": _field("Intercom number (default 8001)", {"text": {}}, required=False),
+    "doorbell": _field(
+        "Doorbell button",
+        {"entity": {"domain": ["binary_sensor", "event"]}},
+        required=False,
+    ),
 }
 
 
@@ -141,35 +139,28 @@ class Marc2dOptionsFlow(OptionsFlow):
             errors,
         )
 
-    async def async_step_mqtt(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """The broker, needed only if the feature is on, and what depends on it."""
-        errors: dict[str, str] = {}
+    async def async_step_entities(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """What the panel exposes in Home Assistant."""
         if user_input is not None:
-            if user_input[CONF_ENABLED] and not user_input.get("server"):
-                errors["server"] = "required"
-            else:
-                self._set_enabled(FEATURE_MQTT, user_input)
-                self._options[SECTION_MQTT] = {
-                    key: value for key, value in user_input.items() if key != CONF_ENABLED
-                }
-                return self.async_create_entry(data=self._options)
-        return self._page(
-            "mqtt",
-            FEATURE_MQTT,
+            self._options[SECTION_FEATURES] = {
+                **self._options.get(SECTION_FEATURES, {}),
+                **user_input,
+            }
+            return self.async_create_entry(data=self._options)
+        schema = probatio.Schema(
             {
-                probatio.Optional("server"): TextSelector(),
-                probatio.Optional("port", default=DEFAULT_MQTT_PORT): NumberSelector(
-                    NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
-                ),
-                probatio.Optional("username"): TextSelector(),
-                probatio.Optional("password"): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                ),
-                probatio.Required("sensors", default=True): BooleanSelector(),
-                probatio.Required("siren", default=True): BooleanSelector(),
-            },
-            self._options.get(SECTION_MQTT, {}),
-            errors,
+                probatio.Required(FEATURE_SENSORS, default=True): BooleanSelector(),
+                probatio.Required(FEATURE_SIREN, default=True): BooleanSelector(),
+            }
+        )
+        suggested = {
+            key: is_enabled(self._options, key) for key in (FEATURE_SENSORS, FEATURE_SIREN)
+        }
+        return self.async_show_form(
+            step_id="entities",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
         )
 
     def _set_enabled(self, feature: str, user_input: dict[str, Any]) -> None:
