@@ -23,6 +23,8 @@ The project is in testing and has no users: break whatever needs breaking.
   named in the configuration, not from a service of our own. They update every 10 minutes and
   are hidden if the data is more than an hour old.
 - At the bottom, a warning only if something fails: HA, registration with an intercom or the microphone permission.
+- If a permission is missing, a warning icon in the top left corner asks for it again, or opens the app's Android
+  settings if Android no longer shows the dialog.
 - Tapping anywhere opens the menu, with **Cameras** and **Settings**.
 
 ### Cameras

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowInsets
@@ -30,10 +31,16 @@ class MainActivity : ComponentActivity() {
 	private var kioskActive by mutableStateOf(false)
 	private val kiosk by lazy { Kiosk(this) }
 
+	private var missingPermissions by mutableStateOf(emptyList<String>())
+	private var askedByTap = false
+
 	private val permissions =
 		registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
 			refreshPermissions()
 			startPanel()
+			// Android stops showing the dialog after two refusals: only its settings can grant them then.
+			if (askedByTap && missingPermissions.isNotEmpty()) openAppSettings()
+			askedByTap = false
 		}
 
 	override fun onCreate(savedInstanceState: Bundle?) {
@@ -158,6 +165,7 @@ class MainActivity : ComponentActivity() {
 								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark),
 								weather = weather,
 								onOpenMenu = { menuOpen = true },
+								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
 						}
 					}
@@ -170,10 +178,7 @@ class MainActivity : ComponentActivity() {
 		super.onStart()
 		refreshPermissions()
 		hideSystemBars()
-		val missing =
-			listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
-				.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-		if (missing.isEmpty()) startPanel() else permissions.launch(missing.toTypedArray())
+		if (missingPermissions.isEmpty()) startPanel() else permissions.launch(missingPermissions.toTypedArray())
 	}
 
 	/** In `onStart` Android does not yet allow pinning the app: the activity does not have focus yet. */
@@ -185,6 +190,19 @@ class MainActivity : ComponentActivity() {
 
 	private fun refreshPermissions() {
 		micGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+		missingPermissions =
+			listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+				.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+	}
+
+	private fun askForPermissions() {
+		askedByTap = true
+		permissions.launch(missingPermissions.toTypedArray())
+	}
+
+	private fun openAppSettings() {
+		kiosk.pause()
+		startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
 	}
 
 	/** The service is of type `microphone`: without the permission, Android does not let it start. */
