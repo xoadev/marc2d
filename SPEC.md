@@ -161,8 +161,9 @@ the integration, and the panel receives it right away through `marc2d/config/sub
 }
 ```
 
-The form has one step per feature, shown only if the feature is on, because HA forms cannot show fields depending on
-another field. A feature that is on must have its data, and what a turned-off feature had is kept.
+The form is a menu with a page per feature, visited in any order, and Save applies them all. HA forms cannot show fields
+depending on another field, so each page has its switch and its data. Lists can stay empty; the weather entity and the
+broker are needed only while they are on, and what a turned-off feature had is kept.
 
 | Feature  | When it is off                                               |
 | -------- | ------------------------------------------------------------ |
@@ -171,7 +172,7 @@ another field. A feature that is on must have its data, and what a turned-off fe
 | Weather  | no weather entity is sent: the panel hides it                |
 | MQTT     | no connection: no doorbell, sensors, siren or states from HA |
 
-Sensors and siren need MQTT, so they are options of its step. Turned off, HA deletes those entities: the panel stops
+Sensors and siren need MQTT, so they are options of its page. Turned off, HA deletes those entities: the panel stops
 publishing the sensors and ignores the siren command.
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.

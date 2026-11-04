@@ -1,4 +1,4 @@
-"""The panel's settings: choose its features, then configure only those."""
+"""The panel's settings: a menu with a page per feature, each with its switch and its data."""
 
 from __future__ import annotations
 
@@ -30,19 +30,14 @@ from .panel_config import (
     FEATURE_MQTT,
     FEATURE_SIP,
     FEATURE_WEATHER,
-    FEATURES,
     SECTION_FEATURES,
     SECTION_MQTT,
     is_enabled,
 )
 
-# Forms cannot show fields depending on another field: each feature has its own step, in this order.
-STEPS = {
-    FEATURE_SIP: "intercoms",
-    FEATURE_CAMERAS: "cameras",
-    FEATURE_WEATHER: "weather",
-    FEATURE_MQTT: "mqtt",
-}
+CONF_ENABLED = "enabled"
+# Forms cannot show fields depending on another: each feature gets a page, in any order.
+MENU = ["intercoms", "cameras", "weather", "mqtt", "save"]
 
 
 def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[str, Any]:
@@ -59,132 +54,143 @@ INTERCOM_FIELDS = {
 
 
 class Marc2dOptionsFlow(OptionsFlow):
-    """The panel receives the result as soon as the last step is saved."""
+    """Nothing reaches the panel until Save, and then it receives everything at once."""
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
-        self._pending: list[str] = []
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Choose the features."""
-        if user_input is None:
-            # What a turned-off feature had is kept, in case it is turned on again.
-            self._options = dict(self.config_entry.options)
-            return self._form(
-                "init",
-                {probatio.Required(key, default=True): BooleanSelector() for key in FEATURES},
-                self._options.get(SECTION_FEATURES, {}),
-            )
-        self._options[SECTION_FEATURES] = user_input
-        self._pending = [
-            step for feature, step in STEPS.items() if is_enabled(self._options, feature)
-        ]
-        return await self._next_step()
+        """Start from what is saved."""
+        self._options = dict(self.config_entry.options)
+        return await self.async_step_menu()
+
+    async def async_step_menu(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Choose what to change."""
+        return self.async_show_menu(step_id="menu", menu_options=MENU)
+
+    async def async_step_save(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Apply the changes."""
+        return self.async_create_entry(data=self._options)
 
     async def async_step_intercoms(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Configure the intercoms."""
-        schema = {
-            probatio.Optional(CONF_INTERCOMS): ObjectSelector(
-                ObjectSelectorConfig(fields=INTERCOM_FIELDS, multiple=True, label_field="name")
-            )
-        }
-        return await self._list_step("intercoms", CONF_INTERCOMS, schema, user_input)
+        """The intercoms: an empty list is valid, the panel just has none."""
+        if user_input is not None:
+            self._set_enabled(FEATURE_SIP, user_input)
+            self._options[CONF_INTERCOMS] = user_input.get(CONF_INTERCOMS, [])
+            return await self.async_step_menu()
+        return self._page(
+            "intercoms",
+            FEATURE_SIP,
+            {
+                probatio.Optional(CONF_INTERCOMS): ObjectSelector(
+                    ObjectSelectorConfig(fields=INTERCOM_FIELDS, multiple=True, label_field="name")
+                )
+            },
+            self._options,
+        )
 
     async def async_step_cameras(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Configure the cameras, which can call the intercoms just configured."""
+        """The cameras, which can call the configured intercoms. An empty list is valid."""
+        if user_input is not None:
+            self._set_enabled(FEATURE_CAMERAS, user_input)
+            self._options[CONF_CAMERAS] = user_input.get(CONF_CAMERAS, [])
+            return await self.async_step_menu()
         fields = {
             "entity": _field("Camera", {"entity": {"domain": "camera"}}),
             "name": _field("Name", {"text": {}}),
         }
-        intercoms = self._active_intercoms()
+        intercoms = [intercom["name"] for intercom in self._options.get(CONF_INTERCOMS, [])]
         if intercoms:
             fields["intercom"] = _field(
                 "Intercom that Talk calls", {"select": {"options": intercoms}}, required=False
             )
-        schema = {
-            probatio.Optional(CONF_CAMERAS): ObjectSelector(
-                ObjectSelectorConfig(fields=fields, multiple=True, label_field="name")
-            )
-        }
-        return await self._list_step("cameras", CONF_CAMERAS, schema, user_input)
+        return self._page(
+            "cameras",
+            FEATURE_CAMERAS,
+            {
+                probatio.Optional(CONF_CAMERAS): ObjectSelector(
+                    ObjectSelectorConfig(fields=fields, multiple=True, label_field="name")
+                )
+            },
+            self._options,
+        )
 
     async def async_step_weather(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose the weather entity."""
-        if user_input is None:
-            return self._form(
-                "weather",
-                {
-                    probatio.Required(CONF_WEATHER_ENTITY): EntitySelector(
-                        EntitySelectorConfig(domain="weather")
-                    )
-                },
-                self._options,
-            )
-        self._options.update(user_input)
-        return await self._next_step()
+        """The weather entity, needed only if the feature is on."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input[CONF_ENABLED] and not user_input.get(CONF_WEATHER_ENTITY):
+                errors[CONF_WEATHER_ENTITY] = "required"
+            else:
+                self._set_enabled(FEATURE_WEATHER, user_input)
+                self._options[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY)
+                return await self.async_step_menu()
+        return self._page(
+            "weather",
+            FEATURE_WEATHER,
+            {
+                probatio.Optional(CONF_WEATHER_ENTITY): EntitySelector(
+                    EntitySelectorConfig(domain="weather")
+                )
+            },
+            self._options,
+            errors,
+        )
 
     async def async_step_mqtt(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Configure the broker and what depends on it."""
-        if user_input is None:
-            return self._form(
-                "mqtt",
-                {
-                    probatio.Required("server"): TextSelector(),
-                    probatio.Required("port", default=DEFAULT_MQTT_PORT): NumberSelector(
-                        NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
-                    ),
-                    probatio.Optional("username"): TextSelector(),
-                    probatio.Optional("password"): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                    ),
-                    probatio.Required("sensors", default=True): BooleanSelector(),
-                    probatio.Required("siren", default=True): BooleanSelector(),
-                },
-                self._options.get(SECTION_MQTT, {}),
-            )
-        self._options[SECTION_MQTT] = user_input
-        return await self._next_step()
+        """The broker, needed only if the feature is on, and what depends on it."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input[CONF_ENABLED] and not user_input.get("server"):
+                errors["server"] = "required"
+            else:
+                self._set_enabled(FEATURE_MQTT, user_input)
+                self._options[SECTION_MQTT] = {
+                    key: value for key, value in user_input.items() if key != CONF_ENABLED
+                }
+                return await self.async_step_menu()
+        return self._page(
+            "mqtt",
+            FEATURE_MQTT,
+            {
+                probatio.Optional("server"): TextSelector(),
+                probatio.Optional("port", default=DEFAULT_MQTT_PORT): NumberSelector(
+                    NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
+                ),
+                probatio.Optional("username"): TextSelector(),
+                probatio.Optional("password"): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+                probatio.Required("sensors", default=True): BooleanSelector(),
+                probatio.Required("siren", default=True): BooleanSelector(),
+            },
+            self._options.get(SECTION_MQTT, {}),
+            errors,
+        )
 
-    def _active_intercoms(self) -> list[str]:
-        if not is_enabled(self._options, FEATURE_SIP):
-            return []
-        return [intercom["name"] for intercom in self._options.get(CONF_INTERCOMS, [])]
+    def _set_enabled(self, feature: str, user_input: dict[str, Any]) -> None:
+        features = dict(self._options.get(SECTION_FEATURES, {}))
+        features[feature] = user_input[CONF_ENABLED]
+        self._options[SECTION_FEATURES] = features
 
-    async def _list_step(
+    def _page(
         self,
         step_id: str,
-        key: str,
-        schema: dict[Any, Any],
-        user_input: dict[str, Any] | None,
-    ) -> ConfigFlowResult:
-        """A feature that is on with an empty list would look on and do nothing."""
-        if user_input is not None and user_input.get(key):
-            self._options[key] = user_input[key]
-            return await self._next_step()
-        errors = {"base": "empty_list"} if user_input is not None else {}
-        return self._form(step_id, schema, self._options, errors)
-
-    async def _next_step(self) -> ConfigFlowResult:
-        if not self._pending:
-            return self.async_create_entry(data=self._options)
-        step = self._pending.pop(0)
-        return await getattr(self, f"async_step_{step}")()
-
-    def _form(
-        self,
-        step_id: str,
-        schema: dict[Any, Any],
+        feature: str,
+        fields: dict[Any, Any],
         values: Any,
         errors: dict[str, str] | None = None,
     ) -> ConfigFlowResult:
+        schema = {probatio.Required(CONF_ENABLED, default=True): BooleanSelector(), **fields}
+        suggested = {**values, CONF_ENABLED: is_enabled(self._options, feature)}
         return self.async_show_form(
             step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(probatio.Schema(schema), values),
+            data_schema=self.add_suggested_values_to_schema(probatio.Schema(schema), suggested),
             errors=errors or {},
         )

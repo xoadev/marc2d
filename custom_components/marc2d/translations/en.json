@@ -22,26 +22,22 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Panel features",
-        "description": "Choose what this panel does. The next steps configure only what is on, and the panel applies it when you finish.",
-        "data": {
-          "sip": "Intercom",
+      "menu": {
+        "title": "Panel settings",
+        "description": "Open what you want to change, then press Save. The panel applies it right away.",
+        "menu_options": {
+          "intercoms": "Intercoms",
           "cameras": "Cameras",
           "weather": "Weather",
-          "mqtt": "Home Assistant link (MQTT)"
-        },
-        "data_description": {
-          "sip": "Registers with the intercoms over SIP, to answer the door and talk to it. DMSS is not affected.",
-          "cameras": "Shows the cameras' video in the panel's menu.",
-          "weather": "Shows the weather and the forecast next to the clock.",
-          "mqtt": "Carries the doorbell ring, the droid's state, the sensors and the siren. Without it, all of those stop."
+          "mqtt": "Doorbell, sensors and siren (MQTT)",
+          "save": "Save"
         }
       },
       "intercoms": {
         "title": "Intercoms",
-        "description": "Each intercom the panel registers with.",
+        "description": "The panel registers with them over SIP, to answer the door and talk to it. DMSS is not affected. You can leave the list empty.",
         "data": {
+          "enabled": "On",
           "intercoms": "Intercoms"
         },
         "data_description": {
@@ -50,27 +46,28 @@
       },
       "cameras": {
         "title": "Cameras",
-        "description": "The cameras shown in the panel's menu.",
+        "description": "Their video is shown in the panel's menu. You can leave the list empty.",
         "data": {
+          "enabled": "On",
           "cameras": "Cameras"
         },
         "data_description": {
-          "cameras": "Choose an intercom to offer Talk on that camera."
+          "cameras": "If you have intercoms, choose one to offer Talk on that camera."
         }
       },
       "weather": {
         "title": "Weather",
+        "description": "The weather and the forecast next to the clock.",
         "data": {
+          "enabled": "On",
           "weather_entity": "Weather entity"
-        },
-        "data_description": {
-          "weather_entity": "It needs to offer an hourly forecast to show the next hours."
         }
       },
       "mqtt": {
-        "title": "Home Assistant link (MQTT)",
-        "description": "The broker the panel connects to, and what it exposes through it.",
+        "title": "Doorbell, sensors and siren (MQTT)",
+        "description": "The broker carries the doorbell ring, the droid's state, the sensors and the siren. Turned off, all of those stop.",
         "data": {
+          "enabled": "On",
           "server": "Broker address",
           "port": "Port",
           "username": "User",
@@ -85,7 +82,7 @@
       }
     },
     "error": {
-      "empty_list": "Add at least one, or go back and turn this feature off."
+      "required": "Needed while this is on."
     }
   }
 }
