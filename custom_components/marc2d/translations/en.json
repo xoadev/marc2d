@@ -40,6 +40,15 @@
               "mqtt": "MQTT",
               "sensors": "Publish sensors",
               "siren": "Siren"
+            },
+            "description": "Turn off what this panel should not do. What is on but has no data below does nothing.",
+            "data_description": {
+              "sip": "Registers with the intercoms, so the panel can answer the door and talk to it. Off: it unregisters, and DMSS is not affected.",
+              "cameras": "Shows the cameras in the panel's menu, with their video.",
+              "weather": "Shows the weather and forecast next to the clock. Needs a weather entity.",
+              "mqtt": "Connects to the broker. It carries the doorbell ring, the sensors, the siren and the droid's state: off, all of them stop. Needs a broker address.",
+              "sensors": "Publishes light, battery, battery temperature and charging. Off: Home Assistant removes those entities.",
+              "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and ignores the command."
             }
           },
           "mqtt": {
@@ -49,8 +58,14 @@
               "port": "Port",
               "username": "User",
               "password": "Password"
-            }
+            },
+            "description": "The broker the panel connects to directly."
           }
+        },
+        "data_description": {
+          "intercoms": "Intercoms the panel registers with over SIP. The name must match the one the doorbell automation publishes to marc2d/doorbell/<name>.",
+          "cameras": "Cameras shown in the panel's menu. Choose an intercom to offer Talk on that camera.",
+          "weather_entity": "The weather entity shown next to the clock."
         }
       }
     }

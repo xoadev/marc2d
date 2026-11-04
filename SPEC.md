@@ -135,7 +135,7 @@ decided.
 - Kiosk mode: the app is the Device Owner and uses Lock Task, so you cannot leave for other apps.
   From the configuration you can open the Android settings, and the kiosk comes back on
   return, or leave it completely.
-- The panel is always in landscape, even if the phone is rotated.
+- The panel follows the phone's orientation and its rotation lock, in portrait or landscape.
 - Both screens are OLED: with the screen on, the time shifts a few pixels now and
   then to avoid burning it.
 - LineageOS is installed, among other reasons, to limit battery charging to 80%: always at

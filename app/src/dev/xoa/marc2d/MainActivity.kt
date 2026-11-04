@@ -38,8 +38,8 @@ class MainActivity : ComponentActivity() {
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
-		// In code because `screenOrientation` in the manifest had no effect on the 3a.
-		requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+		// In code because `screenOrientation` in the manifest had no effect on the 3a. Follows the phone and its rotation lock.
+		requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
 		val runtime = (application as Marc2dApp).runtime
 
 		setContent {

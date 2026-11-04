@@ -151,17 +151,14 @@ class HaClient {
 		}
 	}
 
-	/** Configurations may arrive while waiting for anything else: none is lost. */
+	/** Configurations may arrive while waiting for anything else: none is lost, and the wait for one ends right away. */
 	private suspend fun DefaultClientWebSocketSession.receiveMessage(): JsonObject {
 		while (true) {
 			val frame = incoming.receive()
 			if (frame is Frame.Text) {
 				val message = HaProtocol.parse(frame.readText())
-				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {
-					pendingConfig = message
-				} else {
-					return message
-				}
+				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) pendingConfig = message
+				return message
 			}
 		}
 	}
