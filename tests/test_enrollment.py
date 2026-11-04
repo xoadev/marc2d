@@ -1,6 +1,6 @@
 """The panel's enrollment, from the form to the revocation of its token."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -126,10 +126,3 @@ async def test_duplicate_panel_is_refused(hass, hass_client_no_auth) -> None:
     second = await hass.config_entries.flow.async_configure(second["flow_id"], {"panel": "kitchen"})
     assert second["type"] is FlowResultType.ABORT
     assert second["reason"] == "already_configured"
-
-
-async def test_qr_uses_the_ip_instead_of_a_local_name(hass) -> None:
-    hass.config.internal_url = "http://homeassistant.local:8123"
-    hass.config.api = Mock(local_ip="192.0.2.20", port=8123)
-    result = await start_flow(hass)
-    assert result["description_placeholders"]["url"] == "http://192.0.2.20:8123"

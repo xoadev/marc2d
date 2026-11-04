@@ -49,18 +49,30 @@ class PanelRuntime(
 	/** Returns what to tell the user, or nothing if the panel is now connected. */
 	suspend fun enroll(invite: EnrollmentInvite): String? =
 		try {
-			store.saveConnection(enrollment.enroll(invite))
+			store.saveConnection(enrollWithRetries(invite))
 			null
 		} catch (_: EnrollmentRejectedException) {
 			"The code is not valid or has expired"
-		} catch (_: IOException) {
-			"Cannot reach Home Assistant at ${invite.url}"
+		} catch (e: IOException) {
+			"Cannot reach Home Assistant at ${invite.url} (${e::class.simpleName})"
 		} catch (_: IllegalArgumentException) {
 			// Includes an answer that is not JSON: a typed address may be any other server.
 			"That address is not a Home Assistant with marc2d"
 		} catch (_: IllegalStateException) {
 			"That address is not a Home Assistant with marc2d"
 		}
+
+	/** A `.local` name may fail while the network has not looked it up yet, and one person is waiting for the result. */
+	private suspend fun enrollWithRetries(invite: EnrollmentInvite): HaConnection {
+		repeat(ENROLL_ATTEMPTS - 1) {
+			try {
+				return enrollment.enroll(invite)
+			} catch (_: IOException) {
+				delay(ENROLL_RETRY)
+			}
+		}
+		return enrollment.enroll(invite)
+	}
 
 	fun start() {
 		if (started) return
@@ -153,6 +165,8 @@ class PanelRuntime(
 
 	private companion object {
 		const val DARK_LUX = 5f
+		const val ENROLL_ATTEMPTS = 3
+		val ENROLL_RETRY = 2.seconds
 		val BATTERY_INTERVAL = 1.minutes
 		val MIN_RETRY = 5.seconds
 		val MAX_RETRY = 60.seconds
