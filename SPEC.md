@@ -110,7 +110,8 @@ connection is lost HA could no longer turn it off.
 
 The panel is a `media_player.*_speaker`: `tts.speak` targets it like any other speaker. HA generates the speech and the
 panel plays the URL it receives, so it needs no TTS engine, which LineageOS lacks. Its volume is set from HA, with
-`media_player.volume_set`.
+`media_player.volume_set`. HA's own media arrives as a path, which the panel joins to the address it knows for HA; any
+other URL is played as it is.
 
 ## Voice commands
 
@@ -171,7 +172,8 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   ],
   "sensors": true,
   "siren": true,
-  "speaker": true
+  "speaker": true,
+  "voice": { "pipeline": "01h..." }
 }
 ```
 
@@ -187,8 +189,10 @@ only while it is on, and what a turned-off feature had is kept.
 | Sensors  | HA deletes those entities and the panel stops reporting them |
 | Siren    | HA deletes the entity and the panel ignores the command      |
 | Speaker  | HA deletes the entity and the panel ignores the audio        |
+| Voice    | no voice is sent: the panel does not open the microphone     |
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
+- A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
   way. Administrators can see them in the form, masked.
 - It is kept in the app's private storage, along with the connection, and never in the repo: the

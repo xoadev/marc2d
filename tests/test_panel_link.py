@@ -5,6 +5,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.core_config import async_process_ha_core_config
 from homeassistant.setup import async_setup_component
 
 INTERCOM = {
@@ -173,6 +174,25 @@ async def test_speaker_plays_what_it_is_sent(hass, panel) -> None:
         "media_player", "media_stop", {"entity_id": "media_player.kitchen_speaker"}, blocking=True
     )
     assert (await panel.receive_json())["event"] == {"kind": "stop"}
+
+
+@pytest.mark.parametrize(
+    "media",
+    ["http://homeassistant.local:8123/api/tts_proxy/a.mp3", "/api/tts_proxy/a.mp3"],
+)
+async def test_home_assistant_media_goes_as_a_path(hass, panel, media) -> None:
+    await async_process_ha_core_config(hass, {"internal_url": "http://homeassistant.local:8123"})
+    await hass.services.async_call(
+        "media_player",
+        "play_media",
+        {
+            "entity_id": "media_player.kitchen_speaker",
+            "media_content_type": "music",
+            "media_content_id": media,
+        },
+        blocking=True,
+    )
+    assert (await panel.receive_json())["event"]["url"] == "/api/tts_proxy/a.mp3"
 
 
 async def test_volume_is_set_from_home_assistant(hass, panel) -> None:

@@ -31,6 +31,16 @@ def test_everything_on_by_default() -> None:
     assert config["sensors"] is True
 
 
+def test_talk_needs_an_intercom_that_is_sent() -> None:
+    camera = {**CAMERA, "intercom": "Parking"}
+    options = {**OPTIONS, "cameras": [camera]}
+    assert build_panel_config(options)["cameras"][0]["intercom"] == "Parking"
+    turned_off = {**options, "features": {"sip": False}}
+    assert "intercom" not in build_panel_config(turned_off)["cameras"][0]
+    renamed = {**options, "intercoms": [{**INTERCOM, "name": "Garage"}]}
+    assert "intercom" not in build_panel_config(renamed)["cameras"][0]
+
+
 def test_a_new_panel_receives_an_empty_configuration() -> None:
     assert build_panel_config({}) == {
         "intercoms": [],

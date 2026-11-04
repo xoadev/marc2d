@@ -18,13 +18,14 @@ It's a half-joking personal project, shared in case it's useful to someone.
   Dahua VTO2202F.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
 - **Sensors and siren** in Home Assistant: light, battery and a siren on the alarm channel.
+- **A speaker** for `tts.speak` and any other audio from Home Assistant.
+- **Voice commands**, off by default: it listens for "Oye Mark" on the device and sends what follows to Assist.
 - **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of
   its eye.
 
 ## Status
 
-In testing, with a single panel and no releases. Things still break freely. Next up is a Home
-Assistant integration to add panels with a QR code.
+In testing, with a single panel and no releases. Things still break freely.
 
 ## What you need
 
@@ -43,7 +44,8 @@ flowchart LR
             sip["Linphone SDK"]
             hac["HA client<br/>Ktor"]
             rtsp["RTSP server<br/>optional"]
-            sys["Android<br/>TTS, audio, screen, camera"]
+            voice["Vosk<br/>wake phrase"]
+            sys["Android<br/>audio, screen, camera"]
         end
         vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
@@ -54,6 +56,7 @@ flowchart LR
     svc --> sip
     svc --> hac
     svc --> rtsp
+    svc --> voice
     svc --> sys
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
@@ -73,7 +76,8 @@ intercom from reaching the panel.
 ## Stack
 
 Kotlin and Jetpack Compose on Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
-DataStore, RootEncoder and RTSP-Server. The reasons are in [SPEC.md](SPEC.md#decisions).
+DataStore, Vosk, CameraX and ZXing, with RootEncoder and RTSP-Server planned for the camera. The reasons are in
+[SPEC.md](SPEC.md#decisions).
 
 ## Development
 
@@ -105,8 +109,8 @@ CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS
 4. In Home Assistant, add the marc2d integration, name the panel, scan its QR code from the app and set the
    panel up in the integration's options.
 
-While the app is the device owner, Android will not let you uninstall it. To undo this: long-press the
-clock and choose **Exit kiosk mode**.
+While the app is the device owner, Android will not let you uninstall it. To undo this: tap the
+clock, open **Settings** and choose **Exit kiosk mode**.
 
 ## License
 

@@ -24,7 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 	private var micGranted by mutableStateOf(false)
@@ -76,22 +75,13 @@ class MainActivity : ComponentActivity() {
 							window.attributes = window.attributes.apply { screenBrightness = level }
 						}
 					}
-					val scope = rememberCoroutineScope()
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
 					var scanOpen by rememberSaveable { mutableStateOf(false) }
-					var enrollmentMessage by rememberSaveable { mutableStateOf<String?>(null) }
-					val enroll = { invite: EnrollmentInvite ->
-						scope.launch {
-							enrollmentMessage = "Connecting…"
-							enrollmentMessage = runtime.enroll(invite)
-						}
-						Unit
-					}
-					val cameras by runtime.store.config
-						.map { it.cameras }
-						.collectAsState(initial = emptyList())
+					val enrollmentMessage by runtime.enrollmentMessage.collectAsState()
+					// Remembered: a new flow on each recomposition would restart the collection every time.
+					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
 
 					// The screen does not turn off during a call.
 					LocalView.current.keepScreenOn = call != null || camerasOpen || scanOpen
@@ -123,7 +113,7 @@ class MainActivity : ComponentActivity() {
 							QrScanScreen(
 								onInvite = { invite ->
 									scanOpen = false
-									enroll(invite)
+									runtime.enroll(invite)
 								},
 								onClose = { scanOpen = false },
 							)
@@ -137,7 +127,7 @@ class MainActivity : ComponentActivity() {
 								intercoms = intercoms,
 								enrollmentMessage = enrollmentMessage,
 								onScan = { scanOpen = true },
-								onEnroll = enroll,
+								onEnroll = runtime::enroll,
 								onOpenAndroidSettings = {
 									kiosk.pause()
 									startActivity(Intent(Settings.ACTION_SETTINGS))

@@ -22,6 +22,24 @@ data class BatteryReading(
 	val charging: Boolean,
 )
 
+/** Which light readings go to Home Assistant. It forgets the last one while the sensors are off: they restart with a value. */
+class LightReports {
+	private var last: Float? = null
+
+	fun shouldReport(
+		lux: Float,
+		enabled: Boolean,
+	): Boolean {
+		if (!enabled) {
+			last = null
+			return false
+		}
+		if (!PanelReadings.isSignificant(last, lux)) return false
+		last = lux
+		return true
+	}
+}
+
 /** Reads the phone's sensors that the panel publishes to Home Assistant. */
 class PanelReadings(
 	private val context: Context,

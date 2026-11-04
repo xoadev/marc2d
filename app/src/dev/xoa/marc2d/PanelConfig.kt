@@ -1,6 +1,7 @@
 package dev.xoa.marc2d
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /** The panel's configuration, pushed by the marc2d integration. What is turned off there does not arrive. */
 @Serializable
@@ -12,7 +13,20 @@ data class PanelConfig(
 	val siren: Boolean = true,
 	val speaker: Boolean = true,
 	val voice: VoiceConfig? = null,
-)
+) {
+	companion object {
+		// A version of the app may have stored fields that this one no longer has.
+		private val STORED = Json { ignoreUnknownKeys = true }
+
+		/** Nothing if a version of the app stored it differently: HA sends it again on connecting, so this must not stop the app. */
+		fun fromStored(json: String): PanelConfig? =
+			try {
+				STORED.decodeFromString<PanelConfig>(json)
+			} catch (_: IllegalArgumentException) {
+				null
+			}
+	}
+}
 
 /** Present only if voice commands are on. Without a pipeline, HA uses its preferred one. */
 @Serializable

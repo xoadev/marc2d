@@ -71,14 +71,11 @@ object HaProtocol {
 		) : ConfigResult
 	}
 
-	/** HA's own URLs go through the address the panel already reaches it at: HA may build them with a name the panel cannot resolve. */
+	/** HA sends its own media as a path, because only the panel knows the address it reaches HA at. Any other URL is not HA's. */
 	fun mediaUrl(
 		url: String,
 		haUrl: String,
-	): String {
-		val path = Regex("^(?:https?://[^/]+)?(/api/.*)$").find(url)?.groupValues?.get(1) ?: return url
-		return haUrl.trim().trimEnd('/') + path
-	}
+	): String = if (url.startsWith("/")) haUrl.trim().trimEnd('/') + url else url
 
 	fun webSocketUrl(haUrl: String): String {
 		val base = haUrl.trim().trimEnd('/')
@@ -132,6 +129,8 @@ object HaProtocol {
 	}
 
 	fun assistEvent(message: JsonObject): AssistEvent? {
+		// Refused before starting, for example with a removed assistant: no event will follow.
+		if (type(message) == "result") return if (isSuccess(message)) null else AssistEvent.Ended
 		val event = message["event"] as? JsonObject ?: return null
 		val data = event["data"] as? JsonObject
 		return when (event["type"]?.jsonPrimitive?.contentOrNull) {

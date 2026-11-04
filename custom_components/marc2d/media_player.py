@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from yarl import URL
+
 from homeassistant.components import media_source
 from homeassistant.components.media_player import (
     BrowseMedia,
@@ -16,6 +18,7 @@ from homeassistant.components.media_player import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.network import is_hass_url
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SPEAKER, is_enabled
@@ -64,7 +67,11 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
         if media_source.is_media_source_id(media_id):
             media = await media_source.async_resolve_media(self.hass, media_id, self.entity_id)
             media_id = media.url
-        self._hub.send({"kind": "play", "url": async_process_play_media_url(self.hass, media_id)})
+        url = async_process_play_media_url(self.hass, media_id, allow_relative_url=True)
+        if is_hass_url(self.hass, url):
+            # HA may use a name the panel cannot resolve: the panel knows its own address for it.
+            url = URL(url).raw_path_qs
+        self._hub.send({"kind": "play", "url": url})
 
     async def async_media_stop(self) -> None:
         """Stop the audio."""

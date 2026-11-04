@@ -23,7 +23,7 @@ class VoiceModel(
 		root.deleteRecursively()
 		root.mkdirs()
 		val zip = File(root, "model.zip")
-		URI(MODEL_URL).toURL().openStream().use { input -> zip.outputStream().use { input.copyTo(it) } }
+		download(MODEL_URL, zip)
 		val hash = zip.inputStream().use(::sha256)
 		check(hash == MODEL_SHA256) { "Unexpected voice model" }
 		zip.inputStream().use { unzip(it, root) }
@@ -35,6 +35,21 @@ class VoiceModel(
 		const val MODEL_FOLDER = "vosk-model-small-es-0.42"
 		private const val MODEL_URL = "https://alphacephei.com/vosk/models/$MODEL_FOLDER.zip"
 		private const val MODEL_SHA256 = "09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f"
+		private const val DOWNLOAD_TIMEOUT_MILLIS = 30_000
+
+		/** With timeouts: without them, a server that stops answering would hold voice commands until the app restarts. */
+		fun download(
+			url: String,
+			target: File,
+			timeoutMillis: Int = DOWNLOAD_TIMEOUT_MILLIS,
+		) {
+			val connection =
+				URI(url).toURL().openConnection().apply {
+					connectTimeout = timeoutMillis
+					readTimeout = timeoutMillis
+				}
+			connection.getInputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+		}
 
 		fun sha256(input: InputStream): String {
 			val digest = MessageDigest.getInstance("SHA-256")

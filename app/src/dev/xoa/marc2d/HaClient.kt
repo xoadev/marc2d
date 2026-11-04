@@ -65,25 +65,22 @@ class HaClient {
 			authenticate(connection.token)
 			val ids = AtomicInteger()
 			val nextId = { ids.incrementAndGet() }
-			run {
-				val id = nextId()
-				subscription = id
-				pendingConfig = null
-				send(Frame.Text(HaProtocol.panelSubscribe(id)))
-				val answer = awaitResult(id)
-				if (HaProtocol.isSuccess(answer)) {
-					coroutineScope {
-						launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
-						launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
-						launch { link.assist.collect { startAssist(it, nextId()) } }
-						followConfig(onStatus, onConfig, onWeather, nextId)
-					}
+			val id = nextId()
+			subscription = id
+			pendingConfig = null
+			send(Frame.Text(HaProtocol.panelSubscribe(id)))
+			val answer = awaitResult(id)
+			if (HaProtocol.isSuccess(answer)) {
+				coroutineScope {
+					launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
+					launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
+					launch { link.assist.collect { startAssist(it, nextId()) } }
+					followConfig(onStatus, onConfig, onWeather, nextId)
 				}
-				onStatus(HaProtocol.subscribeError(answer).toStatus())
-				// A new connection for each retry: right after enrolling or a restart, the panel or the integration
-				// may not be there yet, and nothing of this one should survive that.
-				return@webSocket
 			}
+			onStatus(HaProtocol.subscribeError(answer).toStatus())
+			// Ending here closes the connection, and each retry opens a new one: right after enrolling or a restart, the
+			// panel or the integration may not be there yet, and nothing of this one should survive that.
 		}
 	}
 
@@ -207,7 +204,7 @@ class HaClient {
 			val frame = incoming.receive()
 			if (frame is Frame.Text) {
 				val message = HaProtocol.parse(frame.readText())
-				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == assistId) {
+				if (HaProtocol.id(message) == assistId) {
 					HaProtocol.assistEvent(message)?.let { handleAssist(it) }
 				}
 				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {

@@ -44,7 +44,7 @@ class IntercomPhone(
 	private var applied: PanelConfig? = null
 	private var activeCall: Call? = null
 
-	/** The intercom whose doorbell is ringing, notified over MQTT: there is no SIP call yet. */
+	/** The intercom whose doorbell is ringing, notified by Home Assistant: there is no SIP call yet. */
 	private var ringing: IntercomConfig? = null
 	private var ringer: Ringtone? = null
 	private val main = Handler(Looper.getMainLooper())

@@ -2,12 +2,18 @@ package dev.xoa.marc2d
 
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 
 class EnrollmentTest {
+	private val invite = EnrollmentInvite("http://192.0.2.20:8123", "ABCD2345")
+
 	@Test
 	fun `reads the invite that the integration generates`() {
 		val invite = EnrollmentInvite.parse("marc2d://enroll?url=http%3A%2F%2F192.0.2.20%3A8123&code=ABCD2345")
@@ -29,6 +35,23 @@ class EnrollmentTest {
 	@Test
 	fun `does not print the code`() {
 		assertFalse("ABCD2345" in EnrollmentInvite("http://192.0.2.20", "ABCD2345").toString())
+	}
+
+	@Test
+	fun `cancelling is not reported as a wrong address`() {
+		runBlocking {
+			assertFailsWith<CancellationException> { enrollmentProblem(invite) { throw CancellationException("rotated") } }
+		}
+	}
+
+	@Test
+	fun `explains why it could not enroll`() {
+		runBlocking {
+			assertNull(enrollmentProblem(invite) {})
+			assertEquals("The code is not valid or has expired", enrollmentProblem(invite) { throw EnrollmentRejectedException() })
+			assertEquals("Cannot reach Home Assistant at ${invite.url} (IOException)", enrollmentProblem(invite) { throw IOException() })
+			assertEquals("That address is not a Home Assistant with marc2d", enrollmentProblem(invite) { error("not JSON") })
+		}
 	}
 
 	@Test

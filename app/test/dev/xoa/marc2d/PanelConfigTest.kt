@@ -3,6 +3,7 @@ package dev.xoa.marc2d
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 class PanelConfigTest {
 	private val intercom = IntercomConfig("Parking", "192.0.2.8", "9901#1", "s3cr3t")
@@ -10,6 +11,14 @@ class PanelConfigTest {
 	@Test
 	fun `escapes the hash of the extension in the URI`() {
 		assertEquals("sip:9901%231@192.0.2.8", intercom.sipIdentity)
+	}
+
+	@Test
+	fun `a stored configuration it cannot read is ignored`() {
+		assertEquals(PanelConfig(sensors = false), PanelConfig.fromStored("""{"sensors":false,"gone":1}"""))
+		assertNull(PanelConfig.fromStored("""{"intercoms":"not a list"}"""))
+		assertNull(PanelConfig.fromStored("""{"intercoms":[{"name":"missing the rest"}]}"""))
+		assertNull(PanelConfig.fromStored("not json"))
 	}
 
 	@Test

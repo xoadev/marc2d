@@ -7,6 +7,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import org.vosk.Model
 import org.vosk.Recognizer
+import java.io.IOException
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -15,6 +16,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+
+/** A failed read does not recover by itself, as when the audio server restarts, and retrying at once would spin at full CPU. */
+fun microphoneBytes(read: Int): Int {
+	if (read <= 0) throw IOException("The microphone returned $read")
+	return read
+}
 
 /** Hears everything locally. Audio leaves the panel only after the wake phrase, through [onWake]. */
 class VoiceListener(
@@ -28,22 +35,22 @@ class VoiceListener(
 		withContext(Dispatchers.IO) {
 			model.ensure()
 			val buffer = ByteArray(BUFFER_BYTES)
-			val record =
-				AudioRecord(
-					MediaRecorder.AudioSource.VOICE_RECOGNITION,
-					SAMPLE_RATE,
-					AudioFormat.CHANNEL_IN_MONO,
-					AudioFormat.ENCODING_PCM_16BIT,
-					maxOf(AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), BUFFER_BYTES * 4),
-				)
 			Model(model.path.path).use { vosk ->
 				Recognizer(vosk, SAMPLE_RATE.toFloat(), WakeWord.GRAMMAR).use { recognizer ->
+					// Opened last, so that a model that fails to load does not leave it behind on each retry.
+					val record =
+						AudioRecord(
+							MediaRecorder.AudioSource.VOICE_RECOGNITION,
+							SAMPLE_RATE,
+							AudioFormat.CHANNEL_IN_MONO,
+							AudioFormat.ENCODING_PCM_16BIT,
+							maxOf(AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), BUFFER_BYTES * 4),
+						)
 					try {
 						record.startRecording()
 						while (true) {
 							currentCoroutineContext().ensureActive()
-							val read = record.read(buffer, 0, buffer.size)
-							if (read <= 0) continue
+							val read = microphoneBytes(record.read(buffer, 0, buffer.size))
 							if (recognizer.acceptWaveForm(buffer, read) && WakeWord.heard(recognizer.result)) {
 								Log.i(TAG, "Wake phrase heard")
 								streamRequest(record, buffer, pipeline)
@@ -51,7 +58,7 @@ class VoiceListener(
 							}
 						}
 					} finally {
-						record.stop()
+						// It also stops the recording, and unlike stop() it does not throw if that never started.
 						record.release()
 					}
 				}
@@ -71,8 +78,7 @@ class VoiceListener(
 		try {
 			while (started.elapsedNow() < MAX_REQUEST && finished.tryReceive().isFailure) {
 				currentCoroutineContext().ensureActive()
-				val read = record.read(buffer, 0, buffer.size)
-				if (read > 0) audio.trySend(buffer.copyOf(read))
+				audio.trySend(buffer.copyOf(microphoneBytes(record.read(buffer, 0, buffer.size))))
 			}
 		} catch (e: CancellationException) {
 			throw e

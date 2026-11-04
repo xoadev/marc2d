@@ -10,6 +10,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +48,11 @@ class PanelRuntime(
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
+	private val _enrollmentMessage = MutableStateFlow<String?>(null)
+	val enrollmentMessage: StateFlow<String?> = _enrollmentMessage.asStateFlow()
+
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+	private var enrolling: Job? = null
 	private val ha = HaClient()
 	private val enrollment = EnrollmentClient()
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
@@ -65,21 +70,15 @@ class PanelRuntime(
 	private var haUrl = ""
 	private var started = false
 
-	/** Returns what to tell the user, or nothing if the panel is now connected. */
-	suspend fun enroll(invite: EnrollmentInvite): String? =
-		try {
-			store.saveConnection(enrollWithRetries(invite))
-			null
-		} catch (_: EnrollmentRejectedException) {
-			"The code is not valid or has expired"
-		} catch (e: IOException) {
-			"Cannot reach Home Assistant at ${invite.url} (${e::class.simpleName})"
-		} catch (_: IllegalArgumentException) {
-			// Includes an answer that is not JSON: a typed address may be any other server.
-			"That address is not a Home Assistant with marc2d"
-		} catch (_: IllegalStateException) {
-			"That address is not a Home Assistant with marc2d"
-		}
+	/** Not tied to the screen: rotating recreates it, and a code that was already redeemed cannot be used again. */
+	fun enroll(invite: EnrollmentInvite) {
+		if (enrolling?.isActive == true) return
+		enrolling =
+			scope.launch {
+				_enrollmentMessage.value = "Connecting…"
+				_enrollmentMessage.value = enrollmentProblem(invite) { store.saveConnection(enrollWithRetries(invite)) }
+			}
+	}
 
 	/** A `.local` name may fail while the network has not looked it up yet, and one person is waiting for the result. */
 	private suspend fun enrollWithRetries(invite: EnrollmentInvite): HaConnection {
@@ -174,13 +173,10 @@ class PanelRuntime(
 	}
 
 	private suspend fun publishLight() {
-		var last: Float? = null
+		val reports = LightReports()
 		readings.light().collect { lux ->
 			_dark.value = lux < DARK_LUX
-			if (PanelReadings.isSignificant(last, lux)) {
-				last = lux
-				reportReading("light", JsonPrimitive(lux.roundToInt()))
-			}
+			if (reports.shouldReport(lux, config.sensors)) reportReading("light", JsonPrimitive(lux.roundToInt()))
 		}
 	}
 

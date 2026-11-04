@@ -64,9 +64,20 @@ class HaProtocolTest {
 	@Test
 	fun `sends HA's media through the address the panel knows`() {
 		val base = "http://192.0.2.20:8123"
-		assertEquals("$base/api/tts_proxy/a.mp3?x=1", HaProtocol.mediaUrl("http://homeassistant.local:8123/api/tts_proxy/a.mp3?x=1", base))
-		assertEquals("$base/api/x", HaProtocol.mediaUrl("/api/x", base))
+		assertEquals("$base/api/tts_proxy/a.mp3?x=1", HaProtocol.mediaUrl("/api/tts_proxy/a.mp3?x=1", "$base/"))
 		assertEquals("https://example.com/a.mp3", HaProtocol.mediaUrl("https://example.com/a.mp3", base))
+	}
+
+	@Test
+	fun `does not send another server's media to HA`() {
+		val other = "https://example.com/api/a.mp3"
+		assertEquals(other, HaProtocol.mediaUrl(other, "http://192.0.2.20:8123"))
+	}
+
+	@Test
+	fun `a refused voice request ends it`() {
+		assertEquals(HaProtocol.AssistEvent.Ended, HaProtocol.assistEvent(HaProtocol.parse("""{"id":1,"type":"result","success":false}""")))
+		assertNull(HaProtocol.assistEvent(HaProtocol.parse("""{"id":1,"type":"result","success":true}""")))
 	}
 
 	@Test

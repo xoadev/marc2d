@@ -19,6 +19,7 @@ CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
+CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
@@ -50,8 +51,14 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             for intercom in options.get(CONF_INTERCOMS, [])
         ]
     if is_enabled(options, FEATURE_CAMERAS):
+        # Talk needs its intercom, which may be off or renamed: the button would do nothing.
+        intercoms = {intercom["name"] for intercom in config["intercoms"]}
         config["cameras"] = [
-            {key: value for key, value in camera.items() if value}
+            {
+                key: value
+                for key, value in camera.items()
+                if value and (key != CONF_CAMERA_INTERCOM or value in intercoms)
+            }
             for camera in options.get(CONF_CAMERAS, [])
         ]
     if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):

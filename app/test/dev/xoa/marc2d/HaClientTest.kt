@@ -131,6 +131,32 @@ class HaClientTest {
 		}
 
 	@Test
+	fun `stops listening when Home Assistant refuses a voice request`() =
+		runBlocking {
+			val connection =
+				fakeHa {
+					val id = subscribeId()
+					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
+					var run = -1
+					while (run < 0) {
+						val text = (incoming.receive() as Frame.Text).readText()
+						if ("assist_pipeline/run" in text) run = HaProtocol.parse(text)["id"]!!.jsonPrimitive.int
+					}
+					send(Frame.Text("""{"id":$run,"type":"result","success":false,"error":{"code":"pipeline-not-found"}}"""))
+					awaitCancellation()
+				}
+			val link = PanelLink()
+			val stopped = CompletableDeferred<Unit>()
+			val job = launch { HaClient().run(connection, link, {}, {}, {}, {}) }
+			withTimeout(5.seconds) {
+				link.assist.subscriptionCount.first { it > 0 }
+				link.requestAssist(AssistRun(null, Channel(Channel.UNLIMITED)) { stopped.complete(Unit) })
+				stopped.await()
+			}
+			job.cancel()
+		}
+
+	@Test
 	fun `streams a voice request and plays the reply`() =
 		runBlocking {
 			val received = CompletableDeferred<List<Int>>()
