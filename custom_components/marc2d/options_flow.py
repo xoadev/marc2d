@@ -8,6 +8,7 @@ import probatio
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
+    AssistPipelineSelector,
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
@@ -18,12 +19,14 @@ from homeassistant.helpers.selector import (
 from .panel_config import (
     CONF_CAMERAS,
     CONF_INTERCOMS,
+    CONF_PIPELINE,
     CONF_WEATHER_ENTITY,
     FEATURE_CAMERAS,
     FEATURE_SENSORS,
     FEATURE_SIP,
     FEATURE_SIREN,
     FEATURE_SPEAKER,
+    FEATURE_VOICE,
     FEATURE_WEATHER,
     SECTION_FEATURES,
     is_enabled,
@@ -37,6 +40,7 @@ MENU = {
     "cameras": "Cameras",
     "weather": "Weather",
     "entities": "Sensors, siren and speaker",
+    "voice": "Voice commands",
 }
 
 
@@ -163,6 +167,28 @@ class Marc2dOptionsFlow(OptionsFlow):
         }
         return self.async_show_form(
             step_id="entities",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+        )
+
+    async def async_step_voice(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Voice commands: off until someone turns them on, as they keep the microphone open."""
+        if user_input is not None:
+            self._set_enabled(FEATURE_VOICE, user_input)
+            self._options[CONF_PIPELINE] = user_input.get(CONF_PIPELINE)
+            return self.async_create_entry(data=self._options)
+        features = self._options.get(SECTION_FEATURES, {})
+        suggested = {
+            CONF_ENABLED: features.get(FEATURE_VOICE, False),
+            CONF_PIPELINE: self._options.get(CONF_PIPELINE),
+        }
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_ENABLED, default=False): BooleanSelector(),
+                probatio.Optional(CONF_PIPELINE): AssistPipelineSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="voice",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
         )
 

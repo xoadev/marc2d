@@ -11,6 +11,13 @@ data class PanelConfig(
 	val sensors: Boolean = true,
 	val siren: Boolean = true,
 	val speaker: Boolean = true,
+	val voice: VoiceConfig? = null,
+)
+
+/** Present only if voice commands are on. Without a pipeline, HA uses its preferred one. */
+@Serializable
+data class VoiceConfig(
+	val pipeline: String? = null,
 )
 
 @Serializable

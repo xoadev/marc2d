@@ -69,6 +69,17 @@
           "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command.",
           "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
         }
+      },
+      "voice": {
+        "title": "Voice commands",
+        "description": "The panel listens for \"Oye Mark\" on the device. Only what follows is sent to Home Assistant. It downloads a 40 MB model the first time, and anyone near the panel can give orders to what is exposed to Assist.",
+        "data": {
+          "enabled": "On",
+          "pipeline": "Assistant"
+        },
+        "data_description": {
+          "pipeline": "Needs speech-to-text. Empty uses the preferred assistant."
+        }
       }
     },
     "error": {

@@ -18,6 +18,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -125,6 +127,42 @@ class HaClientTest {
 
 			assertEquals(HaProtocol.PanelEvent.Siren(true), withTimeout(5.seconds) { command.await() })
 			assertTrue(""""battery":80""" in withTimeout(5.seconds) { reported.await() })
+			job.cancel()
+		}
+
+	@Test
+	fun `streams a voice request and plays the reply`() =
+		runBlocking {
+			val received = CompletableDeferred<List<Int>>()
+			val connection =
+				fakeHa {
+					val id = subscribeId()
+					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
+					var run = -1
+					while (run < 0) {
+						val text = (incoming.receive() as Frame.Text).readText()
+						if ("assist_pipeline/run" in text) run = HaProtocol.parse(text)["id"]!!.jsonPrimitive.int
+					}
+					send(Frame.Text("""{"id":$run,"type":"result","success":true}"""))
+					send(Frame.Text("""{"id":$run,"type":"event","event":{"type":"run-start","data":{"runner_data":{"stt_binary_handler_id":7}}}}"""))
+					val first = incoming.receive() as Frame.Binary
+					val last = incoming.receive() as Frame.Binary
+					received.complete(listOf(first.data.size, first.data[0].toInt(), last.data.size))
+					send(Frame.Text("""{"id":$run,"type":"event","event":{"type":"tts-end","data":{"tts_output":{"url":"/api/a.mp3"}}}}"""))
+					awaitCancellation()
+				}
+			val link = PanelLink()
+			val reply = CompletableDeferred<HaProtocol.PanelEvent>()
+			val job = launch { HaClient().run(connection, link, {}, {}, {}, { reply.complete(it) }) }
+			val audio = Channel<ByteArray>(Channel.UNLIMITED)
+			audio.trySend(byteArrayOf(1, 2))
+			audio.close()
+			withTimeout(5.seconds) {
+				link.assist.subscriptionCount.first { it > 0 }
+				link.requestAssist(AssistRun(null, audio) {})
+				assertEquals(listOf(3, 7, 1), received.await())
+				assertEquals(HaProtocol.PanelEvent.Play("/api/a.mp3"), reply.await())
+			}
 			job.cancel()
 		}
 }

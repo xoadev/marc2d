@@ -13,6 +13,7 @@ dependencies:
   - $libs.ktor.client.okhttp
   - $libs.ktor.client.websockets
   - $libs.linphone.sdk
+  - $libs.vosk.android
   - $libs.zxing.core
 
 settings:

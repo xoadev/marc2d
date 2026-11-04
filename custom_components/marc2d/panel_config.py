@@ -13,11 +13,13 @@ FEATURE_WEATHER = "weather"
 FEATURE_SENSORS = "sensors"
 FEATURE_SIREN = "siren"
 FEATURE_SPEAKER = "speaker"
+FEATURE_VOICE = "voice"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
+CONF_PIPELINE = "pipeline"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
 
@@ -36,6 +38,9 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
         "siren": is_enabled(options, FEATURE_SIREN),
         "speaker": is_enabled(options, FEATURE_SPEAKER),
     }
+    # The only one off by default: it keeps the microphone open.
+    if options.get(SECTION_FEATURES, {}).get(FEATURE_VOICE, False):
+        config["voice"] = {key: value for key, value in _pipeline(options).items()}
     if is_enabled(options, FEATURE_SIP):
         config["intercoms"] = [
             {
@@ -52,6 +57,11 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
         config["weather"] = weather
     return config
+
+
+def _pipeline(options: Mapping[str, Any]) -> dict[str, str]:
+    pipeline = options.get(CONF_PIPELINE)
+    return {"pipeline": pipeline} if pipeline else {}
 
 
 def doorbell_buttons(options: Mapping[str, Any]) -> dict[str, str]:

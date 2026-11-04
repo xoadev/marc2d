@@ -42,6 +42,8 @@ class HaAuthException : Exception("Home Assistant rejected the token")
 class HaClient {
 	private var subscription = 0
 	private var pendingConfig: HaProtocol.ConfigResult? = null
+	private var assist: AssistRun? = null
+	private var assistId = -1
 	private var onCommand: (HaProtocol.PanelEvent) -> Unit = {}
 
 	private val client =
@@ -73,6 +75,7 @@ class HaClient {
 					coroutineScope {
 						launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
 						launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
+						launch { link.assist.collect { startAssist(it, nextId()) } }
 						followConfig(onStatus, onConfig, onWeather, nextId)
 					}
 				}
@@ -80,6 +83,41 @@ class HaClient {
 				// A new connection for each retry: right after enrolling or a restart, the panel or the integration
 				// may not be there yet, and nothing of this one should survive that.
 				return@webSocket
+			}
+		}
+	}
+
+	private suspend fun DefaultClientWebSocketSession.startAssist(
+		run: AssistRun,
+		id: Int,
+	) {
+		assist = run
+		assistId = id
+		send(Frame.Text(HaProtocol.assistRun(id, run.pipeline)))
+	}
+
+	private fun DefaultClientWebSocketSession.handleAssist(event: HaProtocol.AssistEvent) {
+		val run = assist ?: return
+		when (event) {
+			is HaProtocol.AssistEvent.Started -> {
+				launch {
+					for (chunk in run.audio) send(Frame.Binary(true, byteArrayOf(event.audioHandler) + chunk))
+					// The handler alone tells HA that the audio has ended.
+					send(Frame.Binary(true, byteArrayOf(event.audioHandler)))
+				}
+			}
+
+			HaProtocol.AssistEvent.StopListening -> {
+				run.onStopListening()
+			}
+
+			is HaProtocol.AssistEvent.Reply -> {
+				onCommand(HaProtocol.PanelEvent.Play(event.url))
+			}
+
+			HaProtocol.AssistEvent.Ended -> {
+				run.onStopListening()
+				assist = null
 			}
 		}
 	}
@@ -169,6 +207,9 @@ class HaClient {
 			val frame = incoming.receive()
 			if (frame is Frame.Text) {
 				val message = HaProtocol.parse(frame.readText())
+				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == assistId) {
+					HaProtocol.assistEvent(message)?.let { handleAssist(it) }
+				}
 				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {
 					when (val event = HaProtocol.panelEvent(message)) {
 						is HaProtocol.PanelEvent.Config -> pendingConfig = event.result

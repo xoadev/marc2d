@@ -1,6 +1,7 @@
 package dev.xoa.marc2d
 
 import android.content.Context
+import android.util.Log
 import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -15,6 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -37,6 +41,9 @@ class PanelRuntime(
 	private val _brightness = MutableStateFlow<Float?>(null)
 	val brightness: StateFlow<Float?> = _brightness.asStateFlow()
 
+	private val _listening = MutableStateFlow(false)
+	val listening: StateFlow<Boolean> = _listening.asStateFlow()
+
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
@@ -53,6 +60,7 @@ class PanelRuntime(
 			{ link.report(PanelLink.PLAYING, JsonPrimitive(it)) },
 			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
 		)
+	private val voice = VoiceListener(VoiceModel(context.noBackupFilesDir), link::requestAssist) { _listening.value = it }
 	private var config = PanelConfig()
 	private var haUrl = ""
 	private var started = false
@@ -99,6 +107,7 @@ class PanelRuntime(
 			}
 		}
 		phone.onDoorbellAnswered = link::answer
+		scope.launch { keepListening() }
 		link.report(PanelLink.SIREN, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
@@ -111,6 +120,25 @@ class PanelRuntime(
 				}
 			}
 		}
+	}
+
+	/** Only one can hold the microphone: a call, or the wake phrase, which waits for the call to end. */
+	private suspend fun keepListening() {
+		combine(store.config.map { it.voice }, phone.call.map { it != null }) { voice, inCall -> voice.takeUnless { inCall } }
+			.distinctUntilChanged()
+			.collectLatest { config ->
+				if (config == null) return@collectLatest
+				while (true) {
+					try {
+						voice.run(config.pipeline)
+					} catch (e: CancellationException) {
+						throw e
+					} catch (e: Exception) {
+						Log.w("marc2d", "Voice stopped: ${e::class.simpleName}")
+					}
+					delay(VOICE_RETRY)
+				}
+			}
 	}
 
 	private fun handle(command: HaProtocol.PanelEvent) {
@@ -190,6 +218,7 @@ class PanelRuntime(
 
 	private companion object {
 		const val DARK_LUX = 5f
+		val VOICE_RETRY = 60.seconds
 		const val ENROLL_ATTEMPTS = 3
 		val ENROLL_RETRY = 2.seconds
 		val BATTERY_INTERVAL = 1.minutes

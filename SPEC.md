@@ -45,6 +45,7 @@ eye color only appears when something matters. When its state changes it stays w
 | Intruder  | red band                | HA, with `select.*_state`                    |
 | Alarm     | yellow                  | HA, with `select.*_state`                    |
 | Recording | red lens                | HA, with `select.*_state`                    |
+| Listening | large, with a glint     | the panel, after "Oye Mark"                  |
 | Offline   | an X                    | the panel, if there is any warning on screen |
 | Sleeping  | closed                  | the panel, below 5 lx                        |
 | Walking   | looks where it is going | the panel, if nothing else applies           |
@@ -111,9 +112,12 @@ The panel is a `media_player.*_speaker`: `tts.speak` targets it like any other s
 panel plays the URL it receives, so it needs no TTS engine, which LineageOS lacks. Its volume is set from HA, with
 `media_player.volume_set`.
 
-Voice commands: the panel is an Assist satellite. It is activated with an on-screen button, sends the
-microphone audio to the HA pipeline (`assist_pipeline/run`) and plays the response. The
-wake word is outside this version.
+## Voice commands
+
+Off by default, because it keeps the microphone open. The panel detects "Oye Mark" on the device with Vosk, and audio
+leaves it only after that phrase, to `assist_pipeline/run`. HA transcribes it, runs the assistant chosen in the form and
+returns speech, which the panel plays. The eye shows when it is listening, for up to 10 seconds. A call takes the
+microphone, and listening resumes when it ends. The first time, it downloads a 40 MB model, checked by its hash.
 
 ## Presence
 
@@ -224,6 +228,8 @@ a broker or writing YAML. It requires HA 2026.10.
   commercial license.
 - HA with Ktor Client, OkHttp engine and kotlinx.serialization: WebSocket and JSON over coroutines.
 - Configuration with Jetpack DataStore.
+- Wake phrase with Vosk: it needs no Google services nor training for a new phrase, unlike openWakeWord. Its model is
+  downloaded, not committed.
 - QR codes with CameraX and ZXing core: ML Kit depends on Google services, and CameraX spares us the camera
   lifecycle.
 - RTSP with RootEncoder and RTSP-Server. They are maintained, but by a single author and published on

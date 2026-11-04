@@ -196,3 +196,17 @@ async def test_another_user_cannot_read_a_panel_secrets(hass, entry, hass_ws_cli
     answer = await client.receive_json()
     assert answer["success"] is False
     assert answer["error"]["code"] == "not_found"
+
+
+def test_voice_is_off_until_turned_on() -> None:
+    assert "voice" not in build_panel_config({})
+    on = {"features": {"voice": True}, "pipeline": "abc"}
+    assert build_panel_config(on)["voice"] == {"pipeline": "abc"}
+
+
+async def test_voice_page_saves(hass, entry) -> None:
+    form = await open_page(hass, entry, "voice")
+    keys = {str(key): key.description for key in form["data_schema"].schema}
+    assert keys["enabled"] == {"suggested_value": False}
+    done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": True})
+    assert build_panel_config(done["data"])["voice"] == {}

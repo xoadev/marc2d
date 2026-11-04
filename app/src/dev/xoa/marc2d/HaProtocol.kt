@@ -15,6 +15,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -101,6 +102,68 @@ object HaProtocol {
 			put("id", id)
 			put("type", "marc2d/subscribe")
 		}.toString()
+
+	fun assistRun(
+		id: Int,
+		pipeline: String?,
+	): String =
+		buildJsonObject {
+			put("id", id)
+			put("type", "assist_pipeline/run")
+			put("start_stage", "stt")
+			put("end_stage", "tts")
+			putJsonObject("input") { put("sample_rate", 16_000) }
+			if (pipeline != null) put("pipeline", pipeline)
+		}.toString()
+
+	/** What matters of a voice request's events. */
+	sealed interface AssistEvent {
+		data class Started(
+			val audioHandler: Byte,
+		) : AssistEvent
+
+		data object StopListening : AssistEvent
+
+		data class Reply(
+			val url: String,
+		) : AssistEvent
+
+		data object Ended : AssistEvent
+	}
+
+	fun assistEvent(message: JsonObject): AssistEvent? {
+		val event = message["event"] as? JsonObject ?: return null
+		val data = event["data"] as? JsonObject
+		return when (event["type"]?.jsonPrimitive?.contentOrNull) {
+			"run-start" -> {
+				(data?.get("runner_data") as? JsonObject)
+					?.get("stt_binary_handler_id")
+					?.jsonPrimitive
+					?.intOrNull
+					?.let { AssistEvent.Started(it.toByte()) }
+			}
+
+			"stt-vad-end", "stt-end", "error" -> {
+				if (event["type"]?.jsonPrimitive?.content == "error") AssistEvent.Ended else AssistEvent.StopListening
+			}
+
+			"tts-end" -> {
+				(data?.get("tts_output") as? JsonObject)
+					?.get("url")
+					?.jsonPrimitive
+					?.contentOrNull
+					?.let { AssistEvent.Reply(it) }
+			}
+
+			"run-end" -> {
+				AssistEvent.Ended
+			}
+
+			else -> {
+				null
+			}
+		}
+	}
 
 	fun panelState(
 		id: Int,

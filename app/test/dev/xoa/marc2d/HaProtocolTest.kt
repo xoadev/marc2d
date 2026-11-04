@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonPrimitive
 
 class HaProtocolTest {
@@ -71,6 +72,46 @@ class HaProtocolTest {
 	@Test
 	fun `reads the brightness`() {
 		assertEquals(HaProtocol.PanelEvent.Brightness(40.0), HaProtocol.panelEvent(event("""{"kind":"brightness","level":40}""")))
+	}
+
+	@Test
+	fun `follows a voice request`() {
+		fun assist(body: String) = HaProtocol.assistEvent(event(body))
+
+		assertEquals(
+			HaProtocol.AssistEvent.Started(7),
+			assist("""{"type":"run-start","data":{"runner_data":{"stt_binary_handler_id":7}}}"""),
+		)
+		assertEquals(HaProtocol.AssistEvent.StopListening, assist("""{"type":"stt-vad-end","data":{}}"""))
+		assertEquals(HaProtocol.AssistEvent.Reply("/api/a.mp3"), assist("""{"type":"tts-end","data":{"tts_output":{"url":"/api/a.mp3"}}}"""))
+		assertEquals(HaProtocol.AssistEvent.Ended, assist("""{"type":"error","data":{}}"""))
+		assertEquals(HaProtocol.AssistEvent.Ended, assist("""{"type":"run-end"}"""))
+		assertNull(assist("""{"type":"intent-start"}"""))
+	}
+
+	@Test
+	fun `recognizes the wake phrase`() {
+		assertTrue(WakeWord.heard("""{"text":"oye mark"}"""))
+		assertTrue(WakeWord.heard("""{"text":"oye marco"}"""))
+		assertFalse(WakeWord.heard("""{"text":"[unk]"}"""))
+		assertFalse(WakeWord.heard("""{"text":"mark"}"""))
+		assertFalse(WakeWord.heard("not json"))
+	}
+
+	@Test
+	fun `refuses a model archive that escapes its folder`() {
+		val bytes = java.io.ByteArrayOutputStream()
+		java.util.zip.ZipOutputStream(bytes).use {
+			it.putNextEntry(java.util.zip.ZipEntry("../evil"))
+			it.write(1)
+			it.closeEntry()
+		}
+		val folder =
+			java.nio.file.Files
+				.createTempDirectory("model")
+				.toFile()
+		assertTrue(runCatching { VoiceModel.unzip(bytes.toByteArray().inputStream(), folder) }.isFailure)
+		assertFalse(java.io.File(folder.parentFile, "evil").exists())
 	}
 
 	@Test
