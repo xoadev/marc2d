@@ -93,10 +93,11 @@ class PanelSpeaker(
 						.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
 						.build(),
 				)
-				setOnCompletionListener { stop() }
+				// The speaker's stop, not the player's: only that one releases it and tells HA that it has ended.
+				setOnCompletionListener { this@PanelSpeaker.stop() }
 				setOnErrorListener { _, what, extra ->
 					Log.w(TAG, "Could not play the audio: $what, $extra")
-					stop()
+					this@PanelSpeaker.stop()
 					true
 				}
 				setDataSource(file.path)
