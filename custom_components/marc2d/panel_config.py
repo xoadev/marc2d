@@ -12,16 +12,7 @@ FEATURE_SIP = "sip"
 FEATURE_CAMERAS = "cameras"
 FEATURE_WEATHER = "weather"
 FEATURE_MQTT = "mqtt"
-FEATURE_SENSORS = "sensors"
-FEATURE_SIREN = "siren"
-FEATURES = (
-    FEATURE_SIP,
-    FEATURE_CAMERAS,
-    FEATURE_WEATHER,
-    FEATURE_MQTT,
-    FEATURE_SENSORS,
-    FEATURE_SIREN,
-)
+FEATURES = (FEATURE_SIP, FEATURE_CAMERAS, FEATURE_WEATHER, FEATURE_MQTT)
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
@@ -58,7 +49,7 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             "port": int(mqtt.get("port") or DEFAULT_MQTT_PORT),
             "username": mqtt.get("username", ""),
             "password": mqtt.get("password", ""),
-            "sensors": is_enabled(options, FEATURE_SENSORS),
-            "siren": is_enabled(options, FEATURE_SIREN),
+            "sensors": bool(mqtt.get("sensors", True)),
+            "siren": bool(mqtt.get("siren", True)),
         }
     return config

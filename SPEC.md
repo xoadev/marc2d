@@ -161,14 +161,18 @@ the integration, and the panel receives it right away through `marc2d/config/sub
 }
 ```
 
-| Toggle          | When it is off                                                |
-| --------------- | ------------------------------------------------------------- |
-| Intercom (SIP)  | no intercoms are sent: the panel unregisters                  |
-| Cameras         | no cameras are sent: the menu hides them                      |
-| Weather         | no weather entity is sent: the panel hides it                 |
-| MQTT            | no connection: no doorbell, sensors, siren or states from HA  |
-| Publish sensors | HA deletes those entities and the panel stops publishing them |
-| Siren           | HA deletes the entity and the panel ignores the command       |
+The form has one step per feature, shown only if the feature is on, because HA forms cannot show fields depending on
+another field. A feature that is on must have its data, and what a turned-off feature had is kept.
+
+| Feature  | When it is off                                               |
+| -------- | ------------------------------------------------------------ |
+| Intercom | no intercoms are sent: the panel unregisters                 |
+| Cameras  | no cameras are sent: the menu hides them                     |
+| Weather  | no weather entity is sent: the panel hides it                |
+| MQTT     | no connection: no doorbell, sensors, siren or states from HA |
+
+Sensors and siren need MQTT, so they are options of its step. Turned off, HA deletes those entities: the panel stops
+publishing the sensors and ignores the siren command.
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this

@@ -45,8 +45,6 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
         ("cameras", lambda c: c["cameras"] == []),
         ("weather", lambda c: "weather" not in c),
         ("mqtt", lambda c: "mqtt" not in c),
-        ("sensors", lambda c: c["mqtt"]["sensors"] is False),
-        ("siren", lambda c: c["mqtt"]["siren"] is False),
     ],
 )
 def test_each_toggle_turns_off_only_its_part(feature, check) -> None:
@@ -75,28 +73,36 @@ async def panel_token(hass: HomeAssistant, entry) -> str:
     return hass.auth.async_create_access_token(refresh)
 
 
-async def test_form_saves_and_the_panel_receives_it_at_once(hass, entry, hass_ws_client) -> None:
+FEATURES_OFF = {"sip": False, "cameras": False, "weather": False, "mqtt": False}
+
+
+@pytest.mark.parametrize("key", ["sensors", "siren"])
+def test_sensors_and_siren_belong_to_mqtt(key) -> None:
+    config = build_panel_config({**OPTIONS, "mqtt": {**MQTT, key: False}})
+    assert config["mqtt"][key] is False
+    off = build_panel_config({**OPTIONS, "mqtt": {**MQTT, key: False}, "features": {"mqtt": False}})
+    assert "mqtt" not in off
+
+
+async def test_steps_follow_the_features_and_the_panel_receives_it_at_once(
+    hass, entry, hass_ws_client
+) -> None:
     client = await hass_ws_client(hass, await panel_token(hass, entry))
     await client.send_json({"id": 1, "type": "marc2d/config/subscribe"})
     assert (await client.receive_json())["success"] is True
     assert (await client.receive_json())["event"] == {"intercoms": [], "cameras": []}
 
-    form = await hass.config_entries.options.async_init(entry.entry_id)
+    options = hass.config_entries.options
+    form = await options.async_init(entry.entry_id)
     assert form["step_id"] == "init"
-    done = await hass.config_entries.options.async_configure(
-        form["flow_id"],
-        {
-            "features": {
-                "sip": True,
-                "cameras": False,
-                "weather": True,
-                "mqtt": True,
-                "sensors": True,
-                "siren": True,
-            },
-            "mqtt": {"port": 1883},
-            "intercoms": [INTERCOM],
-        },
+    form = await options.async_configure(
+        form["flow_id"], {**FEATURES_OFF, "sip": True, "mqtt": True}
+    )
+    assert form["step_id"] == "intercoms"
+    form = await options.async_configure(form["flow_id"], {"intercoms": [INTERCOM]})
+    assert form["step_id"] == "mqtt"
+    done = await options.async_configure(
+        form["flow_id"], {"server": "192.0.2.20", "port": 1883, "sensors": False, "siren": True}
     )
     assert done["type"] == "create_entry"
     await hass.async_block_till_done()
@@ -104,23 +110,68 @@ async def test_form_saves_and_the_panel_receives_it_at_once(hass, entry, hass_ws
     pushed = (await client.receive_json())["event"]
     assert pushed["intercoms"][0]["password"] == "s3cr3t"
     assert pushed["cameras"] == []
+    assert pushed["mqtt"]["sensors"] is False
+
+
+async def test_all_steps_in_order(hass, entry) -> None:
+    options = hass.config_entries.options
+    form = await options.async_init(entry.entry_id)
+    form = await options.async_configure(
+        form["flow_id"], {"sip": True, "cameras": True, "weather": True, "mqtt": False}
+    )
+    form = await options.async_configure(form["flow_id"], {"intercoms": [INTERCOM]})
+    assert form["step_id"] == "cameras"
+    # Talk offers the intercoms just configured.
+    selector = form["data_schema"].schema["cameras"]
+    assert selector.config["fields"]["intercom"]["selector"]["select"]["options"] == ["Parking"]
+    form = await options.async_configure(
+        form["flow_id"], {"cameras": [{"entity": "camera.door", "name": "Door"}]}
+    )
+    assert form["step_id"] == "weather"
+    done = await options.async_configure(form["flow_id"], {"weather_entity": "weather.home"})
+    assert done["type"] == "create_entry"
+    assert done["data"]["weather_entity"] == "weather.home"
+
+
+async def test_turning_off_keeps_what_it_had(hass, entry) -> None:
+    hass.config_entries.async_update_entry(entry, options={"intercoms": [INTERCOM]})
+    options = hass.config_entries.options
+    form = await options.async_init(entry.entry_id)
+    done = await options.async_configure(form["flow_id"], FEATURES_OFF)
+    assert done["type"] == "create_entry"
+    assert done["data"]["intercoms"] == [INTERCOM]
+    assert build_panel_config(done["data"])["intercoms"] == []
 
 
 async def test_form_shows_saved_values(hass, entry) -> None:
-    hass.config_entries.async_update_entry(entry, options={"weather_entity": "weather.home"})
-    form = await hass.config_entries.options.async_init(entry.entry_id)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            "features": {"sip": False, "cameras": False, "weather": True, "mqtt": False},
+            "weather_entity": "weather.home",
+        },
+    )
+    options = hass.config_entries.options
+    form = await options.async_init(entry.entry_id)
+    form = await options.async_configure(
+        form["flow_id"], {"sip": False, "cameras": False, "weather": True, "mqtt": False}
+    )
     keys = {key: key.description for key in form["data_schema"].schema}
     assert keys["weather_entity"] == {"suggested_value": "weather.home"}
 
 
 @pytest.mark.parametrize("field", ["intercoms", "cameras"])
-async def test_form_rejects_incomplete_items(hass, entry, field) -> None:
-    form = await hass.config_entries.options.async_init(entry.entry_id)
+async def test_a_feature_on_needs_something_to_work_with(hass, entry, field) -> None:
+    options = hass.config_entries.options
+    form = await options.async_init(entry.entry_id)
+    form = await options.async_configure(
+        form["flow_id"],
+        {**FEATURES_OFF, "sip": field == "intercoms", "cameras": field == "cameras"},
+    )
+    again = await options.async_configure(form["flow_id"], {})
+    assert again["errors"] == {"base": "empty_list"}
     with pytest.raises(InvalidData):
-        await hass.config_entries.options.async_configure(
-            form["flow_id"],
-            {"features": {}, "mqtt": {"port": 1883}, field: [{"name": "Parking"}]},
-        )
+        await options.async_configure(form["flow_id"], {field: [{"name": "Parking"}]})
 
 
 async def test_another_user_cannot_read_a_panel_secrets(hass, entry, hass_ws_client) -> None:
