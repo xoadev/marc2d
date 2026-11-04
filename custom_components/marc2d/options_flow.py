@@ -37,7 +37,7 @@ from .panel_config import (
 
 CONF_ENABLED = "enabled"
 # Forms cannot show fields depending on another: each feature gets a page, in any order.
-MENU = ["intercoms", "cameras", "weather", "mqtt", "save"]
+MENU = ["intercoms", "cameras", "weather", "mqtt"]
 
 
 def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[str, Any]:
@@ -54,23 +54,15 @@ INTERCOM_FIELDS = {
 
 
 class Marc2dOptionsFlow(OptionsFlow):
-    """Nothing reaches the panel until Save, and then it receives everything at once."""
+    """The menu links to each page, and submitting a page saves it and reaches the panel at once."""
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Start from what is saved."""
-        self._options = dict(self.config_entry.options)
-        return await self.async_step_menu()
-
-    async def async_step_menu(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose what to change."""
-        return self.async_show_menu(step_id="menu", menu_options=MENU)
-
-    async def async_step_save(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Apply the changes."""
-        return self.async_create_entry(data=self._options)
+        self._options = dict(self.config_entry.options)
+        return self.async_show_menu(step_id="init", menu_options=MENU)
 
     async def async_step_intercoms(
         self, user_input: dict[str, Any] | None = None
@@ -79,7 +71,7 @@ class Marc2dOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._set_enabled(FEATURE_SIP, user_input)
             self._options[CONF_INTERCOMS] = user_input.get(CONF_INTERCOMS, [])
-            return await self.async_step_menu()
+            return self.async_create_entry(data=self._options)
         return self._page(
             "intercoms",
             FEATURE_SIP,
@@ -98,7 +90,7 @@ class Marc2dOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._set_enabled(FEATURE_CAMERAS, user_input)
             self._options[CONF_CAMERAS] = user_input.get(CONF_CAMERAS, [])
-            return await self.async_step_menu()
+            return self.async_create_entry(data=self._options)
         fields = {
             "entity": _field("Camera", {"entity": {"domain": "camera"}}),
             "name": _field("Name", {"text": {}}),
@@ -130,7 +122,7 @@ class Marc2dOptionsFlow(OptionsFlow):
             else:
                 self._set_enabled(FEATURE_WEATHER, user_input)
                 self._options[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY)
-                return await self.async_step_menu()
+                return self.async_create_entry(data=self._options)
         return self._page(
             "weather",
             FEATURE_WEATHER,
@@ -154,7 +146,7 @@ class Marc2dOptionsFlow(OptionsFlow):
                 self._options[SECTION_MQTT] = {
                     key: value for key, value in user_input.items() if key != CONF_ENABLED
                 }
-                return await self.async_step_menu()
+                return self.async_create_entry(data=self._options)
         return self._page(
             "mqtt",
             FEATURE_MQTT,

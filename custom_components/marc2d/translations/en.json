@@ -22,17 +22,6 @@
   },
   "options": {
     "step": {
-      "menu": {
-        "title": "Panel settings",
-        "description": "Open what you want to change, then press Save. The panel applies it right away.",
-        "menu_options": {
-          "intercoms": "Intercoms",
-          "cameras": "Cameras",
-          "weather": "Weather",
-          "mqtt": "Doorbell, sensors and siren (MQTT)",
-          "save": "Save"
-        }
-      },
       "intercoms": {
         "title": "Intercoms",
         "description": "The panel registers with them over SIP, to answer the door and talk to it. DMSS is not affected. You can leave the list empty.",
@@ -78,6 +67,16 @@
         "data_description": {
           "sensors": "Light, battery, battery temperature and charging. Off: Home Assistant removes those entities.",
           "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command."
+        }
+      },
+      "init": {
+        "title": "Panel settings",
+        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away.",
+        "menu_options": {
+          "intercoms": "Intercoms",
+          "cameras": "Cameras",
+          "weather": "Weather",
+          "mqtt": "Doorbell, sensors and siren (MQTT)"
         }
       }
     },

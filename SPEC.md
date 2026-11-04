@@ -161,7 +161,7 @@ the integration, and the panel receives it right away through `marc2d/config/sub
 }
 ```
 
-The form is a menu with a page per feature, visited in any order, and Save applies them all. HA forms cannot show fields
+The form is a menu that links to a page per feature, and submitting a page saves it right away. HA forms cannot show fields
 depending on another field, so each page has its switch and its data. Lists can stay empty; the weather entity and the
 broker are needed only while they are on, and what a turned-off feature had is kept.
 
