@@ -13,10 +13,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
@@ -27,12 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
@@ -174,12 +165,6 @@ class MainActivity : ComponentActivity() {
 								onOpenMenu = { menuOpen = true },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
-						}
-					}
-					// Over any screen: it must be clear when the microphone reaches Home Assistant.
-					if (listening && activeCall == null) {
-						Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
-							PixelGlyph(PixelIcon.Microphone, PixelWhite, Modifier.size(96.dp).semantics { contentDescription = "Listening" })
 						}
 					}
 				}

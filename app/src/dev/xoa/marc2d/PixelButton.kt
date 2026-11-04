@@ -97,22 +97,6 @@ enum class PixelIcon(
 			"............",
 		),
 	),
-	Microphone(
-		listOf(
-			".....##.....",
-			"....####....",
-			"....####....",
-			"....####....",
-			"....####....",
-			"....####....",
-			"..#.####.#..",
-			"..#.####.#..",
-			"..##.##.##..",
-			"...######...",
-			".....##.....",
-			"...######...",
-		),
-	),
 	Warning(
 		listOf(
 			".....##.....",
@@ -190,24 +174,18 @@ fun PixelButton(
 				.clickable(role = Role.Button, onClick = onClick)
 				.semantics { contentDescription = description },
 	) {
-		PixelGlyph(icon, color, Modifier.padding(size / 5).size(size * 3 / 5))
-	}
-}
-
-/** Only the drawing, for what is shown but not pressed. */
-@Composable
-fun PixelGlyph(
-	icon: PixelIcon,
-	color: Color,
-	modifier: Modifier = Modifier,
-) {
-	Canvas(modifier) {
-		// Whole-number size: with decimals, lines appear between the pixels.
-		val pixel = floor(this.size.width / icon.rows.size).coerceAtLeast(1f)
-		val start = (this.size.width - pixel * icon.rows.size) / 2
-		icon.rows.forEachIndexed { y, row ->
-			row.forEachIndexed { x, cell ->
-				if (cell == '#') drawRect(color, Offset(start + x * pixel, start + y * pixel), Size(pixel, pixel))
+		Canvas(
+			Modifier
+				.padding(size / 5)
+				.size(size * 3 / 5),
+		) {
+			// Whole-number size: with decimals, lines appear between the pixels.
+			val pixel = floor(this.size.width / icon.rows.size).coerceAtLeast(1f)
+			val start = (this.size.width - pixel * icon.rows.size) / 2
+			icon.rows.forEachIndexed { y, row ->
+				row.forEachIndexed { x, cell ->
+					if (cell == '#') drawRect(color, Offset(start + x * pixel, start + y * pixel), Size(pixel, pixel))
+				}
 			}
 		}
 	}
