@@ -147,7 +147,12 @@ object HaProtocol {
 				?.let { it["a"] as? JsonObject }
 				?.let { it[entity] as? JsonObject }
 				?: return null
-		val condition = current["s"]?.jsonPrimitive?.contentOrNull ?: return null
+		val condition =
+			current["s"]
+				?.jsonPrimitive
+				?.contentOrNull
+				?.takeUnless { it == "unavailable" || it == "unknown" }
+				?: return null
 		val temperature =
 			(current["a"] as? JsonObject)
 				?.get("temperature")

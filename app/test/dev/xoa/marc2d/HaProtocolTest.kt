@@ -1,5 +1,6 @@
 package dev.xoa.marc2d
 
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -62,6 +63,12 @@ class HaProtocolTest {
 	fun `reports its values`() {
 		val message = HaProtocol.panelState(3, mapOf("battery" to JsonPrimitive(80), "charging" to JsonPrimitive(true)))
 		assertEquals("""{"id":3,"type":"marc2d/state","values":{"battery":80,"charging":true}}""", message)
+	}
+
+	@Test
+	fun `an unavailable entity gives no report`() {
+		val state = HaProtocol.parse("""{"event":{"a":{"weather.home":{"s":"unavailable","a":{}}}}}""")
+		assertNull(HaProtocol.weather("weather.home", state, HaProtocol.parse("{}"), Instant.EPOCH))
 	}
 
 	@Test

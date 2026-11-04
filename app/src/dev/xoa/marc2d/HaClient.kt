@@ -103,7 +103,10 @@ class HaClient {
 				}
 				onStatus(result.toStatus())
 			}
-			onWeather(weather?.let { fetchWeather(it, nextId) })
+			val entity = weather
+			val report = entity?.let { fetchWeather(it, nextId) }
+			// A failed refresh keeps the last report, which hides by itself once it is an hour old.
+			if (entity == null || report != null) onWeather(report)
 		}
 	}
 
