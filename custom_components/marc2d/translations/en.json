@@ -57,15 +57,17 @@
         "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
       },
       "entities": {
-        "title": "Sensors and siren",
+        "title": "Sensors, siren and speaker",
         "description": "What this panel exposes in Home Assistant.",
         "data": {
           "sensors": "Publish sensors",
-          "siren": "Siren"
+          "siren": "Siren",
+          "speaker": "Speaker"
         },
         "data_description": {
           "sensors": "Light, battery, battery temperature and charging. Off: Home Assistant removes those entities.",
-          "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command."
+          "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command.",
+          "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
         }
       }
     },

@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
@@ -50,7 +49,7 @@ class HaClient {
 			install(WebSockets) { pingIntervalMillis = PING_INTERVAL.inWholeMilliseconds }
 		}
 
-	/** Ends with an exception when the connection is lost. */
+	/** Ends when Home Assistant refuses the panel, and with an exception when the connection is lost. */
 	suspend fun run(
 		connection: HaConnection,
 		link: PanelLink,
@@ -64,7 +63,7 @@ class HaClient {
 			authenticate(connection.token)
 			val ids = AtomicInteger()
 			val nextId = { ids.incrementAndGet() }
-			while (true) {
+			run {
 				val id = nextId()
 				subscription = id
 				pendingConfig = null
@@ -77,10 +76,10 @@ class HaClient {
 						followConfig(onStatus, onConfig, onWeather, nextId)
 					}
 				}
-				val refusal = HaProtocol.subscribeError(answer)
-				onStatus(refusal.toStatus())
-				// Right after enrolling, the panel exists in HA only once the form is submitted there.
-				if (refusal == HaProtocol.ConfigResult.NotAdded) delay(NOT_ADDED_RETRY) else idleUntilNextRefresh()
+				onStatus(HaProtocol.subscribeError(answer).toStatus())
+				// A new connection for each retry: right after enrolling or a restart, the panel or the integration
+				// may not be there yet, and nothing of this one should survive that.
+				return@webSocket
 			}
 		}
 	}
@@ -185,6 +184,5 @@ class HaClient {
 	private companion object {
 		val PING_INTERVAL = 30.seconds
 		val REFRESH_INTERVAL = 10.minutes
-		val NOT_ADDED_RETRY = 5.seconds
 	}
 }

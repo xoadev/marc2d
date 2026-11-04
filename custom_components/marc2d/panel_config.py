@@ -12,6 +12,7 @@ FEATURE_CAMERAS = "cameras"
 FEATURE_WEATHER = "weather"
 FEATURE_SENSORS = "sensors"
 FEATURE_SIREN = "siren"
+FEATURE_SPEAKER = "speaker"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
@@ -33,6 +34,7 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
         "cameras": [],
         "sensors": is_enabled(options, FEATURE_SENSORS),
         "siren": is_enabled(options, FEATURE_SIREN),
+        "speaker": is_enabled(options, FEATURE_SPEAKER),
     }
     if is_enabled(options, FEATURE_SIP):
         config["intercoms"] = [

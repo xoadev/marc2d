@@ -27,5 +27,9 @@ settings:
   kotlin:
     serialization: json
 
+test-dependencies:
+  - $libs.ktor.server.cio
+  - $libs.ktor.server.websockets
+
 plugins:
   ktlint: enabled

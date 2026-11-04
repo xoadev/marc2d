@@ -11,9 +11,16 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.typing import ConfigType
 
 from .enrollment import DOMAIN, async_remove_user
-from .panel_config import FEATURE_SENSORS, FEATURE_SIREN, doorbell_buttons, is_enabled
+from .panel_config import (
+    FEATURE_SENSORS,
+    FEATURE_SIREN,
+    FEATURE_SPEAKER,
+    doorbell_buttons,
+    is_enabled,
+)
 from .panel_hub import (
     DOORBELL_RING,
+    KEY_PLAYING,
     KEY_SIREN,
     SENSOR_KEYS,
     doorbell_to_all,
@@ -23,7 +30,13 @@ from .panel_hub import (
 from .websocket import CONF_USER_ID, async_register, config_event
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SELECT, Platform.SENSOR, Platform.SIREN]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.MEDIA_PLAYER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SIREN,
+]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -63,6 +76,8 @@ def _remove_turned_off_entities(hass: HomeAssistant, entry: ConfigEntry) -> None
         off.update(SENSOR_KEYS)
     if not is_enabled(entry.options, FEATURE_SIREN):
         off.add(KEY_SIREN)
+    if not is_enabled(entry.options, FEATURE_SPEAKER):
+        off.add(KEY_PLAYING)
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.unique_id.removeprefix(f"{entry.entry_id}_") in off:

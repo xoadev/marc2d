@@ -43,6 +43,7 @@ class PanelRuntime(
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
 	private val link = PanelLink()
+	private val speaker = PanelSpeaker { link.report(PanelLink.PLAYING, JsonPrimitive(it)) }
 	private var config = PanelConfig()
 	private var started = false
 
@@ -83,6 +84,7 @@ class PanelRuntime(
 				config = it
 				phone.apply(it)
 				if (!it.siren) siren.set(false)
+				if (!it.speaker) speaker.stop()
 				if (!it.sensors) PanelLink.SENSORS.forEach(link::forget)
 			}
 		}
@@ -106,6 +108,8 @@ class PanelRuntime(
 			is HaProtocol.PanelEvent.Siren -> if (config.siren) siren.set(command.on)
 			is HaProtocol.PanelEvent.Mood -> HaMood.fromLabel(command.value)?.let { _haMood.value = it }
 			is HaProtocol.PanelEvent.Doorbell -> phone.doorbell(command.intercom, command.payload)
+			is HaProtocol.PanelEvent.Play -> if (config.speaker) speaker.play(command.url)
+			HaProtocol.PanelEvent.Stop -> speaker.stop()
 			is HaProtocol.PanelEvent.Config -> Unit
 		}
 	}

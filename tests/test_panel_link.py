@@ -24,6 +24,7 @@ async def entry(hass: HomeAssistant, enable_custom_integrations, hass_owner_user
     """A panel with an intercom, set up."""
     assert await async_setup_component(hass, "http", {})
     assert await async_setup_component(hass, "websocket_api", {})
+    assert await async_setup_component(hass, "media_source", {})
     hass.states.async_set("binary_sensor.button", "off")
     user = await hass.auth.async_create_user("marc2d Kitchen", group_ids=["system-users"])
     entry = MockConfigEntry(
@@ -146,3 +147,28 @@ async def test_another_user_cannot_report(hass, entry, hass_ws_client) -> None:
     assert (await client.receive_json())["error"]["code"] == "not_found"
     await client.send_json({"id": 2, "type": "marc2d/doorbell/answered", "intercom": "Parking"})
     assert (await client.receive_json())["error"]["code"] == "not_found"
+
+
+async def test_speaker_plays_what_it_is_sent(hass, panel) -> None:
+    await hass.services.async_call(
+        "media_player",
+        "play_media",
+        {
+            "entity_id": "media_player.kitchen_speaker",
+            "media_content_type": "music",
+            "media_content_id": "http://192.0.2.20/hello.mp3",
+        },
+        blocking=True,
+    )
+    assert (await panel.receive_json())["event"] == {
+        "kind": "play",
+        "url": "http://192.0.2.20/hello.mp3",
+    }
+    await panel.send_json({"id": 2, "type": "marc2d/state", "values": {"playing": True}})
+    await panel.receive_json()
+    await hass.async_block_till_done()
+    assert hass.states.get("media_player.kitchen_speaker").state == "playing"
+    await hass.services.async_call(
+        "media_player", "media_stop", {"entity_id": "media_player.kitchen_speaker"}, blocking=True
+    )
+    assert (await panel.receive_json())["event"] == {"kind": "stop"}

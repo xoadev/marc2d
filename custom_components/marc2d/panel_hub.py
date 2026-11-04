@@ -12,8 +12,9 @@ from .enrollment import DOMAIN
 DATA_HUBS = f"{DOMAIN}_hubs"
 
 KEY_SIREN = "siren"
+KEY_PLAYING = "playing"
 SENSOR_KEYS = ("light", "battery", "temperature", "charging")
-REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN)
+REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING)
 
 MOOD_NORMAL = "Normal"
 MOODS = [MOOD_NORMAL, "Alarm", "Intruder", "Recording"]

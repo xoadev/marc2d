@@ -23,6 +23,7 @@ from .panel_config import (
     FEATURE_SENSORS,
     FEATURE_SIP,
     FEATURE_SIREN,
+    FEATURE_SPEAKER,
     FEATURE_WEATHER,
     SECTION_FEATURES,
     is_enabled,
@@ -35,7 +36,7 @@ MENU = {
     "intercoms": "Intercoms",
     "cameras": "Cameras",
     "weather": "Weather",
-    "entities": "Sensors and siren",
+    "entities": "Sensors, siren and speaker",
 }
 
 
@@ -153,10 +154,12 @@ class Marc2dOptionsFlow(OptionsFlow):
             {
                 probatio.Required(FEATURE_SENSORS, default=True): BooleanSelector(),
                 probatio.Required(FEATURE_SIREN, default=True): BooleanSelector(),
+                probatio.Required(FEATURE_SPEAKER, default=True): BooleanSelector(),
             }
         )
         suggested = {
-            key: is_enabled(self._options, key) for key in (FEATURE_SENSORS, FEATURE_SIREN)
+            key: is_enabled(self._options, key)
+            for key in (FEATURE_SENSORS, FEATURE_SIREN, FEATURE_SPEAKER)
         }
         return self.async_show_form(
             step_id="entities",

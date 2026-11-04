@@ -10,6 +10,7 @@ data class PanelConfig(
 	val cameras: List<CameraConfig> = emptyList(),
 	val sensors: Boolean = true,
 	val siren: Boolean = true,
+	val speaker: Boolean = true,
 )
 
 @Serializable

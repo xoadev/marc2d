@@ -34,6 +34,7 @@ class PanelLink {
 
 	companion object {
 		const val SIREN = "siren"
+		const val PLAYING = "playing"
 		val SENSORS = listOf("light", "battery", "temperature", "charging")
 	}
 }

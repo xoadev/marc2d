@@ -38,6 +38,12 @@ object HaProtocol {
 			val value: String,
 		) : PanelEvent
 
+		data class Play(
+			val url: String,
+		) : PanelEvent
+
+		data object Stop : PanelEvent
+
 		data class Doorbell(
 			val intercom: String,
 			val payload: String,

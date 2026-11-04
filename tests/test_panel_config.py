@@ -37,6 +37,7 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
         "cameras": [],
         "sensors": True,
         "siren": True,
+        "speaker": True,
     }
 
 
@@ -48,6 +49,7 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
         ("weather", lambda c: "weather" not in c),
         ("sensors", lambda c: c["sensors"] is False),
         ("siren", lambda c: c["siren"] is False),
+        ("speaker", lambda c: c["speaker"] is False),
     ],
 )
 def test_each_toggle_turns_off_only_its_part(feature, check) -> None:
@@ -65,6 +67,7 @@ async def entry(hass: HomeAssistant, enable_custom_integrations, hass_owner_user
     """A panel with its own user."""
     assert await async_setup_component(hass, "http", {})
     assert await async_setup_component(hass, "websocket_api", {})
+    assert await async_setup_component(hass, "media_source", {})
     user = await hass.auth.async_create_user("marc2d Kitchen", group_ids=["system-users"])
     entry = MockConfigEntry(
         domain=DOMAIN, title="Kitchen", data={"panel": "Kitchen", "user_id": user.id}
@@ -140,7 +143,7 @@ async def test_weather_entity_is_needed_only_while_on(hass, entry) -> None:
 async def test_entities_page_saves_its_switches(hass, entry) -> None:
     form = await open_page(hass, entry, "entities")
     done = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"sensors": False, "siren": True}
+        form["flow_id"], {"sensors": False, "siren": True, "speaker": True}
     )
     assert build_panel_config(done["data"])["sensors"] is False
 

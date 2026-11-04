@@ -96,6 +96,7 @@ depend on this connection once registered.
 | `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
 | `siren.*_siren`                | turns on and off      | on change                              |
 | `select.*_state`               | droid state           | on change, decided by HA               |
+| `media_player.*_speaker`       | playing or idle       | on change                              |
 
 The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
 identify it by its user.
@@ -105,7 +106,8 @@ connection is lost HA could no longer turn it off.
 
 ## Speaker
 
-Still missing: HA will ask for a message to be read aloud with the system TTS.
+The panel is a `media_player.*_speaker`: `tts.speak` targets it like any other speaker. HA generates the speech and the
+panel plays the URL it receives, so it needs no TTS engine, which LineageOS lacks.
 
 Voice commands: the panel is an Assist satellite. It is activated with an on-screen button, sends the
 microphone audio to the HA pipeline (`assist_pipeline/run`) and plays the response. The
@@ -129,7 +131,7 @@ decided.
 - A Pixel 3a and, later, a Pixel 4a, powered by PoE and running LineageOS. `minSdk` is 35: the 3a
   runs LineageOS 22.2, with Android 15.
 - LineageOS runs without Google services: the app cannot depend on them. It has no TTS engine
-  either: `marc2d_say` needs one, still to be chosen.
+  either: speech comes from HA.
 - LineageOS blocks the network for new apps if restricted networking is enabled: the panel needs
   **Allow network access** in its Android settings.
 - When plugged in, Android does not enter Doze: the foreground service is enough not to miss calls.
@@ -162,7 +164,8 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
     { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
   ],
   "sensors": true,
-  "siren": true
+  "siren": true,
+  "speaker": true
 }
 ```
 
@@ -177,6 +180,7 @@ only while it is on, and what a turned-off feature had is kept.
 | Weather  | no weather entity is sent: the panel hides it                |
 | Sensors  | HA deletes those entities and the panel stops reporting them |
 | Siren    | HA deletes the entity and the panel ignores the command      |
+| Speaker  | HA deletes the entity and the panel ignores the audio        |
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
@@ -222,7 +226,8 @@ a broker or writing YAML. It requires HA 2026.10.
   lifecycle.
 - RTSP with RootEncoder and RTSP-Server. They are maintained, but by a single author and published on
   JitPack: the camera is optional and sits behind an interface so they can be replaced.
-- TTS, audio and screen with the Android APIs, without libraries.
+- Audio and screen with the Android APIs, without libraries.
+- The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.
 - A foreground service keeps the SIP registration and the connection to HA, because the intercom
   does not send push.
