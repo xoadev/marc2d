@@ -71,13 +71,7 @@
       },
       "init": {
         "title": "Panel settings",
-        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away.",
-        "menu_options": {
-          "intercoms": "Intercoms",
-          "cameras": "Cameras",
-          "weather": "Weather",
-          "mqtt": "Doorbell, sensors and siren (MQTT)"
-        }
+        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
       }
     },
     "error": {

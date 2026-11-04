@@ -88,6 +88,11 @@ async def open_page(hass, entry, page):
     return await options.async_configure(menu["flow_id"], {"next_step_id": page})
 
 
+async def test_menu_carries_its_labels(hass, entry) -> None:
+    menu = await hass.config_entries.options.async_init(entry.entry_id)
+    assert menu["menu_options"]["weather"] == "Weather"
+
+
 async def test_saving_a_page_reaches_the_panel_at_once(hass, entry, hass_ws_client) -> None:
     client = await hass_ws_client(hass, await panel_token(hass, entry))
     await client.send_json({"id": 1, "type": "marc2d/config/subscribe"})

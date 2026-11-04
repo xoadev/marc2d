@@ -37,7 +37,13 @@ from .panel_config import (
 
 CONF_ENABLED = "enabled"
 # Forms cannot show fields depending on another: each feature gets a page, in any order.
-MENU = ["intercoms", "cameras", "weather", "mqtt"]
+# With the labels here: a menu takes them from translations, and shows blank if those are stale.
+MENU = {
+    "intercoms": "Intercoms",
+    "cameras": "Cameras",
+    "weather": "Weather",
+    "mqtt": "Doorbell, sensors and siren (MQTT)",
+}
 
 
 def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[str, Any]:
