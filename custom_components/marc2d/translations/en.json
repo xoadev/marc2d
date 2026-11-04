@@ -45,7 +45,7 @@
           "intercoms": "Intercoms"
         },
         "data_description": {
-          "intercoms": "The name must match the one the doorbell automation publishes to marc2d/doorbell/<name>."
+          "intercoms": "The name must match the last part of the marc2d/doorbell topic that the doorbell automation publishes to."
         }
       },
       "cameras": {
