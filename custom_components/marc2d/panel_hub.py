@@ -17,6 +17,8 @@ KEY_VOLUME = "volume"
 SENSOR_KEYS = ("light", "battery", "temperature", "charging")
 REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING, KEY_VOLUME)
 
+DEFAULT_BRIGHTNESS = 100
+
 MOOD_NORMAL = "Normal"
 MOODS = [MOOD_NORMAL, "Alarm", "Intruder", "Recording"]
 
@@ -32,6 +34,7 @@ class PanelHub:
     def __init__(self) -> None:
         self.values: dict[str, Any] = {}
         self.mood = MOOD_NORMAL
+        self.brightness: float = DEFAULT_BRIGHTNESS
         self._connections: list[Send] = []
         self._listeners: list[Callable[[], None]] = []
 

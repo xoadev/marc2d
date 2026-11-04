@@ -97,6 +97,7 @@ depend on this connection once registered.
 | `siren.*_siren`                | turns on and off      | on change                              |
 | `select.*_state`               | droid state           | on change, decided by HA               |
 | `media_player.*_speaker`       | playing or idle       | on change                              |
+| `number.*_screen_brightness`   | brightness, in %      | decided by HA, sent on each connection |
 
 The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
 identify it by its user.

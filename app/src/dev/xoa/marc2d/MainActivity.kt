@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,12 @@ class MainActivity : ComponentActivity() {
 					val weather by runtime.weather.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
+					val brightness by runtime.brightness.collectAsState()
+					LaunchedEffect(brightness) {
+						brightness?.let { level ->
+							window.attributes = window.attributes.apply { screenBrightness = level }
+						}
+					}
 					val scope = rememberCoroutineScope()
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }

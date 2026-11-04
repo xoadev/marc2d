@@ -49,6 +49,7 @@ async def panel(hass, entry, hass_ws_client):
     assert (await client.receive_json())["success"] is True
     assert (await client.receive_json())["event"]["kind"] == "config"
     assert (await client.receive_json())["event"] == {"kind": "mood", "value": "Normal"}
+    assert (await client.receive_json())["event"] == {"kind": "brightness", "level": 100}
     return client
 
 
@@ -184,3 +185,13 @@ async def test_volume_is_set_from_home_assistant(hass, panel) -> None:
     await panel.receive_json()
     await hass.async_block_till_done()
     assert hass.states.get(speaker).attributes["volume_level"] == 0.5
+
+
+async def test_brightness_reaches_the_panel(hass, panel) -> None:
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {"entity_id": "number.kitchen_screen_brightness", "value": 40},
+        blocking=True,
+    )
+    assert (await panel.receive_json())["event"] == {"kind": "brightness", "level": 40}

@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.util.Log
 import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -35,6 +34,9 @@ class PanelRuntime(
 	private val _haMood = MutableStateFlow(HaMood.Normal)
 	val haMood: StateFlow<HaMood> = _haMood.asStateFlow()
 
+	private val _brightness = MutableStateFlow<Float?>(null)
+	val brightness: StateFlow<Float?> = _brightness.asStateFlow()
+
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
@@ -47,10 +49,12 @@ class PanelRuntime(
 	private val speaker =
 		PanelSpeaker(
 			context,
+			scope,
 			{ link.report(PanelLink.PLAYING, JsonPrimitive(it)) },
 			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
 		)
 	private var config = PanelConfig()
+	private var haUrl = ""
 	private var started = false
 
 	/** Returns what to tell the user, or nothing if the panel is now connected. */
@@ -110,14 +114,14 @@ class PanelRuntime(
 	}
 
 	private fun handle(command: HaProtocol.PanelEvent) {
-		Log.i("marc2d", "Command: ${command::class.simpleName}")
 		when (command) {
 			is HaProtocol.PanelEvent.Siren -> if (config.siren) siren.set(command.on)
 			is HaProtocol.PanelEvent.Mood -> HaMood.fromLabel(command.value)?.let { _haMood.value = it }
 			is HaProtocol.PanelEvent.Doorbell -> phone.doorbell(command.intercom, command.payload)
-			is HaProtocol.PanelEvent.Play -> if (config.speaker) speaker.play(command.url)
+			is HaProtocol.PanelEvent.Play -> if (config.speaker) speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
 			HaProtocol.PanelEvent.Stop -> speaker.stop()
 			is HaProtocol.PanelEvent.Volume -> speaker.setVolume(command.level)
+			is HaProtocol.PanelEvent.Brightness -> _brightness.value = (command.percent / 100).toFloat()
 			is HaProtocol.PanelEvent.Config -> Unit
 		}
 	}
@@ -153,6 +157,7 @@ class PanelRuntime(
 	}
 
 	private suspend fun keepConnected(connection: HaConnection) {
+		haUrl = connection.url
 		var wait = MIN_RETRY
 		// Only at the start: during retries the warning from the last disconnection stays.
 		_haStatus.value = HaStatus.Connecting

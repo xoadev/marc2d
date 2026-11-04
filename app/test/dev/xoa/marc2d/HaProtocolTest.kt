@@ -61,6 +61,19 @@ class HaProtocolTest {
 	}
 
 	@Test
+	fun `sends HA's media through the address the panel knows`() {
+		val base = "http://192.0.2.20:8123"
+		assertEquals("$base/api/tts_proxy/a.mp3?x=1", HaProtocol.mediaUrl("http://homeassistant.local:8123/api/tts_proxy/a.mp3?x=1", base))
+		assertEquals("$base/api/x", HaProtocol.mediaUrl("/api/x", base))
+		assertEquals("https://example.com/a.mp3", HaProtocol.mediaUrl("https://example.com/a.mp3", base))
+	}
+
+	@Test
+	fun `reads the brightness`() {
+		assertEquals(HaProtocol.PanelEvent.Brightness(40.0), HaProtocol.panelEvent(event("""{"kind":"brightness","level":40}""")))
+	}
+
+	@Test
 	fun `ignores what it does not know`() {
 		assertNull(HaProtocol.panelEvent(event("""{"kind":"future"}""")))
 		assertNull(HaProtocol.panelEvent(event("""{"kind":"siren"}""")))

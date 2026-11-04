@@ -44,6 +44,10 @@ object HaProtocol {
 
 		data object Stop : PanelEvent
 
+		data class Brightness(
+			val percent: Double,
+		) : PanelEvent
+
 		data class Volume(
 			val level: Double,
 		) : PanelEvent
@@ -64,6 +68,15 @@ object HaProtocol {
 		data class Invalid(
 			val reason: String,
 		) : ConfigResult
+	}
+
+	/** HA's own URLs go through the address the panel already reaches it at: HA may build them with a name the panel cannot resolve. */
+	fun mediaUrl(
+		url: String,
+		haUrl: String,
+	): String {
+		val path = Regex("^(?:https?://[^/]+)?(/api/.*)$").find(url)?.groupValues?.get(1) ?: return url
+		return haUrl.trim().trimEnd('/') + path
 	}
 
 	fun webSocketUrl(haUrl: String): String {
@@ -243,6 +256,10 @@ object HaProtocol {
 
 			"volume" -> {
 				event["level"]?.jsonPrimitive?.doubleOrNull?.let { PanelEvent.Volume(it) }
+			}
+
+			"brightness" -> {
+				event["level"]?.jsonPrimitive?.doubleOrNull?.let { PanelEvent.Brightness(it) }
 			}
 
 			"doorbell" -> {

@@ -97,6 +97,7 @@ async def test_saving_a_page_reaches_the_panel_at_once(hass, entry, hass_ws_clie
     assert (await client.receive_json())["success"] is True
     assert (await client.receive_json())["event"]["kind"] == "config"
     assert (await client.receive_json())["event"]["kind"] == "mood"
+    assert (await client.receive_json())["event"]["kind"] == "brightness"
 
     page = await open_page(hass, entry, "intercoms")
     done = await hass.config_entries.options.async_configure(

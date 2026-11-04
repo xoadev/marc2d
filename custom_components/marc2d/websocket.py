@@ -61,6 +61,7 @@ def ws_subscribe(
     connection.send_result(msg["id"])
     send(config_event(entry))
     send({"kind": "mood", "value": hub.mood})
+    send({"kind": "brightness", "level": hub.brightness})
 
 
 @callback
