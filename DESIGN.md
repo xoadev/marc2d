@@ -38,14 +38,15 @@ white head, a compact gray base and one eye.
 
 The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 
-| State     | Eye                                         | Movement         |
-| --------- | ------------------------------------------- | ---------------- |
-| Walking   | black with a glint, looks where it is going | walks and blinks |
-| Sleeping  | closed line                                 | still            |
-| Offline   | an X                                        | still            |
-| Alarm     | yellow                                      | blinks           |
-| Intruder  | red band                                    | blinks           |
-| Recording | lens with a red center                      | blinks           |
+| State     | Eye                                                    | Movement         |
+| --------- | ------------------------------------------------------ | ---------------- |
+| Walking   | black with a glint, looks where it is going            | walks and blinks |
+| Sleeping  | closed line                                            | still            |
+| Offline   | an X                                                   | still            |
+| Alarm     | yellow                                                 | blinks           |
+| Intruder  | red band                                               | blinks           |
+| Recording | lens with a red center                                 | blinks           |
+| Listening | large, with a glint, and a microphone drawn at the top | blinks           |
 
 ## Buttons
 
