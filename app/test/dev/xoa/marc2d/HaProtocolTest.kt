@@ -7,7 +7,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 class HaProtocolTest {
 	@Test
@@ -111,11 +114,19 @@ class HaProtocolTest {
 
 	@Test
 	fun `recognizes the wake phrase`() {
-		assertTrue(WakeWord.heard("""{"text":"oye mark"}"""))
-		assertTrue(WakeWord.heard("""{"text":"oye marco"}"""))
-		assertFalse(WakeWord.heard("""{"text":"[unk]"}"""))
-		assertFalse(WakeWord.heard("""{"text":"mark"}"""))
-		assertFalse(WakeWord.heard("not json"))
+		val sure = """{"result":[{"conf":1.0,"word":"oye"},{"conf":0.95,"word":"mark"}],"text":"oye mark"}"""
+		assertEquals(0.95, WakeWord.confidence(sure))
+		assertTrue(WakeWord.isEnough(WakeWord.confidence(sure)))
+		// "oye Margarita", the only sentence that got through on the samples.
+		val unsure = """{"result":[{"conf":1.0,"word":"oye"},{"conf":0.79,"word":"mark"}],"text":"oye mark"}"""
+		assertFalse(WakeWord.isEnough(WakeWord.confidence(unsure)))
+		assertEquals(null, WakeWord.confidence("""{"result":[{"conf":1.0,"word":"oye"},{"conf":1.0,"word":"mar"}],"text":"oye mar"}"""))
+		assertEquals(null, WakeWord.confidence("""{"result":[{"conf":1.0,"word":"mark"}],"text":"mark"}"""))
+		assertEquals(null, WakeWord.confidence("""{"text":"[unk]"}"""))
+		assertEquals(null, WakeWord.confidence("""{"text":"oye mark"}"""))
+		assertEquals(null, WakeWord.confidence("""{"result":[],"text":"oye mark se lo"}"""))
+		assertEquals(null, WakeWord.confidence("not json"))
+		assertFalse(WakeWord.isEnough(null))
 	}
 
 	@Test
@@ -169,5 +180,14 @@ class HaProtocolTest {
 		val result = assertIs<HaProtocol.ConfigResult.Invalid>(config.result)
 
 		assertFalse("s3" in result.reason)
+	}
+
+	@Test
+	fun `the grammar gives other speech somewhere to go`() {
+		val entries = Json.parseToJsonElement(WakeWord.GRAMMAR).jsonArray.map { it.jsonPrimitive.content }
+		assertTrue("oye mark" in entries)
+		assertTrue("[unk]" in entries)
+		assertTrue("oye maría" in entries)
+		assertEquals(entries.size, entries.distinct().size)
 	}
 }

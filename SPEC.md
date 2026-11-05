@@ -127,6 +127,11 @@ leaves it only after that phrase, to `assist_pipeline/run`. HA transcribes it, r
 returns speech, which the panel plays. The eye shows when it is listening, for up to 10 seconds. A call takes the
 microphone, and listening resumes when it ends. The first time, it downloads a 40 MB model, checked by its hash.
 
+The phrase has to be said alone, with a pause before and after: inside a sentence it is someone talking. Vosk hears only
+what its grammar lists, so with few entries it fits nearly any speech into the phrase. Measured with synthetic Spanish
+voices, the first grammar woke on 15 of 38 other sentences; this one, with common words as decoys and a minimum confidence
+of 0.9, on none of 88, and on all 9 of the phrase. Real voices have yet to be measured: the log gives each one's confidence.
+
 ## Presence
 
 The panel guesses that someone is there from sudden changes of light, with the same threshold as `sensor.*_light`, and

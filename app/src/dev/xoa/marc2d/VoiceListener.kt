@@ -37,6 +37,8 @@ class VoiceListener(
 			val buffer = ByteArray(BUFFER_BYTES)
 			Model(model.path.path).use { vosk ->
 				Recognizer(vosk, SAMPLE_RATE.toFloat(), WakeWord.GRAMMAR).use { recognizer ->
+					// Without the words, Vosk does not say how sure it is.
+					recognizer.setWords(true)
 					// Opened last, so that a model that fails to load does not leave it behind on each retry.
 					val record =
 						AudioRecord(
@@ -51,10 +53,14 @@ class VoiceListener(
 						while (true) {
 							currentCoroutineContext().ensureActive()
 							val read = microphoneBytes(record.read(buffer, 0, buffer.size))
-							if (recognizer.acceptWaveForm(buffer, read) && WakeWord.heard(recognizer.result)) {
-								Log.i(TAG, "Wake phrase heard")
-								streamRequest(record, buffer, pipeline)
-								recognizer.reset()
+							if (recognizer.acceptWaveForm(buffer, read)) {
+								val confidence = WakeWord.confidence(recognizer.result)
+								// Only the phrase's number, never what was heard: it is what real voices tell us about the threshold.
+								if (confidence != null) Log.i(TAG, "Wake phrase at $confidence")
+								if (WakeWord.isEnough(confidence)) {
+									streamRequest(record, buffer, pipeline)
+									recognizer.reset()
+								}
 							}
 						}
 					} finally {
