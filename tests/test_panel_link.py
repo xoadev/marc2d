@@ -1,10 +1,12 @@
 """The panel's live link: entities, commands, availability and the doorbell."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
-from homeassistant.components.camera import async_get_stream_source
+from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
 from homeassistant.helpers import entity_registry as er
@@ -297,3 +299,20 @@ async def test_the_camera_needs_the_panel_and_its_address(hass, published, hass_
 
     await _report_address(hass, client, "not an address@evil", 92)
     assert hass.states.get(RTSP).state == "unavailable"
+
+
+async def test_a_picture_waits_for_the_camera_to_start(hass, published, hass_ws_client) -> None:
+    user = await hass.auth.async_get_user(published.data["user_id"])
+    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
+    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
+    for _ in range(4):
+        await client.receive_json()
+    await _report_address(hass, client, "192.0.2.20")
+    with patch(
+        "homeassistant.components.stream.Stream.async_get_image",
+        AsyncMock(return_value=b"jpeg"),
+    ) as get_image:
+        image = await async_get_image(hass, RTSP)
+    assert image.content == b"jpeg"
+    assert get_image.await_args.kwargs["wait_for_next_keyframe"] is True

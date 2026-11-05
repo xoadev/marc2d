@@ -52,11 +52,6 @@ class PanelCamera(PanelEntity, Camera):
         self._url = self._current_url()
 
     @property
-    def use_stream_for_stills(self) -> bool:
-        """Not a new connection per picture: each refresh would turn the camera on."""
-        return True
-
-    @property
     def available(self) -> bool:
         """It needs the panel connected, and to know where it is."""
         return super().available and self._url is not None
@@ -64,6 +59,18 @@ class PanelCamera(PanelEntity, Camera):
     async def stream_source(self) -> str | None:
         """Return the panel's stream."""
         return self._url
+
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
+        """Take it from the stream, as a new connection per picture would restart the camera.
+
+        It waits for a key frame: with the camera off, there is nothing yet to take it from.
+        """
+        stream = await self.async_create_stream()
+        if stream is None:
+            return None
+        return await stream.async_get_image(width, height, wait_for_next_keyframe=True)
 
     async def async_added_to_hass(self) -> None:
         """Follow the panel, which may change its address."""
