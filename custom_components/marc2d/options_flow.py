@@ -25,6 +25,7 @@ from .panel_config import (
     CONF_CAMERAS,
     CONF_INTERCOMS,
     CONF_PIPELINE,
+    CONF_RTSP_AUDIO,
     CONF_RTSP_PASSWORD,
     CONF_WEATHER_ENTITY,
     FEATURE_CAMERAS,
@@ -208,11 +209,13 @@ class Marc2dOptionsFlow(OptionsFlow):
             self._options[CONF_RTSP_PASSWORD] = user_input.get(CONF_RTSP_PASSWORD) or (
                 self._options.get(CONF_RTSP_PASSWORD) or secrets.token_urlsafe(24)
             )
+            self._options[CONF_RTSP_AUDIO] = user_input.get(CONF_RTSP_AUDIO, False)
             return self.async_create_entry(data=self._options)
         features = self._options.get(SECTION_FEATURES, {})
         suggested = {
             CONF_ENABLED: features.get(FEATURE_RTSP, False),
             CONF_RTSP_PASSWORD: self._options.get(CONF_RTSP_PASSWORD),
+            CONF_RTSP_AUDIO: self._options.get(CONF_RTSP_AUDIO, False),
         }
         schema = probatio.Schema(
             {
@@ -220,6 +223,7 @@ class Marc2dOptionsFlow(OptionsFlow):
                 probatio.Optional(CONF_RTSP_PASSWORD): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD)
                 ),
+                probatio.Required(CONF_RTSP_AUDIO, default=False): BooleanSelector(),
             }
         )
         # The placeholder and not the password: this text is not masked, the field below is.

@@ -7,6 +7,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import kotlin.math.abs
 import kotlin.math.max
@@ -38,6 +39,29 @@ class LightReports {
 		if (!PanelReadings.isSignificant(last, lux)) return false
 		last = lux
 		return true
+	}
+}
+
+/** Which Wi-Fi readings go to Home Assistant: it moves a few dB all the time, which would fill its history. */
+class SignalReports {
+	private var last: Int? = null
+
+	fun shouldReport(
+		dbm: Int,
+		enabled: Boolean,
+	): Boolean {
+		if (!enabled) {
+			last = null
+			return false
+		}
+		val previous = last
+		if (previous != null && abs(dbm - previous) < MIN_CHANGE_DB) return false
+		last = dbm
+		return true
+	}
+
+	private companion object {
+		const val MIN_CHANGE_DB = 5
 	}
 }
 
@@ -106,6 +130,17 @@ class PanelReadings(
 		)
 	}
 
+	/** In dBm, or nothing without Wi-Fi: a panel on Ethernet has none. The replacement needs a network callback for one number. */
+	@Suppress("DEPRECATION")
+	fun wifiSignal(): Int? =
+		context
+			.getSystemService(WifiManager::class.java)
+			?.connectionInfo
+			?.rssi
+			?.takeIf { it in MIN_WIFI_DBM..MAX_WIFI_DBM }
+
+	fun appVersion(): String? = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+
 	fun light(): Flow<Float> {
 		val manager = context.getSystemService(SensorManager::class.java)
 		val sensor = manager.getDefaultSensor(Sensor.TYPE_LIGHT) ?: return emptyFlow()
@@ -128,6 +163,8 @@ class PanelReadings(
 
 	companion object {
 		private const val PERCENT = 100
+		private const val MIN_WIFI_DBM = -126
+		private const val MAX_WIFI_DBM = -1
 		private const val TENTHS = 10f
 		private const val MIN_LUX_CHANGE = 2f
 		private const val MIN_RELATIVE_CHANGE = 0.2f

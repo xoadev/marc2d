@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import LIGHT_LUX, PERCENTAGE, UnitOfTemperature
+from homeassistant.const import (
+    LIGHT_LUX,
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SENSORS, is_enabled
-from .panel_hub import get_hub
+from .panel_hub import KEY_APP_VERSION, KEY_WIFI_SIGNAL, get_hub
 
 SENSORS = {
     "light": ("Light", SensorDeviceClass.ILLUMINANCE, LIGHT_LUX),
@@ -20,7 +26,13 @@ SENSORS = {
         SensorDeviceClass.TEMPERATURE,
         UnitOfTemperature.CELSIUS,
     ),
+    KEY_WIFI_SIGNAL: (
+        "Wi-Fi signal",
+        SensorDeviceClass.SIGNAL_STRENGTH,
+        SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    ),
 }
+DIAGNOSTIC = {KEY_WIFI_SIGNAL}
 
 
 async def async_setup_entry(
@@ -29,7 +41,12 @@ async def async_setup_entry(
     """Add the sensors, if they are on."""
     if is_enabled(entry.options, FEATURE_SENSORS):
         hub = get_hub(hass, entry.entry_id)
-        add_entities(PanelSensor(entry, hub, key) for key in SENSORS)
+        add_entities(
+            [
+                *(PanelSensor(entry, hub, key) for key in SENSORS),
+                PanelAppVersion(entry, hub, KEY_APP_VERSION),
+            ]
+        )
 
 
 class PanelSensor(PanelEntity, SensorEntity):
@@ -42,8 +59,22 @@ class PanelSensor(PanelEntity, SensorEntity):
         self._attr_name, self._attr_device_class, self._attr_native_unit_of_measurement = SENSORS[
             key
         ]
+        if key in DIAGNOSTIC:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def native_value(self) -> float | None:
         """Return the last reading."""
+        return self._hub.values.get(self._key)
+
+
+class PanelAppVersion(PanelEntity, SensorEntity):
+    """Which app the panel runs: it does not always match the integration."""
+
+    _attr_name = "App version"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the version."""
         return self._hub.values.get(self._key)

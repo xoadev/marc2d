@@ -251,3 +251,21 @@ async def test_publishing_with_a_chosen_password(hass, entry) -> None:
         form["flow_id"], {"enabled": True, "rtsp_password": "chosen"}
     )
     assert build_panel_config(done["data"])["rtsp"] == {"password": "chosen"}
+
+
+def test_sound_is_left_out_unless_it_is_on() -> None:
+    on = {**OPTIONS, "features": {"rtsp": True}, "rtsp_password": "s3cr3t"}
+    assert "audio" not in build_panel_config(on)["rtsp"]
+    assert build_panel_config({**on, "rtsp_audio": True})["rtsp"]["audio"] is True
+    assert "rtsp" not in build_panel_config({**OPTIONS, "rtsp_audio": True})
+
+
+async def test_sound_is_chosen_in_the_form_and_off_by_default(hass, entry) -> None:
+    form = await open_page(hass, entry, "rtsp")
+    done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": True})
+    assert done["data"]["rtsp_audio"] is False
+    form = await open_page(hass, entry, "rtsp")
+    done = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"enabled": True, "rtsp_audio": True}
+    )
+    assert build_panel_config(done["data"])["rtsp"]["audio"] is True

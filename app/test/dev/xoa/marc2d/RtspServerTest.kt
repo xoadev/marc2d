@@ -6,6 +6,7 @@ import java.net.SocketException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -71,10 +72,12 @@ class RtspServerTest {
 	private fun withServer(
 		source: H264Source,
 		onCamera: (Boolean) -> Unit = {},
+		audio: AacSource? = null,
+		onSound: (Boolean) -> Unit = {},
 		body: suspend (Int) -> Unit,
 	) = runBlocking {
 		val port = CompletableDeferred<Int>()
-		val server = RtspServer(PASSWORD, source, stopDelay = 100.milliseconds, onCamera = onCamera)
+		val server = RtspServer(PASSWORD, source, stopDelay = 100.milliseconds, onCamera = onCamera, audio = audio, onSound = onSound)
 		val job = launch(Dispatchers.IO) { server.run(0, port::complete) }
 		try {
 			withTimeout(30.seconds) { body(port.await()) }
@@ -147,8 +150,53 @@ class RtspServerTest {
 			return input.readNBytes(size)
 		}
 
+		/** The next packet on the connection, with its channel. */
+		fun readInterleaved(): Pair<Int, ByteArray> {
+			check(input.read() == '$'.code)
+			val channel = input.read()
+			val size = (input.read() shl 8) or input.read()
+			return channel to input.readNBytes(size)
+		}
+
 		override fun close() {
 			socket.close()
+		}
+	}
+
+	private class FakeAudio(
+		private val frames: List<ByteArray> = listOf(byteArrayOf(1, 2, 3)),
+		private val failing: Boolean = false,
+		private val config: AacConfig = AacConfig(16_000, 1, byteArrayOf(0x14, 0x08)),
+	) : AacSource {
+		@Volatile var stops = 0
+
+		@Volatile var fail: () -> Unit = {}
+
+		@Volatile private var feeding: kotlinx.coroutines.Job? = null
+
+		override suspend fun start(
+			onFrame: (AacFrame) -> Unit,
+			onFailure: () -> Unit,
+		): AacConfig {
+			check(!failing) { "microphone in use" }
+			fail = onFailure
+			feeding =
+				CoroutineScope(Dispatchers.IO).launch {
+					var index = 0
+					var time = 0L
+					while (isActive) {
+						onFrame(AacFrame(frames[index % frames.size], time))
+						index++
+						time += 64_000
+						delay(10.milliseconds)
+					}
+				}
+			return config
+		}
+
+		override fun stop() {
+			stops++
+			feeding?.cancel()
 		}
 	}
 
@@ -228,6 +276,90 @@ class RtspServerTest {
 				waitFor { changes.size == 2 }
 			}
 			assertEquals(listOf(true, false), changes.toList())
+		}
+	}
+
+	@Test
+	fun `without sound, the stream only describes the video`() {
+		withServer(FakeSource()) { port ->
+			RtspClient(port).use { client ->
+				val nonce = client.challenge()
+				assertFalse("m=audio" in client.request("DESCRIBE", nonce = nonce).body)
+				assertEquals(404, client.request("SETUP", "$URI/track1", listOf(SOUND), nonce = nonce).status)
+			}
+		}
+	}
+
+	@Test
+	fun `sound goes on its own channel, with the video`() {
+		val microphone = FakeAudio()
+		val sound = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+		val source = FakeSource()
+		withServer(source, audio = microphone, onSound = { sound += it }) { port ->
+			RtspClient(port).use { client ->
+				val nonce = client.challenge()
+				val described = client.request("DESCRIBE", nonce = nonce).body
+				assertTrue("a=rtpmap:97 mpeg4-generic/16000/1" in described, described)
+				assertTrue("config=1408" in described, described)
+				assertEquals(listOf(true), sound.toList())
+				assertEquals(200, client.request("SETUP", "$URI/track0", listOf(TCP), nonce = nonce).status)
+				val setup = client.request("SETUP", "$URI/track1", listOf(SOUND), nonce = nonce)
+				assertTrue("interleaved=2-3" in setup.headers.getValue("transport"))
+				assertEquals(200, client.request("PLAY", nonce = nonce).status)
+				val channels = mutableSetOf<Int>()
+				repeat(40) { channels += client.readInterleaved().first }
+				// The RTCP of each track follows it, on the next channel, but only every few seconds.
+				assertTrue(channels.containsAll(setOf(0, 2)), channels.toString())
+				assertTrue(channels.all { it in 0..3 }, channels.toString())
+			}
+			waitFor { source.stops == 1 }
+			waitFor { sound.size == 2 }
+			assertEquals(1, microphone.stops)
+		}
+	}
+
+	@Test
+	fun `a client that does not ask for the sound does not get it`() {
+		withServer(FakeSource(), audio = FakeAudio()) { port ->
+			RtspClient(port).use { client ->
+				val nonce = client.challenge()
+				client.request("DESCRIBE", nonce = nonce)
+				client.request("SETUP", "$URI/track0", listOf(TCP), nonce = nonce)
+				client.request("PLAY", nonce = nonce)
+				repeat(10) { assertTrue(client.readInterleaved().first in 0..1) }
+			}
+		}
+	}
+
+	@Test
+	fun `a microphone that cannot start leaves the video`() {
+		val sound = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+		withServer(FakeSource(), audio = FakeAudio(failing = true), onSound = { sound += it }) { port ->
+			RtspClient(port).use { client ->
+				val described = client.request("DESCRIBE", nonce = client.challenge())
+				assertEquals(200, described.status)
+				assertFalse("m=audio" in described.body)
+			}
+			assertEquals(emptyList(), sound.toList())
+		}
+	}
+
+	@Test
+	fun `losing the microphone does not stop the video`() {
+		val microphone = FakeAudio()
+		val sound = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+		val source = FakeSource()
+		withServer(source, audio = microphone, onSound = { sound += it }) { port ->
+			RtspClient(port).use { client ->
+				val nonce = client.challenge()
+				client.request("DESCRIBE", nonce = nonce)
+				client.request("SETUP", "$URI/track0", listOf(TCP), nonce = nonce)
+				client.request("PLAY", nonce = nonce)
+				microphone.fail()
+				waitFor { sound.size == 2 }
+				assertEquals(0, source.stops)
+				client.readInterleaved()
+			}
 		}
 	}
 
@@ -420,6 +552,76 @@ class RtspServerTest {
 		}
 	}
 
+	/** The same, with the sound: Home Assistant only keeps a track if ffmpeg recognises it. */
+	@Test
+	fun `ffmpeg reads the sound and the video`() {
+		val tools = listOf("ffmpeg", "ffprobe").map { tool(it) }
+		if (tools.any { it == null }) return
+		val video = File.createTempFile("marc2d", ".h264")
+		val sound = File.createTempFile("marc2d", ".aac")
+		try {
+			val common = listOf(tools[0], "-y", "-loglevel", "error", "-f", "lavfi", "-i")
+			val encodedVideo =
+				ProcessBuilder(
+					common + listOf("testsrc=size=320x240:rate=15:duration=2", "-c:v", "libx264", "-g", "5", "-pix_fmt", "yuv420p", "-f", "h264", video.path),
+				).inheritIO().start()
+			val encodedSound =
+				ProcessBuilder(
+					common + listOf("sine=frequency=440:sample_rate=16000:duration=2", "-c:a", "aac", "-b:a", "32k", "-ac", "1", "-f", "adts", sound.path),
+				).inheritIO().start()
+			assertTrue(encodedVideo.waitFor(60, TimeUnit.SECONDS) && encodedSound.waitFor(60, TimeUnit.SECONDS))
+			if (encodedVideo.exitValue() != 0 || encodedSound.exitValue() != 0) return
+			val units = nalUnits(video.readBytes())
+			val sps = units.first { it[0].toInt() and 0x1F == 7 }
+			val pps = units.first { it[0].toInt() and 0x1F == 8 }
+			val frames =
+				units.filter { it[0].toInt() and 0x1F in listOf(1, 5) }.map { unit ->
+					val key = unit[0].toInt() and 0x1F == 5
+					H264Frame(if (key) annexBOf(sps, pps, unit) else annexBOf(unit), 0, key)
+				}
+			withServer(FakeH264File(H264Parameters(sps, pps), frames), audio = FakeAudio(adtsFrames(sound.readBytes()))) { port ->
+				val probe =
+					withContext(Dispatchers.IO) {
+						val process =
+							ProcessBuilder(
+								tools[1],
+								"-v",
+								"error",
+								"-rtsp_transport",
+								"tcp",
+								"-show_entries",
+								"stream=codec_name,sample_rate",
+								"-of",
+								"csv=p=0",
+								"rtsp://marc2d:$PASSWORD@127.0.0.1:$port/camera",
+							).redirectErrorStream(true).start()
+						assertTrue(process.waitFor(20, TimeUnit.SECONDS))
+						process.inputStream.bufferedReader().readText()
+					}
+				assertTrue("h264" in probe, probe)
+				assertTrue("aac,16000" in probe, probe)
+			}
+		} finally {
+			video.delete()
+			sound.delete()
+		}
+	}
+
+	/** The raw frames, as the panel's encoder delivers them: ffmpeg writes them with ADTS headers. */
+	private fun adtsFrames(data: ByteArray): List<ByteArray> {
+		val frames = mutableListOf<ByteArray>()
+		var at = 0
+		while (at + 7 <= data.size) {
+			val size =
+				((data[at + 3].toInt() and 0x03) shl 11) or
+					((data[at + 4].toInt() and 0xFF) shl 3) or
+					((data[at + 5].toInt() and 0xFF) shr 5)
+			frames += data.copyOfRange(at + 7, at + size)
+			at += size
+		}
+		return frames
+	}
+
 	private class FakeH264File(
 		private val parameters: H264Parameters,
 		frames: List<H264Frame>,
@@ -456,6 +658,7 @@ class RtspServerTest {
 		const val PASSWORD = "s3cr3t-Password_1"
 		const val URI = "rtsp://127.0.0.1/camera"
 		const val TCP = "Transport: RTP/AVP/TCP;unicast;interleaved=0-1"
+		const val SOUND = "Transport: RTP/AVP/TCP;unicast;interleaved=2-3"
 		const val KEY_NAL_TYPE = 5
 		val PARAMETERS = H264Parameters(byteArrayOf(0x67, 0x42, 0x00, 0x1E), byteArrayOf(0x68, 0xCE.toByte()))
 		val KEY_FRAME = H264Frame(annexBOf(byteArrayOf(0x65, 1, 2, 3)), 0, true)

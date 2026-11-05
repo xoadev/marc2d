@@ -19,6 +19,44 @@ class FrameTurnTest {
 	}
 }
 
+class AacRtpTest {
+	@Test
+	fun `a frame goes whole after its AU header`() {
+		val packet = AacPacketizer(16_000).packet(AacFrame(ByteArray(300) { 7 }, 1_000_000))
+		assertEquals(0x80 or 97, packet[1].toInt() and 0xFF)
+		// The header is 16 bits long, and holds the size in its 13 highest bits.
+		assertContentEquals(byteArrayOf(0, 16, (300 shl 3 shr 8).toByte(), (300 shl 3).toByte()), packet.copyOfRange(12, 16))
+		assertEquals(300, packet.size - 16)
+	}
+
+	@Test
+	fun `its clock runs at the sample rate`() {
+		val packet = AacPacketizer(16_000).packet(AacFrame(byteArrayOf(1), 1_000_000))
+		assertEquals(16_000, packet.copyOfRange(4, 8).fold(0) { all, byte -> (all shl 8) or (byte.toInt() and 0xFF) })
+	}
+}
+
+class SenderReportTest {
+	@Test
+	fun `both tracks say the same time for the same moment`() {
+		val video = H264Packetizer().senderReportIfDue(2_500_000)!!
+		val sound = AacPacketizer(16_000).senderReportIfDue(2_500_000)!!
+		assertEquals(28, video.size)
+		assertEquals(200, video[1].toInt() and 0xFF)
+		assertContentEquals(video.copyOfRange(8, 16), sound.copyOfRange(8, 16))
+		assertEquals(225_000, video.copyOfRange(16, 20).fold(0) { all, byte -> (all shl 8) or (byte.toInt() and 0xFF) })
+		assertEquals(40_000, sound.copyOfRange(16, 20).fold(0) { all, byte -> (all shl 8) or (byte.toInt() and 0xFF) })
+	}
+
+	@Test
+	fun `they come every few seconds`() {
+		val packetizer = H264Packetizer()
+		assertTrue(packetizer.senderReportIfDue(0) != null)
+		assertNull(packetizer.senderReportIfDue(4_000_000))
+		assertTrue(packetizer.senderReportIfDue(5_000_000) != null)
+	}
+}
+
 class H264RtpTest {
 	private fun frame(vararg units: ByteArray) = H264Frame(units.fold(ByteArray(0)) { all, unit -> all + byteArrayOf(0, 0, 0, 1) + unit }, 1_000_000, true)
 

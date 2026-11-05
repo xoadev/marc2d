@@ -122,7 +122,7 @@ fun BoxWithConstraintsScope.DroidSprite(
 				}
 			}
 
-			DroidMood.Alarm, DroidMood.Intruder, DroidMood.Recording, DroidMood.Listening -> {
+			DroidMood.Alarm, DroidMood.Intruder, DroidMood.Recording, DroidMood.RecordingSound, DroidMood.Listening -> {
 				while (true) {
 					blink = !blink
 					delay(STEP_TIME)
@@ -201,6 +201,11 @@ private fun DrawScope.eye(
 		DroidMood.Recording -> {
 			block(pixel, 5..10, 4..8, Color.Black)
 			block(pixel, 7..8, 5..7, if (blink) Red else DimRed)
+		}
+
+		DroidMood.RecordingSound -> {
+			block(pixel, 4..11, 3..9, Color.Black)
+			block(pixel, 6..9, 5..7, if (blink) Red else DimRed)
 		}
 
 		DroidMood.Listening -> {

@@ -47,29 +47,86 @@ fun h264Parameters(annexB: ByteArray): H264Parameters? {
 private val ByteArray.nalType: Int
 	get() = this[0].toInt() and 0x1F
 
+/** What both tracks share: the RTP header, and the reports that let clients line up their clocks. */
+private class RtpWriter(
+	private val payloadType: Int,
+	private val clockRate: Int,
+	private val ssrc: Int,
+) {
+	private var sequence = Random.nextInt(0x10000)
+	private var packets = 0
+	private var octets = 0
+	private var lastReportUs: Long? = null
+
+	fun packet(
+		payload: ByteArray,
+		timestampUs: Long,
+		marker: Boolean,
+	): ByteArray {
+		val packet = ByteBuffer.allocate(RTP_HEADER + payload.size)
+		packet.put(RTP_VERSION_2)
+		packet.put((payloadType or (if (marker) RTP_MARKER else 0)).toByte())
+		packet.putShort(sequence.toShort())
+		packet.putInt(rtpTime(timestampUs))
+		packet.putInt(ssrc)
+		packet.put(payload)
+		sequence = (sequence + 1) and 0xFFFF
+		packets++
+		octets += payload.size
+		return packet.array()
+	}
+
+	/**
+	 * An RTCP sender report (RFC 3550), every few seconds. Without it, a client has no way to know how the timestamps of
+	 * one track relate to the other, and sound and video can drift apart.
+	 */
+	fun senderReportIfDue(timestampUs: Long): ByteArray? {
+		val last = lastReportUs
+		if (last != null && timestampUs - last < REPORT_INTERVAL_US) return null
+		lastReportUs = timestampUs
+		val seconds = timestampUs / MICROS
+		val fraction = (timestampUs % MICROS) * (1L shl 32) / MICROS
+		return ByteBuffer
+			.allocate(SENDER_REPORT_BYTES)
+			.put(RTP_VERSION_2)
+			.put(RTCP_SENDER_REPORT)
+			.putShort((SENDER_REPORT_BYTES / 4 - 1).toShort())
+			.putInt(ssrc)
+			.putInt(seconds.toInt())
+			.putInt(fraction.toInt())
+			.putInt(rtpTime(timestampUs))
+			.putInt(packets)
+			.putInt(octets)
+			.array()
+	}
+
+	private fun rtpTime(timestampUs: Long): Int = (timestampUs * clockRate / MICROS).toInt()
+}
+
 /** RFC 6184, with single NAL units and FU-A: every client of the panel understands both. */
 class H264Packetizer(
 	private val maxPacket: Int = MAX_RTP_PACKET,
-	private val ssrc: Int = Random.nextInt(),
+	ssrc: Int = Random.nextInt(),
 ) {
-	private var sequence = Random.nextInt(0x10000)
+	private val writer = RtpWriter(RTP_PAYLOAD_TYPE, RTP_CLOCK, ssrc)
 
 	fun packets(frame: H264Frame): List<ByteArray> {
 		val units = nalUnits(frame.data).filter { it.isNotEmpty() }
-		val timestamp = (frame.timestampUs * RTP_CLOCK / 1_000_000).toInt()
 		return units.flatMapIndexed { index, unit ->
 			val isLastUnit = index == units.lastIndex
 			if (unit.size + RTP_HEADER <= maxPacket) {
-				listOf(rtp(unit, timestamp, isLastUnit))
+				listOf(writer.packet(unit, frame.timestampUs, isLastUnit))
 			} else {
-				fragments(unit, timestamp, isLastUnit)
+				fragments(unit, frame.timestampUs, isLastUnit)
 			}
 		}
 	}
 
+	fun senderReportIfDue(timestampUs: Long): ByteArray? = writer.senderReportIfDue(timestampUs)
+
 	private fun fragments(
 		unit: ByteArray,
-		timestamp: Int,
+		timestampUs: Long,
 		isLastUnit: Boolean,
 	): List<ByteArray> {
 		val indicator = ((unit[0].toInt() and 0xE0) or FU_A).toByte()
@@ -80,33 +137,53 @@ class H264Packetizer(
 			val end = minOf(start + room, unit.size)
 			val isLast = index == chunks.lastIndex
 			val header = type or (if (index == 0) FU_START else 0) or (if (isLast) FU_END else 0)
-			rtp(byteArrayOf(indicator, header.toByte()) + unit.copyOfRange(start, end), timestamp, isLast && isLastUnit)
+			writer.packet(byteArrayOf(indicator, header.toByte()) + unit.copyOfRange(start, end), timestampUs, isLast && isLastUnit)
 		}
-	}
-
-	private fun rtp(
-		payload: ByteArray,
-		timestamp: Int,
-		marker: Boolean,
-	): ByteArray {
-		val packet = ByteBuffer.allocate(RTP_HEADER + payload.size)
-		packet.put(RTP_VERSION_2)
-		packet.put((RTP_PAYLOAD_TYPE or (if (marker) RTP_MARKER else 0)).toByte())
-		packet.putShort(sequence.toShort())
-		packet.putInt(timestamp)
-		packet.putInt(ssrc)
-		packet.put(payload)
-		sequence = (sequence + 1) and 0xFFFF
-		return packet.array()
 	}
 }
 
+/** What the SDP needs to describe the sound: `config` is the encoder's AudioSpecificConfig. */
+class AacConfig(
+	val sampleRate: Int,
+	val channels: Int,
+	val config: ByteArray,
+)
+
+/** A raw AAC frame, without ADTS headers, as the encoder delivers it. */
+class AacFrame(
+	val data: ByteArray,
+	val timestampUs: Long,
+)
+
+/** RFC 3640 in AAC-hbr mode: the one that ffmpeg and go2rtc read, with one frame per packet. */
+class AacPacketizer(
+	sampleRate: Int,
+	ssrc: Int = Random.nextInt(),
+) {
+	private val writer = RtpWriter(RTP_AUDIO_PAYLOAD_TYPE, sampleRate, ssrc)
+
+	fun packet(frame: AacFrame): ByteArray {
+		val size = frame.data.size shl AU_INDEX_BITS
+		val header = byteArrayOf(0, AU_HEADER_BITS, (size shr 8).toByte(), size.toByte())
+		return writer.packet(header + frame.data, frame.timestampUs, true)
+	}
+
+	fun senderReportIfDue(timestampUs: Long): ByteArray? = writer.senderReportIfDue(timestampUs)
+}
+
 const val RTP_PAYLOAD_TYPE = 96
+const val RTP_AUDIO_PAYLOAD_TYPE = 97
 private const val MAX_RTP_PACKET = 1400
 private const val RTP_HEADER = 12
 private const val RTP_CLOCK = 90_000
 private const val RTP_VERSION_2: Byte = 0x80.toByte()
 private const val RTP_MARKER = 0x80
+private const val RTCP_SENDER_REPORT: Byte = 200.toByte()
+private const val SENDER_REPORT_BYTES = 28
+private const val REPORT_INTERVAL_US = 5_000_000L
+private const val MICROS = 1_000_000L
+private const val AU_HEADER_BITS: Byte = 16
+private const val AU_INDEX_BITS = 3
 private const val FU_A = 28
 private const val FU_START = 0x80
 private const val FU_END = 0x40

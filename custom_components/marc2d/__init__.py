@@ -22,6 +22,8 @@ from .panel_config import (
 from .panel_hub import (
     DOORBELL_RING,
     KEY_CAMERA,
+    KEY_CAMERA_ON,
+    KEY_OVERHEATING,
     KEY_PLAYING,
     KEY_SIREN,
     SENSOR_KEYS,
@@ -77,13 +79,13 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 def _remove_turned_off_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     off = set()
     if not is_enabled(entry.options, FEATURE_SENSORS):
-        off.update(SENSOR_KEYS)
+        off.update((*SENSOR_KEYS, KEY_OVERHEATING))
     if not is_enabled(entry.options, FEATURE_SIREN):
         off.add(KEY_SIREN)
     if not is_enabled(entry.options, FEATURE_SPEAKER):
         off.add(KEY_PLAYING)
     if not rtsp_password(entry.options):
-        off.add(KEY_CAMERA)
+        off.update((KEY_CAMERA, KEY_CAMERA_ON))
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.unique_id.removeprefix(f"{entry.entry_id}_") in off:

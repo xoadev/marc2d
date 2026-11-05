@@ -44,6 +44,7 @@ eye color only appears when something matters. When its state changes it stays w
 | --------- | ----------------------- | -------------------------------------------- |
 | Intruder  | red band                | HA, with `select.*_state`                    |
 | Alarm     | yellow                  | HA, with `select.*_state`                    |
+| Sound     | large red lens          | the panel, while it streams the microphone   |
 | Recording | red lens                | HA, or the panel while its camera is on      |
 | Listening | large, with a glint     | the panel, after "Oye Mark"                  |
 | Offline   | an X                    | the panel, if there is any warning on screen |
@@ -94,6 +95,9 @@ depend on this connection once registered.
 | `sensor.*_light`               | ambient light, in lux | if it changes by at least 2 lx and 20% |
 | `binary_sensor.*_presence`     | someone seems there   | on change, and 60 s after the last one |
 | `sensor.*_battery`             | level, in %           | if it changes, checked every minute    |
+| `binary_sensor.*_overheating`  | battery at 45 °C +    | HA works it out from the temperature   |
+| `sensor.*_wi_fi_signal`        | Wi-Fi signal, in dBm  | if it moves 5 dB, checked every minute |
+| `sensor.*_app_version`         | the app's version     | on each connection                     |
 | `sensor.*_battery_temperature` | battery, in °C        | if it changes, checked every minute    |
 | `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
 | `siren.*_siren`                | turns on and off      | on change                              |
@@ -101,6 +105,7 @@ depend on this connection once registered.
 | `media_player.*_speaker`       | playing or idle       | on change                              |
 | `number.*_screen_brightness`   | brightness, in %      | decided by HA, sent on each connection |
 | `camera.*_camera`              | the panel's camera    | if published, while someone watches    |
+| `binary_sensor.*_camera_on`    | the camera is on      | if published, on change                |
 
 The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
 identify it by its user.
@@ -150,7 +155,9 @@ are up to whoever consumes it, in HA or in Frigate, which use the same URL:
   the panel with its configuration.
 - **Address:** the panel reports its IPv4 address and HA follows it. Frigate does not: give the panel a fixed address.
 - **Pictures:** HA takes them from the stream, so a card turns the camera on while it is on screen.
-- **Video:** H.264 from the front camera, 15 fps at 2 Mbps, 720p, without audio and turned to match the panel when the
+- **Sound:** off by default, with its own switch. AAC from the microphone at 16 kHz, in the same stream, and the droid
+  has its own eye for it. If the microphone fails the video goes on without it. A call may leave the stream silent.
+- **Video:** H.264 from the front camera, 15 fps at 2 Mbps, 720p, turned to match the panel when the
   stream starts. Only RTP over the RTSP connection: other clients than HA and Frigate may need to ask for TCP.
 - The camera can only have one owner: scanning a QR code takes it, and clients are disconnected and retry.
 
@@ -195,7 +202,7 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "siren": true,
   "speaker": true,
   "voice": { "pipeline": "01h..." },
-  "rtsp": { "password": "…" }
+  "rtsp": { "password": "…", "audio": true }
 }
 ```
 
@@ -225,7 +232,7 @@ only while it is on, and what a turned-off feature had is kept.
 ## Delivery order
 
 1. Time, date, weather, kiosk mode and answering the intercom.
-2. Messages and siren.
+2. Siren.
 3. Turning the screen on with presence.
 4. Voice commands.
 5. Publishing the camera.
@@ -262,6 +269,7 @@ a broker or writing YAML. It requires HA 2026.10.
   not open its port until the encoder has produced the stream's parameters, so it needs the camera always on, which is
   what we want to avoid, and it comes from a single author on JitPack. Tests run it against the real ffmpeg, which is what
   HA and Frigate use.
+- No messages on the screen: what HA has to say, the panel speaks, through its speaker.
 - Audio and screen with the Android APIs, without libraries.
 - The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.

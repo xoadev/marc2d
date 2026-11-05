@@ -23,6 +23,7 @@ CONF_DOORBELL = "doorbell"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
 CONF_RTSP_PASSWORD = "rtsp_password"  # noqa: S105 - the name of a form field
+CONF_RTSP_AUDIO = "rtsp_audio"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
 
@@ -50,6 +51,8 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
         config["voice"] = {key: value for key, value in _pipeline(options).items()}
     if password := rtsp_password(options):
         config["rtsp"] = {"password": password}
+        if options.get(CONF_RTSP_AUDIO, False):
+            config["rtsp"]["audio"] = True
     if is_enabled(options, FEATURE_SIP):
         config["intercoms"] = [
             {

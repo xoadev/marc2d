@@ -29,6 +29,25 @@ class PanelReadingsTest {
 	}
 }
 
+class SignalReportsTest {
+	@Test
+	fun `only a real change of Wi-Fi signal is reported`() {
+		val reports = SignalReports()
+		assertTrue(reports.shouldReport(-60, enabled = true))
+		assertFalse(reports.shouldReport(-62, enabled = true))
+		assertFalse(reports.shouldReport(-64, enabled = true))
+		assertTrue(reports.shouldReport(-65, enabled = true))
+	}
+
+	@Test
+	fun `it reports the signal again when the sensors come back`() {
+		val reports = SignalReports()
+		assertTrue(reports.shouldReport(-60, enabled = true))
+		assertFalse(reports.shouldReport(-60, enabled = false))
+		assertTrue(reports.shouldReport(-60, enabled = true))
+	}
+}
+
 class LightPresenceTest {
 	private fun presence(start: Float = 100f) = LightPresence().apply { update(start, START) }
 
@@ -131,6 +150,13 @@ class DroidMoodTest {
 		assertEquals(DroidMood.Recording, DroidMoods.resolve(HaMood.Normal, hasProblem = true, dark = true, listening = true, cameraOn = true))
 		assertEquals(DroidMood.Intruder, DroidMoods.resolve(HaMood.Intruder, hasProblem = false, dark = false, cameraOn = true))
 		assertEquals(DroidMood.Alarm, DroidMoods.resolve(HaMood.Alarm, hasProblem = false, dark = false, cameraOn = true))
+	}
+
+	@Test
+	fun `sound has its own eye, but only with the camera on`() {
+		assertEquals(DroidMood.RecordingSound, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, cameraOn = true, cameraSound = true))
+		assertEquals(DroidMood.Walking, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, cameraSound = true))
+		assertEquals(DroidMood.Alarm, DroidMoods.resolve(HaMood.Alarm, hasProblem = false, dark = false, cameraOn = true, cameraSound = true))
 	}
 
 	@Test

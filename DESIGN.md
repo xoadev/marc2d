@@ -46,6 +46,7 @@ The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 | Alarm     | yellow                                      | blinks           |
 | Intruder  | red band                                    | blinks           |
 | Recording | lens with a red center                      | blinks           |
+| Sound     | large lens with a wide red center           | blinks           |
 | Listening | large, with a glint                         | blinks           |
 
 ## Buttons

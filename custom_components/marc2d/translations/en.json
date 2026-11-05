@@ -65,7 +65,7 @@
           "speaker": "Speaker"
         },
         "data_description": {
-          "sensors": "Light, battery, battery temperature, charging and presence, guessed from sudden changes of light. Off: Home Assistant removes those entities.",
+          "sensors": "Light, battery and its temperature, overheating, charging, Wi-Fi signal, app version and presence, guessed from sudden changes of light. Off: Home Assistant removes those entities.",
           "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command.",
           "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
         }
@@ -75,10 +75,12 @@
         "description": "Creates a camera entity in Home Assistant. The panel's camera is only on while something is watching, and the panel shows it and keeps its screen on: Frigate or anything that records keeps it on all the time. Anyone on the home network who has the password can see it. Others, such as Frigate, connect to `{url}`, so give the panel a fixed address.",
         "data": {
           "enabled": "On",
-          "rtsp_password": "Password"
+          "rtsp_password": "Password",
+          "rtsp_audio": "Sound"
         },
         "data_description": {
-          "rtsp_password": "Leave it empty to generate one. The user is always marc2d."
+          "rtsp_password": "Leave it empty to generate one. The user is always marc2d.",
+          "rtsp_audio": "Also sends the panel's microphone: whoever watches can hear the room. The droid's eye shows it. Check the law where you live before recording conversations."
         }
       },
       "voice": {

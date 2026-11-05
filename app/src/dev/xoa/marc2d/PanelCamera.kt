@@ -376,7 +376,8 @@ private class RotatingRenderer(
 
 	private fun drawFrame() {
 		surfaceTexture.updateTexImage()
-		val time = surfaceTexture.timestamp
+		// Not the camera's own time: its clock is up to each phone, and the sound has to be on the same one.
+		val time = System.nanoTime()
 		// Sensors may only offer more than the frames we want, and the encoder would spend on them.
 		if (time - lastFrameNs < MIN_FRAME_NS) return
 		lastFrameNs = time

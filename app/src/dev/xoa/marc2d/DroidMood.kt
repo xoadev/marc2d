@@ -1,7 +1,7 @@
 package dev.xoa.marc2d
 
 /** What the droid on the main screen shows. */
-enum class DroidMood { Walking, Sleeping, Offline, Listening, Recording, Alarm, Intruder }
+enum class DroidMood { Walking, Sleeping, Offline, Listening, Recording, RecordingSound, Alarm, Intruder }
 
 /** The states HA sends, with the `select.*_state` entity. */
 enum class HaMood(
@@ -26,6 +26,7 @@ object DroidMoods {
 		dark: Boolean,
 		listening: Boolean = false,
 		cameraOn: Boolean = false,
+		cameraSound: Boolean = false,
 	): DroidMood =
 		when {
 			ha == HaMood.Intruder -> DroidMood.Intruder
@@ -33,6 +34,8 @@ object DroidMoods {
 			ha == HaMood.Alarm -> DroidMood.Alarm
 
 			// Whoever is in front has to know, whatever else the panel would like to say.
+			cameraOn && cameraSound -> DroidMood.RecordingSound
+
 			ha == HaMood.Recording || cameraOn -> DroidMood.Recording
 
 			listening -> DroidMood.Listening

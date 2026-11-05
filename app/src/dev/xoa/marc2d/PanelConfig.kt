@@ -39,6 +39,8 @@ data class VoiceConfig(
 @Serializable
 data class RtspConfig(
 	val password: String,
+	/** Whether the stream carries the microphone. */
+	val audio: Boolean = false,
 ) {
 	override fun toString(): String = "RtspConfig"
 }

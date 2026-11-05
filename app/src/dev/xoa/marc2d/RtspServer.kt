@@ -47,6 +47,17 @@ interface H264Source {
 	fun stop()
 }
 
+/** The panel's microphone. Without it the stream still works, only with no sound. */
+interface AacSource {
+	/** It throws if it cannot start, and calls [onFailure] if it stops by itself later. */
+	suspend fun start(
+		onFrame: (AacFrame) -> Unit,
+		onFailure: () -> Unit,
+	): AacConfig
+
+	fun stop()
+}
+
 /**
  * An RTSP server that only turns the camera on while someone is watching: the camera starts with the first authenticated
  * DESCRIBE, because the SDP needs what the encoder produces, and stops shortly after the last client leaves.
@@ -60,6 +71,10 @@ class RtspServer(
 	private val stopDelay: Duration = STOP_DELAY,
 	/** Whether the camera is on, so that the panel can show it to whoever is in front. */
 	private val onCamera: (Boolean) -> Unit = {},
+	/** Nothing if the stream has no sound. */
+	private val audio: AacSource? = null,
+	/** Whether the microphone is being sent, as the panel shows that differently. */
+	private val onSound: (Boolean) -> Unit = {},
 ) {
 	private val random = SecureRandom()
 	private val packetizer = H264Packetizer()
@@ -67,6 +82,10 @@ class RtspServer(
 	private val lock = Mutex()
 	private val viewers = mutableSetOf<Client>()
 	private var parameters: H264Parameters? = null
+
+	@Volatile private var audioConfig: AacConfig? = null
+
+	@Volatile private var audioPacketizer: AacPacketizer? = null
 	private var users = 0
 	private var stopping: Job? = null
 
@@ -131,6 +150,7 @@ class RtspServer(
 					).also {
 						parameters = it
 						onCamera(true)
+						startSound(scope)
 					}
 			users++
 			current
@@ -150,7 +170,35 @@ class RtspServer(
 		}
 	}
 
+	/** A microphone that fails does not take the video with it. */
+	private suspend fun startSound(scope: CoroutineScope) {
+		val microphone = audio ?: return
+		try {
+			val config =
+				microphone.start(
+					onFrame = ::deliverSound,
+					onFailure = { scope.launch { lock.withLock { stopSound() } } },
+				)
+			audioPacketizer = AacPacketizer(config.sampleRate)
+			audioConfig = config
+			onSound(true)
+		} catch (e: CancellationException) {
+			throw e
+		} catch (e: Exception) {
+			logDisconnect(e)
+		}
+	}
+
+	private fun stopSound() {
+		if (audioConfig != null) {
+			audio?.stop()
+			onSound(false)
+		}
+		audioConfig = null
+	}
+
 	private fun stopCamera() {
+		stopSound()
 		if (parameters != null) {
 			source.stop()
 			onCamera(false)
@@ -164,9 +212,30 @@ class RtspServer(
 	}
 
 	private fun deliver(frame: H264Frame) {
-		val packets = synchronized(viewers) { if (viewers.isEmpty()) null else packetizer.packets(frame) } ?: return
-		synchronized(viewers) { viewers.toList() }.forEach { it.offer(packets, frame.keyFrame) }
+		val outgoing =
+			synchronized(viewers) {
+				if (viewers.isEmpty()) return
+				Outgoing(false, packetizer.packets(frame), packetizer.senderReportIfDue(frame.timestampUs), frame.keyFrame)
+			}
+		synchronized(viewers) { viewers.toList() }.forEach { it.offer(outgoing) }
 	}
+
+	private fun deliverSound(frame: AacFrame) {
+		val writer = audioPacketizer ?: return
+		val outgoing =
+			synchronized(viewers) {
+				if (viewers.isEmpty()) return
+				Outgoing(true, listOf(writer.packet(frame)), writer.senderReportIfDue(frame.timestampUs), false)
+			}
+		synchronized(viewers) { viewers.toList() }.forEach { it.offer(outgoing) }
+	}
+
+	private class Outgoing(
+		val isSound: Boolean,
+		val packets: List<ByteArray>,
+		val report: ByteArray?,
+		val keyFrame: Boolean,
+	)
 
 	private inner class Client(
 		private val socket: Socket,
@@ -175,8 +244,11 @@ class RtspServer(
 		private val nonce = randomHex()
 		private val session = randomHex()
 		private val output: OutputStream = socket.getOutputStream().buffered()
-		private val queue = Channel<List<ByteArray>>(MAX_QUEUED_FRAMES)
-		private var channel = 0
+		private val queue = Channel<Outgoing>(MAX_QUEUED_FRAMES)
+		private var videoChannel = 0
+
+		// Nothing until the client asks for the sound: not every client wants it.
+		@Volatile private var soundChannel: Int? = null
 		private var acquired = false
 		private var playing = false
 		private var sawKeyFrame = false
@@ -207,14 +279,12 @@ class RtspServer(
 			}
 		}
 
-		fun offer(
-			packets: List<ByteArray>,
-			keyFrame: Boolean,
-		) {
-			if (!sawKeyFrame && !keyFrame) return
+		fun offer(outgoing: Outgoing) {
+			if (!sawKeyFrame && !outgoing.keyFrame) return
 			sawKeyFrame = true
+			if (outgoing.isSound && soundChannel == null) return
 			// Waiting for it would hold back the rest, and dropping frames would break its video until the next key frame.
-			if (queue.trySend(packets).isFailure) close()
+			if (queue.trySend(outgoing).isFailure) close()
 		}
 
 		fun close() {
@@ -226,17 +296,14 @@ class RtspServer(
 		}
 
 		private suspend fun sendFrames() {
-			for (packets in queue) {
+			for (outgoing in queue) {
+				val channel = if (outgoing.isSound) soundChannel ?: continue else videoChannel
 				runInterruptible(Dispatchers.IO) {
 					try {
 						synchronized(output) {
-							packets.forEach { packet ->
-								output.write(INTERLEAVED)
-								output.write(channel)
-								output.write(packet.size shr 8)
-								output.write(packet.size and 0xFF)
-								output.write(packet)
-							}
+							outgoing.packets.forEach { writeInterleaved(channel, it) }
+							// RTCP goes on the channel after its track's.
+							outgoing.report?.let { writeInterleaved(channel + 1, it) }
 							output.flush()
 						}
 					} catch (_: IOException) {
@@ -244,6 +311,17 @@ class RtspServer(
 					}
 				}
 			}
+		}
+
+		private fun writeInterleaved(
+			channel: Int,
+			packet: ByteArray,
+		) {
+			output.write(INTERLEAVED)
+			output.write(channel)
+			output.write(packet.size shr 8)
+			output.write(packet.size and 0xFF)
+			output.write(packet)
 		}
 
 		/** The next request, skipping the RTCP that clients send over the same connection. */
@@ -323,7 +401,7 @@ class RtspServer(
 				respond(UNAVAILABLE, cseq)
 				return true
 			}
-			val body = sdp(parameters)
+			val body = sdp(parameters, audioConfig)
 			respond(
 				OK,
 				cseq,
@@ -350,12 +428,19 @@ class RtspServer(
 				respond(UNAVAILABLE, cseq)
 				return true
 			}
-			channel = Regex("interleaved=(\\d+)")
-				.find(transport)
-				?.groupValues
-				?.get(1)
-				?.toIntOrNull()
-				?.takeIf { it in 0..254 } ?: 0
+			val isSound = request.isForTheSound()
+			if (isSound && audioConfig == null) {
+				respond(NOT_FOUND, cseq)
+				return true
+			}
+			val channel =
+				Regex("interleaved=(\\d+)")
+					.find(transport)
+					?.groupValues
+					?.get(1)
+					?.toIntOrNull()
+					?.takeIf { it in 0..254 } ?: if (isSound) DEFAULT_SOUND_CHANNEL else 0
+			if (isSound) soundChannel = channel else videoChannel = channel
 			respond(OK, cseq, listOf("Transport" to "RTP/AVP/TCP;unicast;interleaved=$channel-${channel + 1}", sessionHeader()))
 			return true
 		}
@@ -445,7 +530,10 @@ class RtspServer(
 		private const val UNSUPPORTED_TRANSPORT = "461 Unsupported Transport"
 		private const val UNAVAILABLE = "503 Service Unavailable"
 		private const val MAX_CLIENTS = 8
-		private const val MAX_QUEUED_FRAMES = 60
+
+		// About 4 seconds, counting the frames of both tracks.
+		private const val MAX_QUEUED_FRAMES = 120
+		private const val DEFAULT_SOUND_CHANNEL = 2
 		private const val HANDSHAKE_TIMEOUT = 30_000
 		private const val SESSION_TIMEOUT_SECONDS = 60
 
@@ -466,8 +554,10 @@ internal class RtspRequest(
 			} catch (_: URISyntaxException) {
 				return false
 			}
-		return path.trimEnd('/') in listOf(RTSP_PATH, "$RTSP_PATH/$RTSP_TRACK")
+		return path.trimEnd('/') in listOf(RTSP_PATH, "$RTSP_PATH/$RTSP_TRACK", "$RTSP_PATH/$RTSP_SOUND_TRACK")
 	}
+
+	fun isForTheSound(): Boolean = uri.trimEnd('/').endsWith("/$RTSP_SOUND_TRACK")
 }
 
 /** Nothing if the connection ends. It limits sizes because anyone on the network can connect before authenticating. */
@@ -521,7 +611,10 @@ internal fun md5(text: String): String =
 		.digest(text.toByteArray())
 		.joinToString("") { "%02x".format(it) }
 
-internal fun sdp(parameters: H264Parameters): String {
+internal fun sdp(
+	parameters: H264Parameters,
+	audio: AacConfig? = null,
+): String {
 	val encoder = Base64.getEncoder()
 	val profile =
 		parameters.sps
@@ -529,22 +622,35 @@ internal fun sdp(parameters: H264Parameters): String {
 			.take(3)
 			.joinToString("") { "%02x".format(it) }
 	val sets = "${encoder.encodeToString(parameters.sps)},${encoder.encodeToString(parameters.pps)}"
-	return listOf(
-		"v=0",
-		"o=- 0 0 IN IP4 0.0.0.0",
-		"s=marc2d",
-		"c=IN IP4 0.0.0.0",
-		"t=0 0",
-		"a=control:*",
-		"m=video 0 RTP/AVP $RTP_PAYLOAD_TYPE",
-		"a=rtpmap:$RTP_PAYLOAD_TYPE H264/90000",
-		"a=fmtp:$RTP_PAYLOAD_TYPE packetization-mode=1;profile-level-id=$profile;sprop-parameter-sets=$sets",
-		"a=control:$RTSP_TRACK",
-		"",
-	).joinToString("\r\n")
+	val video =
+		listOf(
+			"v=0",
+			"o=- 0 0 IN IP4 0.0.0.0",
+			"s=marc2d",
+			"c=IN IP4 0.0.0.0",
+			"t=0 0",
+			"a=control:*",
+			"m=video 0 RTP/AVP $RTP_PAYLOAD_TYPE",
+			"a=rtpmap:$RTP_PAYLOAD_TYPE H264/90000",
+			"a=fmtp:$RTP_PAYLOAD_TYPE packetization-mode=1;profile-level-id=$profile;sprop-parameter-sets=$sets",
+			"a=control:$RTSP_TRACK",
+		)
+	val sound =
+		audio
+			?.let {
+				val config = it.config.joinToString("") { byte -> "%02x".format(byte) }
+				listOf(
+					"m=audio 0 RTP/AVP $RTP_AUDIO_PAYLOAD_TYPE",
+					"a=rtpmap:$RTP_AUDIO_PAYLOAD_TYPE mpeg4-generic/${it.sampleRate}/${it.channels}",
+					"a=fmtp:$RTP_AUDIO_PAYLOAD_TYPE streamtype=5;profile-level-id=1;mode=AAC-hbr;sizelength=13;indexlength=3;indexdeltalength=3;config=$config",
+					"a=control:$RTSP_SOUND_TRACK",
+				)
+			}.orEmpty()
+	return (video + sound + "").joinToString("\r\n")
 }
 
 const val RTSP_PORT = 8554
 const val RTSP_PATH = "/camera"
 private const val RTSP_TRACK = "track0"
+private const val RTSP_SOUND_TRACK = "track1"
 private const val MAX_REQUEST = 16 * 1024

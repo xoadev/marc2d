@@ -16,9 +16,22 @@ KEY_PLAYING = "playing"
 KEY_VOLUME = "volume"
 KEY_ADDRESS = "address"
 KEY_CAMERA = "camera"
+KEY_CAMERA_ON = "camera_on"
+KEY_TEMPERATURE = "temperature"
+KEY_OVERHEATING = "overheating"
 KEY_PRESENCE = "presence"
-SENSOR_KEYS = ("light", "battery", "temperature", "charging", KEY_PRESENCE)
-REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING, KEY_VOLUME, KEY_ADDRESS)
+KEY_WIFI_SIGNAL = "wifi_signal"
+KEY_APP_VERSION = "app_version"
+SENSOR_KEYS = (
+    "light",
+    "battery",
+    KEY_TEMPERATURE,
+    "charging",
+    KEY_PRESENCE,
+    KEY_WIFI_SIGNAL,
+    KEY_APP_VERSION,
+)
+REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING, KEY_VOLUME, KEY_ADDRESS, KEY_CAMERA_ON)
 
 DEFAULT_BRIGHTNESS = 100
 

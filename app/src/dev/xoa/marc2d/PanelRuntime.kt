@@ -51,6 +51,9 @@ class PanelRuntime(
 	private val _cameraOn = MutableStateFlow(false)
 	val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
 
+	private val _cameraSound = MutableStateFlow(false)
+	val cameraSound: StateFlow<Boolean> = _cameraSound.asStateFlow()
+
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
@@ -153,13 +156,15 @@ class PanelRuntime(
 	/** The server only listens: it is the first client that turns the camera on. */
 	private suspend fun publishCamera() {
 		store.config
-			.map { it.rtsp?.password }
+			.map { it.rtsp }
 			.distinctUntilChanged()
-			.collectLatest { password ->
-				if (password == null) {
+			.collectLatest { rtsp ->
+				if (rtsp == null) {
 					link.forget(PanelLink.ADDRESS)
+					link.forget(PanelLink.CAMERA_ON)
 					return@collectLatest
 				}
+				link.report(PanelLink.CAMERA_ON, JsonPrimitive(false))
 				coroutineScope {
 					launch {
 						panelAddress(context).collect { address ->
@@ -168,7 +173,17 @@ class PanelRuntime(
 					}
 					while (true) {
 						try {
-							val server = RtspServer(password, camera, onCamera = { _cameraOn.value = it })
+							val server =
+								RtspServer(
+									rtsp.password,
+									camera,
+									onCamera = { on ->
+										_cameraOn.value = on
+										link.report(PanelLink.CAMERA_ON, JsonPrimitive(on))
+									},
+									audio = if (rtsp.audio) PanelMicrophone(context) else null,
+									onSound = { _cameraSound.value = it },
+								)
 							server.onProblem = { Log.w("marc2d", "RTSP client: $it") }
 							withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
 						} catch (e: CancellationException) {
@@ -227,7 +242,12 @@ class PanelRuntime(
 	}
 
 	private suspend fun publishBattery() {
+		val signals = SignalReports()
 		while (true) {
+			readings.appVersion()?.let { reportReading("app_version", JsonPrimitive(it)) }
+			readings.wifiSignal()?.let { signal ->
+				if (signals.shouldReport(signal, config.sensors)) reportReading("wifi_signal", JsonPrimitive(signal))
+			}
 			val battery = readings.battery()
 			if (battery != null) {
 				reportReading("battery", JsonPrimitive(battery.level))

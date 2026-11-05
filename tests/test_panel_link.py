@@ -316,3 +316,68 @@ async def test_a_picture_waits_for_the_camera_to_start(hass, published, hass_ws_
         image = await async_get_image(hass, RTSP)
     assert image.content == b"jpeg"
     assert get_image.await_args.kwargs["wait_for_next_keyframe"] is True
+
+
+async def _connect(hass, entry, hass_ws_client):
+    user = await hass.auth.async_get_user(entry.data["user_id"])
+    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
+    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
+    for _ in range(4):
+        await client.receive_json()
+    return client
+
+
+async def _report(hass, client, message_id: int, **values) -> None:
+    await client.send_json({"id": message_id, "type": "marc2d/state", "values": values})
+    assert (await client.receive_json())["success"] is True
+    await hass.async_block_till_done()
+
+
+async def test_the_camera_on_sensor_follows_the_panel(hass, published, hass_ws_client) -> None:
+    client = await _connect(hass, published, hass_ws_client)
+    await _report(hass, client, 2, camera_on=True)
+    assert hass.states.get("binary_sensor.kitchen_camera_on").state == "on"
+    await _report(hass, client, 3, camera_on=False)
+    assert hass.states.get("binary_sensor.kitchen_camera_on").state == "off"
+
+
+async def test_no_camera_on_sensor_unless_it_is_published(hass, published) -> None:
+    assert hass.states.get("binary_sensor.kitchen_camera_on") is not None
+    hass.config_entries.async_update_entry(
+        published, options={**published.options, "features": {"rtsp": False}}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.kitchen_camera_on") is None
+    assert er.async_get(hass).async_get("binary_sensor.kitchen_camera_on") is None
+
+
+@pytest.mark.parametrize(("temperature", "state"), [(44, "off"), (45, "on"), (50, "on")])
+async def test_overheating_comes_from_the_temperature(hass, panel, temperature, state) -> None:
+    assert hass.states.get("binary_sensor.kitchen_overheating").state == "unknown"
+    await _report(hass, panel, 2, temperature=temperature)
+    assert hass.states.get("binary_sensor.kitchen_overheating").state == state
+
+
+async def test_the_panels_health_becomes_entities(hass, panel) -> None:
+    await _report(hass, panel, 2, wifi_signal=-61, app_version="0.1.0")
+    wifi = hass.states.get("sensor.kitchen_wi_fi_signal")
+    assert wifi.state == "-61"
+    assert wifi.attributes["unit_of_measurement"] == "dBm"
+    assert hass.states.get("sensor.kitchen_app_version").state == "0.1.0"
+    for entity in ("sensor.kitchen_wi_fi_signal", "sensor.kitchen_app_version"):
+        assert er.async_get(hass).async_get(entity).entity_category == "diagnostic"
+
+
+async def test_turning_the_sensors_off_removes_the_health_entities(hass, entry, panel) -> None:
+    assert hass.states.get("binary_sensor.kitchen_overheating") is not None
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "features": {"sensors": False}}
+    )
+    await hass.async_block_till_done()
+    for entity in (
+        "binary_sensor.kitchen_overheating",
+        "sensor.kitchen_wi_fi_signal",
+        "sensor.kitchen_app_version",
+    ):
+        assert er.async_get(hass).async_get(entity) is None

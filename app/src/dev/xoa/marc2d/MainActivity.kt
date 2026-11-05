@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
 					val dark by runtime.dark.collectAsState()
 					val listening by runtime.listening.collectAsState()
 					val cameraOn by runtime.cameraOn.collectAsState()
+					val cameraSound by runtime.cameraSound.collectAsState()
 					val brightness by runtime.brightness.collectAsState()
 					LaunchedEffect(brightness) {
 						brightness?.let { level ->
@@ -171,7 +172,7 @@ class MainActivity : ComponentActivity() {
 							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
-								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark, listening = listening, cameraOn = cameraOn),
+								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark, listening = listening, cameraOn = cameraOn, cameraSound = cameraSound),
 								weather = weather,
 								onOpenMenu = { menuOpen = true },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
