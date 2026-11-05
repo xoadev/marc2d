@@ -62,6 +62,7 @@ class PanelRuntime(
 
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 	private var enrolling: Job? = null
+	private var updating: Job? = null
 	private val ha = HaClient()
 	private val enrollment = EnrollmentClient()
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
@@ -69,6 +70,7 @@ class PanelRuntime(
 	private val link = PanelLink()
 	private val camera = PanelCamera(context)
 	private val presence = LightPresence()
+	private val updater = PanelUpdater(context)
 	private val speaker =
 		PanelSpeaker(
 			context,
@@ -121,6 +123,8 @@ class PanelRuntime(
 		scope.launch { publishCamera() }
 		scope.launch { cameraOn.collect { presence.ignoreChanges(SystemClock.elapsedRealtime()) } }
 		link.report(PanelLink.SIREN, JsonPrimitive(false))
+		readings.appVersion()?.let { link.report(PanelLink.APP_VERSION, JsonPrimitive(it)) }
+		link.report(PanelLink.UPDATING, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
 		scope.launch {
@@ -197,6 +201,30 @@ class PanelRuntime(
 			}
 	}
 
+	/** A new version replaces the process, so success needs no answer: the new one reports again. */
+	private fun update(
+		url: String,
+		sha256: String,
+	) {
+		if (updating?.isActive == true) return
+		updating =
+			scope.launch {
+				link.report(PanelLink.UPDATING, JsonPrimitive(true))
+				try {
+					updater.install(url, sha256)
+				} catch (e: CancellationException) {
+					throw e
+				} catch (e: Exception) {
+					Log.w("marc2d", "Update failed: ${e::class.simpleName}")
+					updateFailed()
+				}
+			}
+	}
+
+	fun updateFailed() {
+		link.report(PanelLink.UPDATING, JsonPrimitive(false))
+	}
+
 	private fun handle(command: HaProtocol.PanelEvent) {
 		when (command) {
 			is HaProtocol.PanelEvent.Siren -> {
@@ -217,6 +245,10 @@ class PanelRuntime(
 
 			HaProtocol.PanelEvent.Stop -> {
 				speaker.stop()
+			}
+
+			is HaProtocol.PanelEvent.Update -> {
+				update(command.url, command.sha256)
 			}
 
 			is HaProtocol.PanelEvent.Volume -> {
@@ -244,7 +276,6 @@ class PanelRuntime(
 	private suspend fun publishBattery() {
 		val signals = SignalReports()
 		while (true) {
-			readings.appVersion()?.let { reportReading("app_version", JsonPrimitive(it)) }
 			readings.wifiSignal()?.let { signal ->
 				if (signals.shouldReport(signal, config.sensors)) reportReading("wifi_signal", JsonPrimitive(signal))
 			}

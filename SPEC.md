@@ -97,7 +97,7 @@ depend on this connection once registered.
 | `sensor.*_battery`             | level, in %           | if it changes, checked every minute    |
 | `binary_sensor.*_overheating`  | battery at 45 °C +    | HA works it out from the temperature   |
 | `sensor.*_wi_fi_signal`        | Wi-Fi signal, in dBm  | if it moves 5 dB, checked every minute |
-| `sensor.*_app_version`         | the app's version     | on each connection                     |
+| `update.*_app`                 | the app's version     | on each connection                     |
 | `sensor.*_battery_temperature` | battery, in °C        | if it changes, checked every minute    |
 | `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
 | `siren.*_siren`                | turns on and off      | on change                              |
@@ -237,6 +237,18 @@ only while it is on, and what a turned-off feature had is kept.
 4. Voice commands.
 5. Publishing the camera.
 
+## Updates
+
+A version is a tag `vX.Y.Z`. The release workflow signs the APK and publishes it as a GitHub release, with its hash and
+the changelog from `convco`, and nothing else: no stores.
+
+HA looks for the latest release every 6 hours and shows `update.*_app`. Pressing **Install** sends the panel the APK's URL
+and hash. The panel downloads it, checks the hash and installs it without asking, as it is the Device Owner, and the app
+starts by itself afterwards. Android only accepts a newer version signed with the same key.
+
+The signing key cannot be replaced: changing it means uninstalling the app, which removes the Device Owner, the enrollment
+and the kiosk. Keep a copy outside GitHub. Panels that run a debug build need that once, to move to the signed one.
+
 ## Home Assistant integration
 
 Our own integration, installable with HACS, in `custom_components/marc2d/`, so that installing marc2d does not require
@@ -257,8 +269,8 @@ a broker or writing YAML. It requires HA 2026.10.
 - Linter: ktlint with the Compose rules, through our own plugin in `plugins/ktlint`, because
   the Toolchain does not include one. detekt stays out while 2.0 is still in alpha. The Toolchain does not
   run Android Lint.
-- SIP with Linphone SDK. It is GPLv3: fine for personal use; distributing it to third parties requires its
-  commercial license.
+- SIP with Linphone SDK, under GPLv3, like marc2d: releases are published with their source. Its commercial license
+  would only be needed to distribute the app under other terms.
 - HA with Ktor Client, OkHttp engine and kotlinx.serialization: WebSocket and JSON over coroutines.
 - Configuration with Jetpack DataStore.
 - Wake phrase with Vosk: it needs no Google services nor training for a new phrase, unlike openWakeWord. Its model is
@@ -270,6 +282,7 @@ a broker or writing YAML. It requires HA 2026.10.
   what we want to avoid, and it comes from a single author on JitPack. Tests run it against the real ffmpeg, which is what
   HA and Frigate use.
 - No messages on the screen: what HA has to say, the panel speaks, through its speaker.
+- Updates with `PackageInstaller` and GitHub releases, without an app store: the panels have no Google services.
 - Audio and screen with the Android APIs, without libraries.
 - The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.

@@ -42,6 +42,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SIREN,
+    Platform.UPDATE,
 ]
 
 

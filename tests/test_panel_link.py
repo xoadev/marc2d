@@ -360,13 +360,13 @@ async def test_overheating_comes_from_the_temperature(hass, panel, temperature, 
 
 
 async def test_the_panels_health_becomes_entities(hass, panel) -> None:
-    await _report(hass, panel, 2, wifi_signal=-61, app_version="0.1.0")
+    await _report(hass, panel, 2, wifi_signal=-61)
     wifi = hass.states.get("sensor.kitchen_wi_fi_signal")
     assert wifi.state == "-61"
     assert wifi.attributes["unit_of_measurement"] == "dBm"
-    assert hass.states.get("sensor.kitchen_app_version").state == "0.1.0"
-    for entity in ("sensor.kitchen_wi_fi_signal", "sensor.kitchen_app_version"):
-        assert er.async_get(hass).async_get(entity).entity_category == "diagnostic"
+    assert (
+        er.async_get(hass).async_get("sensor.kitchen_wi_fi_signal").entity_category == "diagnostic"
+    )
 
 
 async def test_turning_the_sensors_off_removes_the_health_entities(hass, entry, panel) -> None:
@@ -378,6 +378,84 @@ async def test_turning_the_sensors_off_removes_the_health_entities(hass, entry, 
     for entity in (
         "binary_sensor.kitchen_overheating",
         "sensor.kitchen_wi_fi_signal",
-        "sensor.kitchen_app_version",
     ):
         assert er.async_get(hass).async_get(entity) is None
+
+
+APP = "update.kitchen_app"
+RELEASE_API = "https://api.github.com/repos/xoadev/marc2d/releases/latest"
+DOWNLOADS = "https://github.com/xoadev/marc2d/releases/download/v0.2.0"
+APK_HASH = "a" * 64
+
+
+def _mock_release(aioclient_mock, apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> None:
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(
+        RELEASE_API,
+        json={
+            "tag_name": "v0.2.0",
+            "html_url": "https://github.com/xoadev/marc2d/releases/tag/v0.2.0",
+            "assets": [
+                {"name": "marc2d.apk", "browser_download_url": apk_url},
+                {"name": "marc2d.apk.sha256", "browser_download_url": f"{DOWNLOADS}/hash"},
+            ],
+        },
+    )
+    aioclient_mock.get(f"{DOWNLOADS}/hash", text=f"{APK_HASH}  marc2d.apk\n")
+
+
+async def _look_for_updates(hass) -> None:
+    await async_setup_component(hass, "homeassistant", {})
+    await hass.services.async_call(
+        "homeassistant", "update_entity", {"entity_id": APP}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+
+async def test_a_newer_release_is_offered_and_sent_to_the_panel(
+    hass, panel, aioclient_mock
+) -> None:
+    _mock_release(aioclient_mock)
+    await _report(hass, panel, 2, app_version="0.1.0")
+    await _look_for_updates(hass)
+    state = hass.states.get(APP)
+    assert state.state == "on"
+    assert state.attributes["installed_version"] == "0.1.0"
+    assert state.attributes["latest_version"] == "0.2.0"
+    await hass.services.async_call("update", "install", {"entity_id": APP}, blocking=True)
+    assert (await panel.receive_json())["event"] == {
+        "kind": "update",
+        "url": f"{DOWNLOADS}/marc2d.apk",
+        "sha256": APK_HASH,
+    }
+
+
+async def test_the_installed_version_is_not_offered_again(hass, panel, aioclient_mock) -> None:
+    _mock_release(aioclient_mock)
+    await _report(hass, panel, 2, app_version="0.2.0")
+    await _look_for_updates(hass)
+    assert hass.states.get(APP).state == "off"
+
+
+async def test_it_shows_while_the_panel_installs(hass, panel, aioclient_mock) -> None:
+    _mock_release(aioclient_mock)
+    await _report(hass, panel, 2, app_version="0.1.0", updating=True)
+    await _look_for_updates(hass)
+    assert hass.states.get(APP).attributes["in_progress"] is True
+
+
+async def test_an_apk_from_elsewhere_is_not_offered(hass, panel, aioclient_mock) -> None:
+    _mock_release(aioclient_mock, apk_url="https://example.com/marc2d.apk")
+    await _report(hass, panel, 2, app_version="0.1.0")
+    await _look_for_updates(hass)
+    assert hass.states.get(APP).attributes["latest_version"] is None
+
+
+async def test_no_internet_keeps_what_it_knew(hass, panel, aioclient_mock) -> None:
+    _mock_release(aioclient_mock)
+    await _report(hass, panel, 2, app_version="0.1.0")
+    await _look_for_updates(hass)
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(RELEASE_API, exc=TimeoutError())
+    await _look_for_updates(hass)
+    assert hass.states.get(APP).attributes["latest_version"] == "0.2.0"

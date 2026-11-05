@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SENSORS, is_enabled
-from .panel_hub import KEY_APP_VERSION, KEY_WIFI_SIGNAL, get_hub
+from .panel_hub import KEY_WIFI_SIGNAL, get_hub
 
 SENSORS = {
     "light": ("Light", SensorDeviceClass.ILLUMINANCE, LIGHT_LUX),
@@ -41,12 +41,7 @@ async def async_setup_entry(
     """Add the sensors, if they are on."""
     if is_enabled(entry.options, FEATURE_SENSORS):
         hub = get_hub(hass, entry.entry_id)
-        add_entities(
-            [
-                *(PanelSensor(entry, hub, key) for key in SENSORS),
-                PanelAppVersion(entry, hub, KEY_APP_VERSION),
-            ]
-        )
+        add_entities(PanelSensor(entry, hub, key) for key in SENSORS)
 
 
 class PanelSensor(PanelEntity, SensorEntity):
@@ -65,16 +60,4 @@ class PanelSensor(PanelEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the last reading."""
-        return self._hub.values.get(self._key)
-
-
-class PanelAppVersion(PanelEntity, SensorEntity):
-    """Which app the panel runs: it does not always match the integration."""
-
-    _attr_name = "App version"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the version."""
         return self._hub.values.get(self._key)

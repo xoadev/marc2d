@@ -63,6 +63,8 @@ flowchart LR
     hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
     ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
+    ha -- "HTTPS<br/>latest version" --> github["GitHub releases"]
+    svc -- "HTTPS<br/>signed APK" --> github
 ```
 
 | Connection  | Who starts it | What for                                                 |
@@ -70,6 +72,7 @@ flowchart LR
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
 | WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
 | RTSP        | HA or Frigate | reading the video; the camera is only on during it       |
+| HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK   |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
 intercom from reaching the panel.

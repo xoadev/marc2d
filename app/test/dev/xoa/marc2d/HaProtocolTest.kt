@@ -81,6 +81,15 @@ class HaProtocolTest {
 	}
 
 	@Test
+	fun `reads an update, which needs its url and its hash`() {
+		assertEquals(
+			HaProtocol.PanelEvent.Update("https://example.com/a.apk", "abc"),
+			HaProtocol.panelEvent(event("""{"kind":"update","url":"https://example.com/a.apk","sha256":"abc"}""")),
+		)
+		assertEquals(null, HaProtocol.panelEvent(event("""{"kind":"update","url":"https://example.com/a.apk"}""")))
+	}
+
+	@Test
 	fun `reads the brightness`() {
 		assertEquals(HaProtocol.PanelEvent.Brightness(40.0), HaProtocol.panelEvent(event("""{"kind":"brightness","level":40}""")))
 	}

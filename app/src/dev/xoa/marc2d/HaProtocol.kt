@@ -49,6 +49,11 @@ object HaProtocol {
 			val percent: Double,
 		) : PanelEvent
 
+		data class Update(
+			val url: String,
+			val sha256: String,
+		) : PanelEvent
+
 		data class Volume(
 			val level: Double,
 		) : PanelEvent
@@ -314,6 +319,12 @@ object HaProtocol {
 
 			"stop" -> {
 				PanelEvent.Stop
+			}
+
+			"update" -> {
+				val url = text("url")
+				val sha256 = text("sha256")
+				if (url != null && sha256 != null) PanelEvent.Update(url, sha256) else null
 			}
 
 			"volume" -> {

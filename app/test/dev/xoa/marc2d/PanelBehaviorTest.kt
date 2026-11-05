@@ -29,6 +29,26 @@ class PanelReadingsTest {
 	}
 }
 
+class PanelUpdaterTest {
+	private val hello = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+	@Test
+	fun `the copy says whether it is the file it should be`() {
+		val output = java.io.ByteArrayOutputStream()
+		assertTrue(copyVerifying("hello".byteInputStream(), output, hello))
+		assertEquals("hello", output.toString())
+		assertTrue(copyVerifying("hello".byteInputStream(), java.io.ByteArrayOutputStream(), hello.uppercase()))
+		assertFalse(copyVerifying("other".byteInputStream(), java.io.ByteArrayOutputStream(), hello))
+	}
+
+	@Test
+	fun `updates only come over HTTPS`() {
+		assertTrue(isUpdateUrl("https://github.com/xoadev/marc2d/releases/download/v1.0.0/marc2d.apk"))
+		assertFalse(isUpdateUrl("http://192.0.2.1/marc2d.apk"))
+		assertFalse(isUpdateUrl("file:///sdcard/marc2d.apk"))
+	}
+}
+
 class SignalReportsTest {
 	@Test
 	fun `only a real change of Wi-Fi signal is reported`() {
