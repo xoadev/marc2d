@@ -244,8 +244,9 @@ A version comes out when someone runs the release workflow on `main`, by hand, a
 its hash and the changelog, and nothing else: no stores. Without a `feat` or a `fix` since the last one, it stops.
 
 HA looks for the latest release every 6 hours and shows `update.*_app`. Pressing **Install** sends the panel the APK's URL
-and hash. The panel downloads it, checks the hash and installs it without asking, as it is the Device Owner, and the app
-starts by itself afterwards. Android only accepts a newer version signed with the same key.
+and hash. The panel downloads it, checks the hash and installs it, and the app starts by itself afterwards. As the Device
+Owner it does so without asking. Otherwise Android first needs someone to allow installing apps and confirm it on the
+panel, and the dialog stays behind the lock screen. Android only accepts a newer version signed with the same key.
 
 The signing key cannot be replaced: changing it means uninstalling the app, which removes the Device Owner, the enrollment
 and the kiosk. Keep a copy outside GitHub. Panels that run a debug build need that once, to move to the signed one.

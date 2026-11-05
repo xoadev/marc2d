@@ -36,7 +36,7 @@ internal fun copyVerifying(
 /** Android checks the signature, but only the hash says it is the file that HA was told about. */
 internal fun isUpdateUrl(url: String): Boolean = url.startsWith("https://")
 
-/** Installs without asking anyone, as the panel is the Device Owner. Otherwise Android refuses it, and that is reported. */
+/** Installs without asking anyone if the panel is the Device Owner. Otherwise Android asks on its screen. */
 class PanelUpdater(
 	private val context: Context,
 ) {
@@ -90,21 +90,33 @@ class PanelUpdater(
 	}
 }
 
-/** On success this process is gone before it gets here: only what went wrong arrives. */
+/** What Android answers. On success this process is usually gone before it gets here. */
 class UpdateResultReceiver : BroadcastReceiver() {
 	override fun onReceive(
 		context: Context,
 		intent: Intent,
 	) {
-		val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-		if (status != PackageInstaller.STATUS_SUCCESS) {
-			Log.w("marc2d", "Update refused: $status")
-			(context.applicationContext as Marc2dApp).runtime.updateFailed()
+		when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+			PackageInstaller.STATUS_SUCCESS -> {
+				Unit
+			}
+
+			// Not the Device Owner: Android wants someone to confirm it on the panel.
+			PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+				intent
+					.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+					?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+			}
+
+			else -> {
+				Log.w("marc2d", "Update refused: $status")
+				(context.applicationContext as Marc2dApp).runtime.updateFailed()
+			}
 		}
 	}
 }
 
-/** Device Owners can open their screen from here, which is what brings the panel back after an update. */
+/** Brings the panel back after an update: it is the home app, and Android lets it open from this broadcast. */
 class UpdatedReceiver : BroadcastReceiver() {
 	override fun onReceive(
 		context: Context,
