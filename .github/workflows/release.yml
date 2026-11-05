@@ -1,28 +1,29 @@
 name: release
 
-# Publishes the Android app as a GitHub release, on a tag vX.Y.Z: a signed APK, its hash and convco's changelog. No stores.
+# Publishes the Android app as a GitHub release, when someone presses Run workflow on main: convco works out the next
+# version from the commits, and the release gets its tag, a signed APK, its hash and the changelog. No stores.
 # Home Assistant finds it there and offers it to the panels (SPEC.md, Updates).
 #
-# It needs an environment `production` that only admits the tags v*.*.*, so that no other branch can read the key, with:
+# It needs an environment `production` that only admits the branch main, so that no other branch can read the key, with:
 #   SIGNING_KEYSTORE        the keystore, in base64
 #   SIGNING_STORE_PASSWORD
 #   SIGNING_KEY_ALIAS
 #   SIGNING_KEY_PASSWORD
 
 on:
-  push:
-    tags: ['v*.*.*']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Never cut in half, and a run must not overwrite another's files.
+# Two at once would work out the same version.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
   gate:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -40,9 +41,19 @@ jobs:
         with:
           fetch-depth: 0 # convco reads every commit since the last tag
 
-      - name: Changelog
+      - name: Next version
         id: convco
         uses: xoadev/convco-version@e8cf4f03b64bbbb8b2e10cecdab9c99ada457e9c # v1.1.0
+
+      # Only feat and fix make a version: what else there is does not change the app.
+      - name: Check there is something to release
+        env:
+          HAS_CHANGES: ${{ steps.convco.outputs.has-changes }}
+        run: |
+          if [[ "$HAS_CHANGES" != "true" ]]; then
+            echo "::error::No feat or fix since the last version: nothing to release"
+            exit 1
+          fi
 
       - name: Restore the signing key
         env:
@@ -61,24 +72,22 @@ jobs:
 
       # The code only has to grow, and the run number always does. It starts above 1, what debug builds use.
       - name: Build the signed APK
-        run: make release VERSION="${GITHUB_REF_NAME#v}" VERSION_CODE="$((100 + GITHUB_RUN_NUMBER))"
+        env:
+          VERSION: ${{ steps.convco.outputs.next-version }}
+        run: make release VERSION="$VERSION" VERSION_CODE="$((100 + GITHUB_RUN_NUMBER))"
 
       - name: Hash
         working-directory: build
         run: sha256sum marc2d.apk > marc2d.apk.sha256
 
+      # It creates the tag, on the commit just built, and only publishes it once the files are up. A tag created here does
+      # not start other workflows, which is why all of this is one.
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.convco.outputs.next-version-tag }}
           CHANGELOG: ${{ steps.convco.outputs.changelog }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            # A re-run of the same tag.
-            gh release upload "$GITHUB_REF_NAME" build/marc2d.apk build/marc2d.apk.sha256 --clobber
-            gh release edit "$GITHUB_REF_NAME" --notes "$CHANGELOG"
-          else
-            gh release create "$GITHUB_REF_NAME" build/marc2d.apk build/marc2d.apk.sha256 --title "$GITHUB_REF_NAME" --notes "$CHANGELOG"
-          fi
+        run: gh release create "$TAG" build/marc2d.apk build/marc2d.apk.sha256 --target "$GITHUB_SHA" --title "$TAG" --notes "$CHANGELOG"
 
       - name: Remove the signing key
         if: always()

@@ -239,8 +239,9 @@ only while it is on, and what a turned-off feature had is kept.
 
 ## Updates
 
-A version is a tag `vX.Y.Z`. The release workflow signs the APK and publishes it as a GitHub release, with its hash and
-the changelog from `convco`, and nothing else: no stores.
+A version comes out when someone runs the release workflow on `main`, by hand, as each one ends up offered to the panels.
+`convco` works out its number from the commits, and the workflow publishes a GitHub release with its tag, the signed APK,
+its hash and the changelog, and nothing else: no stores. Without a `feat` or a `fix` since the last one, it stops.
 
 HA looks for the latest release every 6 hours and shows `update.*_app`. Pressing **Install** sends the panel the APK's URL
 and hash. The panel downloads it, checks the hash and installs it without asking, as it is the Device Owner, and the app

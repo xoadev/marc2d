@@ -15,7 +15,7 @@ format: app-format integration-format ## Fix the formatting of all the code
 build: ## Build the APK
 	./kotlin build -m app
 
-# It changes module.yaml only while building: the version of a release comes from its tag.
+# It changes module.yaml only while building: the version of a release comes from convco.
 release: ## Build the signed APK: needs VERSION, VERSION_CODE and app/keystore.properties
 	@test -n "$(VERSION)" -a -n "$(VERSION_CODE)" || (echo "VERSION and VERSION_CODE are needed" && exit 1)
 	@test -f app/keystore.properties || (echo "app/keystore.properties is needed" && exit 1)
