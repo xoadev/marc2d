@@ -44,6 +44,10 @@ class HaClient {
 	private var pendingConfig: HaProtocol.ConfigResult? = null
 	private var assist: AssistRun? = null
 	private var assistId = -1
+	private val assistTimer = AssistTimer()
+
+	/** Each step of a voice request, with its time. It reaches the log from outside: this class also runs in plain JVM tests. */
+	var onAssistTiming: (String) -> Unit = {}
 	private var onCommand: (HaProtocol.PanelEvent) -> Unit = {}
 
 	private val client =
@@ -205,6 +209,10 @@ class HaClient {
 			if (frame is Frame.Text) {
 				val message = HaProtocol.parse(frame.readText())
 				if (HaProtocol.id(message) == assistId) {
+					HaProtocol
+						.assistStep(message)
+						?.let { assistTimer.line(it, System.nanoTime() / NANOS_PER_MS) }
+						?.let(onAssistTiming)
 					HaProtocol.assistEvent(message)?.let { handleAssist(it) }
 				}
 				if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == subscription) {
@@ -224,3 +232,5 @@ class HaClient {
 		val REFRESH_INTERVAL = 10.minutes
 	}
 }
+
+private const val NANOS_PER_MS = 1_000_000L

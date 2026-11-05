@@ -169,6 +169,19 @@ object HaProtocol {
 		}
 	}
 
+	/** What a step of a voice request was and, if it failed, its code. Never its content, which is what someone said. */
+	fun assistStep(message: JsonObject): AssistStep? {
+		val event = message["event"] as? JsonObject ?: return null
+		val type = event["type"]?.jsonPrimitive?.contentOrNull ?: return null
+		val code = if (type == "error") (event["data"] as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull else null
+		return AssistStep(type, code)
+	}
+
+	data class AssistStep(
+		val type: String,
+		val code: String? = null,
+	)
+
 	fun panelState(
 		id: Int,
 		values: Map<String, JsonPrimitive>,

@@ -63,7 +63,7 @@ class PanelRuntime(
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 	private var enrolling: Job? = null
 	private var updating: Job? = null
-	private val ha = HaClient()
+	private val ha = HaClient().apply { onAssistTiming = { Log.i("marc2d", it) } }
 	private val enrollment = EnrollmentClient()
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)

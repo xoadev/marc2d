@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class HaProtocolTest {
@@ -208,5 +209,61 @@ class HaProtocolTest {
 		val entries = Json.parseToJsonElement(WakeWord("hola").grammar).jsonArray.map { it.jsonPrimitive.content }
 		assertEquals(1, entries.count { it == "hola" })
 		assertEquals("hola", entries.first())
+	}
+}
+
+class AssistTimerTest {
+	private fun step(
+		type: String,
+		code: String? = null,
+	) = HaProtocol.AssistStep(type, code)
+
+	@Test
+	fun `each step says how long it took, and the total`() {
+		val timer = AssistTimer()
+		assertNull(timer.line(step("run-start"), 1000))
+		assertEquals("Voice: voice ended in 3.2 s, 3.2 s so far", timer.line(step("stt-vad-end"), 4200))
+		assertEquals("Voice: transcribed in 8.0 s, 11.2 s so far", timer.line(step("stt-end"), 12200))
+		assertEquals("Voice: reply ready in 0.5 s, 11.7 s so far", timer.line(step("tts-end"), 12700))
+	}
+
+	@Test
+	fun `steps that say nothing about the time are left out`() {
+		val timer = AssistTimer()
+		timer.line(step("run-start"), 0)
+		assertNull(timer.line(step("stt-start"), 100))
+		assertEquals("Voice: understood in 0.2 s, 0.2 s so far", timer.line(step("intent-end"), 200))
+	}
+
+	@Test
+	fun `a failure gives its code`() {
+		val timer = AssistTimer()
+		timer.line(step("run-start"), 0)
+		assertEquals("Voice: failed in 1.0 s, 1.0 s so far (stt-no-text-recognized)", timer.line(step("error", "stt-no-text-recognized"), 1000))
+	}
+
+	@Test
+	fun `nothing is measured outside a request`() {
+		val timer = AssistTimer()
+		assertNull(timer.line(step("stt-end"), 1000))
+		timer.line(step("run-start"), 0)
+		timer.line(step("run-end"), 100)
+		assertNull(timer.line(step("stt-end"), 200))
+	}
+
+	@Test
+	fun `only the step and its code are read, never what was said`() {
+		val message =
+			Json
+				.parseToJsonElement(
+					"""{"event":{"type":"stt-end","data":{"stt_output":{"text":"abre la puerta"}}}}""",
+				).jsonObject
+		assertEquals(HaProtocol.AssistStep("stt-end"), HaProtocol.assistStep(message))
+		val failed =
+			Json
+				.parseToJsonElement(
+					"""{"event":{"type":"error","data":{"code":"stt-stream-failed","message":"abre la puerta"}}}""",
+				).jsonObject
+		assertEquals(HaProtocol.AssistStep("error", "stt-stream-failed"), HaProtocol.assistStep(failed))
 	}
 }
