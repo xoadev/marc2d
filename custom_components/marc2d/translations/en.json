@@ -85,13 +85,15 @@
       },
       "voice": {
         "title": "Voice commands",
-        "description": "The panel listens for \"Oye Mark\" on the device. Only what follows is sent to Home Assistant. It downloads a 40 MB model the first time, and anyone near the panel can give orders to what is exposed to Assist.",
+        "description": "The panel listens for its wake phrase on the device. Only what follows is sent to Home Assistant. It downloads a 40 MB model the first time, and anyone near the panel can give orders to what is exposed to Assist.",
         "data": {
           "enabled": "On",
-          "pipeline": "Assistant"
+          "pipeline": "Assistant",
+          "wake_phrase": "Wake phrase"
         },
         "data_description": {
-          "pipeline": "Needs speech-to-text. Empty uses the preferred assistant."
+          "pipeline": "Needs speech-to-text. Empty uses the preferred assistant.",
+          "wake_phrase": "Say it alone, with a pause before and after. Short, unusual phrases work best. It has to use words of the panel's Spanish model: with any other word it never reacts. Empty uses jarvis."
         }
       }
     },

@@ -33,7 +33,12 @@ data class PanelConfig(
 @Serializable
 data class VoiceConfig(
 	val pipeline: String? = null,
-)
+	val phrase: String = DEFAULT_PHRASE,
+) {
+	companion object {
+		const val DEFAULT_PHRASE = "jarvis"
+	}
+}
 
 /** Present only if the camera is published. */
 @Serializable

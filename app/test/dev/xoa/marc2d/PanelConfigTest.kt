@@ -22,6 +22,12 @@ class PanelConfigTest {
 	}
 
 	@Test
+	fun `the wake phrase comes from Home Assistant, or is the default`() {
+		assertEquals("oye mark", PanelConfig.fromStored("""{"voice":{"phrase":"oye mark"}}""")?.voice?.phrase)
+		assertEquals(VoiceConfig.DEFAULT_PHRASE, PanelConfig.fromStored("""{"voice":{}}""")?.voice?.phrase)
+	}
+
+	@Test
 	fun `the stream's password arrives and stays out of logs`() {
 		val config = PanelConfig.fromStored("""{"rtsp":{"password":"s3cr3t"}}""")!!
 		assertEquals("s3cr3t", config.rtsp?.password)

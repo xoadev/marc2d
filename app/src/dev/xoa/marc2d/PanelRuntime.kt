@@ -146,7 +146,7 @@ class PanelRuntime(
 				if (config == null) return@collectLatest
 				while (true) {
 					try {
-						voice.run(config.pipeline)
+						voice.run(config.pipeline, config.phrase)
 					} catch (e: CancellationException) {
 						throw e
 					} catch (e: Exception) {

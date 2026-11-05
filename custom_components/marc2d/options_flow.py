@@ -27,7 +27,9 @@ from .panel_config import (
     CONF_PIPELINE,
     CONF_RTSP_AUDIO,
     CONF_RTSP_PASSWORD,
+    CONF_WAKE_PHRASE,
     CONF_WEATHER_ENTITY,
+    DEFAULT_WAKE_PHRASE,
     FEATURE_CAMERAS,
     FEATURE_RTSP,
     FEATURE_SENSORS,
@@ -185,16 +187,19 @@ class Marc2dOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._set_enabled(FEATURE_VOICE, user_input)
             self._options[CONF_PIPELINE] = user_input.get(CONF_PIPELINE)
+            self._options[CONF_WAKE_PHRASE] = user_input.get(CONF_WAKE_PHRASE)
             return self.async_create_entry(data=self._options)
         features = self._options.get(SECTION_FEATURES, {})
         suggested = {
             CONF_ENABLED: features.get(FEATURE_VOICE, False),
             CONF_PIPELINE: self._options.get(CONF_PIPELINE),
+            CONF_WAKE_PHRASE: self._options.get(CONF_WAKE_PHRASE) or DEFAULT_WAKE_PHRASE,
         }
         schema = probatio.Schema(
             {
                 probatio.Required(CONF_ENABLED, default=False): BooleanSelector(),
                 probatio.Optional(CONF_PIPELINE): AssistPipelineSelector(),
+                probatio.Optional(CONF_WAKE_PHRASE): TextSelector(),
             }
         )
         return self.async_show_form(

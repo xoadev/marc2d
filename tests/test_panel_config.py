@@ -269,3 +269,21 @@ async def test_sound_is_chosen_in_the_form_and_off_by_default(hass, entry) -> No
         form["flow_id"], {"enabled": True, "rtsp_audio": True}
     )
     assert build_panel_config(done["data"])["rtsp"]["audio"] is True
+
+
+def test_the_wake_phrase_is_sent_only_if_chosen() -> None:
+    on = {"features": {"voice": True}}
+    assert "phrase" not in build_panel_config(on)["voice"]
+    chosen = {**on, "wake_phrase": "oye mark"}
+    assert build_panel_config(chosen)["voice"]["phrase"] == "oye mark"
+    assert "voice" not in build_panel_config({"wake_phrase": "oye mark"})
+
+
+async def test_the_wake_phrase_is_chosen_in_the_form(hass, entry) -> None:
+    form = await open_page(hass, entry, "voice")
+    field = next(key for key in form["data_schema"].schema if key == "wake_phrase")
+    assert field.description["suggested_value"] == "jarvis"
+    done = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"enabled": True, "wake_phrase": "oye mark"}
+    )
+    assert build_panel_config(done["data"])["voice"]["phrase"] == "oye mark"

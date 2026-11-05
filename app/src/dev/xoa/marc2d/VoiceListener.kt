@@ -31,12 +31,16 @@ class VoiceListener(
 ) {
 	/** Runs until cancelled: cancelling it releases the microphone, as a call needs. */
 	@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
-	suspend fun run(pipeline: String?) =
+	suspend fun run(
+		pipeline: String?,
+		phrase: String,
+	) =
 		withContext(Dispatchers.IO) {
 			model.ensure()
 			val buffer = ByteArray(BUFFER_BYTES)
+			val wakeWord = WakeWord(phrase)
 			Model(model.path.path).use { vosk ->
-				Recognizer(vosk, SAMPLE_RATE.toFloat(), WakeWord.GRAMMAR).use { recognizer ->
+				Recognizer(vosk, SAMPLE_RATE.toFloat(), wakeWord.grammar).use { recognizer ->
 					// Without the words, Vosk does not say how sure it is.
 					recognizer.setWords(true)
 					// Opened last, so that a model that fails to load does not leave it behind on each retry.
@@ -54,7 +58,7 @@ class VoiceListener(
 							currentCoroutineContext().ensureActive()
 							val read = microphoneBytes(record.read(buffer, 0, buffer.size))
 							if (recognizer.acceptWaveForm(buffer, read)) {
-								val confidence = WakeWord.confidence(recognizer.result)
+								val confidence = wakeWord.confidence(recognizer.result)
 								// Only the phrase's number, never what was heard: it is what real voices tell us about the threshold.
 								if (confidence != null) Log.i(TAG, "Wake phrase at $confidence")
 								if (WakeWord.isEnough(confidence)) {

@@ -19,7 +19,7 @@ It's a half-joking personal project, shared in case it's useful to someone.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
 - **Sensors and siren** in Home Assistant: light, battery and a siren on the alarm channel.
 - **A speaker** for `tts.speak` and any other audio from Home Assistant.
-- **Voice commands**, off by default: it listens for "Oye Mark" on the device and sends what follows to Assist.
+- **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what follows to Assist.
 - **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of
   its eye.
 

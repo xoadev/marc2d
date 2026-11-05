@@ -46,7 +46,7 @@ eye color only appears when something matters. When its state changes it stays w
 | Alarm     | yellow                  | HA, with `select.*_state`                    |
 | Sound     | large red lens          | the panel, while it streams the microphone   |
 | Recording | red lens                | HA, or the panel while its camera is on      |
-| Listening | large, with a glint     | the panel, after "Oye Mark"                  |
+| Listening | large, with a glint     | the panel, after the wake phrase             |
 | Offline   | an X                    | the panel, if there is any warning on screen |
 | Sleeping  | closed                  | the panel, below 5 lx                        |
 | Walking   | looks where it is going | the panel, if nothing else applies           |
@@ -122,15 +122,19 @@ other URL is played as it is.
 
 ## Voice commands
 
-Off by default, because it keeps the microphone open. The panel detects "Oye Mark" on the device with Vosk, and audio
+Off by default, because it keeps the microphone open. The panel detects its wake phrase, "jarvis" unless the form says
+otherwise, on the device with Vosk, and audio
 leaves it only after that phrase, to `assist_pipeline/run`. HA transcribes it, runs the assistant chosen in the form and
 returns speech, which the panel plays. The eye shows when it is listening, for up to 10 seconds. A call takes the
 microphone, and listening resumes when it ends. The first time, it downloads a 40 MB model, checked by its hash.
 
 The phrase has to be said alone, with a pause before and after: inside a sentence it is someone talking. Vosk hears only
-what its grammar lists, so with few entries it fits nearly any speech into the phrase. Measured with synthetic Spanish
-voices, the first grammar woke on 15 of 38 other sentences; this one, with common words as decoys and a minimum confidence
-of 0.9, on none of 88, and on all 9 of the phrase. Real voices have yet to be measured: the log gives each one's confidence.
+what its grammar lists, so with few entries it fits nearly any speech into the phrase: the first grammar woke on 15 of 38
+other sentences. The grammar now has general Spanish as decoys, not chosen for one phrase, and needs a confidence of 0.9.
+On 100 other sentences said by synthetic voices, "jarvis" wakes on one, "Harvey", and "oye mark" on none, and both on every
+try of the phrase, "jarvis" also when said "yarvis". Real voices have yet to be measured: the log gives each one's
+confidence. The model only knows its vocabulary, and Android's Vosk cannot ask about a word, so a phrase with any other
+word never wakes. "yarvis" is one of those: write "jarvis".
 
 ## Presence
 
@@ -206,7 +210,7 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "sensors": true,
   "siren": true,
   "speaker": true,
-  "voice": { "pipeline": "01h..." },
+  "voice": { "pipeline": "01h...", "phrase": "jarvis" },
   "rtsp": { "password": "…", "audio": true }
 }
 ```

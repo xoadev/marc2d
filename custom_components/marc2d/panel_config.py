@@ -22,10 +22,12 @@ CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
+CONF_WAKE_PHRASE = "wake_phrase"
 CONF_RTSP_PASSWORD = "rtsp_password"  # noqa: S105 - the name of a form field
 CONF_RTSP_AUDIO = "rtsp_audio"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
+DEFAULT_WAKE_PHRASE = "jarvis"
 
 RTSP_USER = "marc2d"
 RTSP_PORT = 8554
@@ -48,7 +50,9 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     }
     # The only one off by default: it keeps the microphone open.
     if options.get(SECTION_FEATURES, {}).get(FEATURE_VOICE, False):
-        config["voice"] = {key: value for key, value in _pipeline(options).items()}
+        config["voice"] = _pipeline(options)
+        if phrase := options.get(CONF_WAKE_PHRASE):
+            config["voice"]["phrase"] = phrase
     if password := rtsp_password(options):
         config["rtsp"] = {"password": password}
         if options.get(CONF_RTSP_AUDIO, False):
