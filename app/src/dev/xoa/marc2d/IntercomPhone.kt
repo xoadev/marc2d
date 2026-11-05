@@ -61,6 +61,8 @@ class IntercomPhone(
 		Factory.instance().createCore(null, null, context).apply {
 			// The panel has no Google services, and the intercoms do not send push.
 			isPushNotificationEnabled = false
+			// The panel rings by itself, with the phone's ringtone, however the call arrives.
+			isNativeRingingEnabled = true
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -123,6 +125,12 @@ class IntercomPhone(
 		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
 		_call.value = IntercomCall(intercom.name, answered = false)
+		startRinger()
+		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
+	}
+
+	private fun startRinger() {
+		if (ringer != null) return
 		ringer =
 			RingtoneManager
 				.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
@@ -130,7 +138,6 @@ class IntercomPhone(
 					isLooping = true
 					play()
 				}
-		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
 	}
 
 	private fun silence() {
@@ -247,9 +254,12 @@ class IntercomPhone(
 						silence()
 						activeCall = call
 						_call.value = IntercomCall(callName(call), answered = false)
+						// A call can arrive without HA having said anything: it has to ring by itself too.
+						startRinger()
 					}
 
 					Call.State.Connected, Call.State.StreamsRunning -> {
+						silence()
 						activeCall = call
 						dialing = null
 						routeToSpeaker(call)
@@ -258,6 +268,7 @@ class IntercomPhone(
 
 					Call.State.End, Call.State.Error, Call.State.Released -> {
 						if (activeCall == call) {
+							silence()
 							activeCall = null
 							retryOrEnd()
 						}
