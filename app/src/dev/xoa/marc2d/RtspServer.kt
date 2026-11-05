@@ -58,6 +58,8 @@ class RtspServer(
 	private val password: String,
 	private val source: H264Source,
 	private val stopDelay: Duration = STOP_DELAY,
+	/** Whether the camera is on, so that the panel can show it to whoever is in front. */
+	private val onCamera: (Boolean) -> Unit = {},
 ) {
 	private val random = SecureRandom()
 	private val packetizer = H264Packetizer()
@@ -126,7 +128,10 @@ class RtspServer(
 					.start(
 						onFrame = ::deliver,
 						onFailure = { scope.launch { failed() } },
-					).also { parameters = it }
+					).also {
+						parameters = it
+						onCamera(true)
+					}
 			users++
 			current
 		}
@@ -146,7 +151,10 @@ class RtspServer(
 	}
 
 	private fun stopCamera() {
-		if (parameters != null) source.stop()
+		if (parameters != null) {
+			source.stop()
+			onCamera(false)
+		}
 		parameters = null
 	}
 

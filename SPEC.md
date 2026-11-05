@@ -44,7 +44,7 @@ eye color only appears when something matters. When its state changes it stays w
 | --------- | ----------------------- | -------------------------------------------- |
 | Intruder  | red band                | HA, with `select.*_state`                    |
 | Alarm     | yellow                  | HA, with `select.*_state`                    |
-| Recording | red lens                | HA, with `select.*_state`                    |
+| Recording | red lens                | HA, or the panel while its camera is on      |
 | Listening | large, with a glint     | the panel, after "Oye Mark"                  |
 | Offline   | an X                    | the panel, if there is any warning on screen |
 | Sleeping  | closed                  | the panel, below 5 lx                        |
@@ -92,6 +92,7 @@ depend on this connection once registered.
 | Entity                         | Data                  | When it is reported                    |
 | ------------------------------ | --------------------- | -------------------------------------- |
 | `sensor.*_light`               | ambient light, in lux | if it changes by at least 2 lx and 20% |
+| `binary_sensor.*_presence`     | someone seems there   | on change, and 60 s after the last one |
 | `sensor.*_battery`             | level, in %           | if it changes, checked every minute    |
 | `sensor.*_battery_temperature` | battery, in °C        | if it changes, checked every minute    |
 | `binary_sensor.*_charging`     | charging or not       | if it changes, checked every minute    |
@@ -123,7 +124,12 @@ microphone, and listening resumes when it ends. The first time, it downloads a 4
 
 ## Presence
 
-The panel turns the screen on when the presence detector in its room sees someone, and
+The panel guesses that someone is there from sudden changes of light, with the same threshold as `sensor.*_light`, and
+reports it as `binary_sensor.*_presence` for a minute after the last change. It goes with the other sensors. Slow changes,
+such as the sun, do not count, nor does the panel changing its own brightness. It is a guess: it sees nothing in the dark
+or from someone who stays still, and a lamp or a passing cloud can trigger it. What to do with it is decided in HA.
+
+Still to do: the panel turns the screen on when the presence detector in its room sees someone, and
 turns it off when it stops seeing them. The detector is an HA `binary_sensor.*` entity chosen in the
 configuration; the panel does not use its own sensors.
 
@@ -137,6 +143,9 @@ are up to whoever consumes it, in HA or in Frigate, which use the same URL:
 - **On demand:** the panel always listens, and it is the first authenticated client that turns the camera on. It turns
   off 10 seconds after the last one leaves, so that a client that connects twice in a row does not make it blink.
   Anything that watches all the time, such as Frigate, keeps it on, and then the phone's heat has to be watched.
+- **Seen:** whoever is in front has to know. While the camera is on, including those 10 seconds, the screen stays on and
+  the droid shows the Recording state, above anything except an alarm, and the screens without the droid show a red square.
+  HA can still set the brightness to 0.
 - **Password:** RTSP Digest, with the user `marc2d`. The form generates a random password if none is given, and it reaches
   the panel with its configuration.
 - **Address:** the panel reports its IPv4 address and HA follows it. Frigate does not: give the panel a fixed address.

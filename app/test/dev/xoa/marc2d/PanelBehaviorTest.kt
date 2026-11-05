@@ -29,6 +29,74 @@ class PanelReadingsTest {
 	}
 }
 
+class LightPresenceTest {
+	private fun presence(start: Float = 100f) = LightPresence().apply { update(start, START) }
+
+	@Test
+	fun `the first reading is not someone arriving`() {
+		assertEquals(0, presence().remaining(START))
+	}
+
+	@Test
+	fun `a sudden change is someone, for a minute`() {
+		val presence = presence()
+		presence.update(60f, START + 1000)
+		assertEquals(60_000, presence.remaining(START + 1000))
+		assertEquals(10_000, presence.remaining(START + 51_000))
+		assertEquals(0, presence.remaining(START + 61_000))
+	}
+
+	@Test
+	fun `each new change extends it`() {
+		val presence = presence()
+		presence.update(60f, START + 1000)
+		presence.update(100f, START + 31_000)
+		assertEquals(60_000, presence.remaining(START + 31_000))
+	}
+
+	@Test
+	fun `the sensor's small fluctuations are nobody`() {
+		val presence = presence()
+		presence.update(110f, START + 1000)
+		presence.update(95f, START + 2000)
+		assertEquals(0, presence.remaining(START + 2000))
+	}
+
+	@Test
+	fun `the sun moving slowly is nobody`() {
+		val presence = presence()
+		var lux = 100f
+		repeat(120) { minute ->
+			lux *= 1.02f
+			presence.update(lux, START + (minute + 1) * 60_000L)
+		}
+		assertEquals(0, presence.remaining(START + 120 * 60_000L))
+	}
+
+	@Test
+	fun `changes in the dark are too small to tell`() {
+		val presence = presence(1f)
+		presence.update(2.5f, START + 1000)
+		assertEquals(0, presence.remaining(START + 1000))
+	}
+
+	@Test
+	fun `its own screen changing is nobody, and what it left is the new normal`() {
+		val presence = presence()
+		presence.ignoreChanges(START + 1000)
+		presence.update(300f, START + 2000)
+		assertEquals(0, presence.remaining(START + 2000))
+		presence.update(310f, START + 8000)
+		assertEquals(0, presence.remaining(START + 8000))
+		presence.update(100f, START + 9000)
+		assertEquals(60_000, presence.remaining(START + 9000))
+	}
+
+	private companion object {
+		const val START = 1_000_000L
+	}
+}
+
 class VoiceFailuresTest {
 	@Test
 	fun `a microphone error ends the listening instead of repeating`() {
@@ -56,6 +124,13 @@ class DroidMoodTest {
 	fun `what HA commands takes priority`() {
 		assertEquals(DroidMood.Intruder, DroidMoods.resolve(HaMood.Intruder, hasProblem = true, dark = true))
 		assertEquals(DroidMood.Alarm, DroidMoods.resolve(HaMood.Alarm, hasProblem = true, dark = false))
+	}
+
+	@Test
+	fun `the camera being on is always seen, except during an alarm`() {
+		assertEquals(DroidMood.Recording, DroidMoods.resolve(HaMood.Normal, hasProblem = true, dark = true, listening = true, cameraOn = true))
+		assertEquals(DroidMood.Intruder, DroidMoods.resolve(HaMood.Intruder, hasProblem = false, dark = false, cameraOn = true))
+		assertEquals(DroidMood.Alarm, DroidMoods.resolve(HaMood.Alarm, hasProblem = false, dark = false, cameraOn = true))
 	}
 
 	@Test

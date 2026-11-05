@@ -10,6 +10,7 @@ import android.hardware.SensorManager
 import android.os.BatteryManager
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,53 @@ class LightReports {
 		if (!PanelReadings.isSignificant(last, lux)) return false
 		last = lux
 		return true
+	}
+}
+
+/**
+ * Guesses that someone is there from sudden changes of light: a shadow, or a lamp turned on. Slow changes, such as the
+ * sun moving, are followed without noticing them. It cannot see anything in the dark, or someone who stays still.
+ */
+class LightPresence {
+	private var baseline: Float? = null
+	private var lastReading = 0L
+	private var presentUntil = 0L
+	private var ignoredUntil = 0L
+
+	/** The panel's own screen also lights its sensor: without this, an automation that follows presence would feed itself. */
+	fun ignoreChanges(now: Long) {
+		ignoredUntil = now + IGNORE_MS
+	}
+
+	fun update(
+		lux: Float,
+		now: Long,
+	) {
+		val last = baseline
+		when {
+			last == null || now < ignoredUntil -> {
+				baseline = lux
+			}
+
+			PanelReadings.isSignificant(last, lux) -> {
+				presentUntil = now + HOLD_MS
+				baseline = lux
+			}
+
+			else -> {
+				baseline = last + (lux - last) * min(1f, (now - lastReading) / FOLLOW_MS)
+			}
+		}
+		lastReading = now
+	}
+
+	/** How long it will still say that someone is there, in milliseconds. */
+	fun remaining(now: Long): Long = max(0, presentUntil - now)
+
+	private companion object {
+		const val HOLD_MS = 60_000L
+		const val IGNORE_MS = 5_000L
+		const val FOLLOW_MS = 60_000f
 	}
 }
 

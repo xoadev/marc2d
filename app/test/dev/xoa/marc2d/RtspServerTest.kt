@@ -70,10 +70,11 @@ class RtspServerTest {
 
 	private fun withServer(
 		source: H264Source,
+		onCamera: (Boolean) -> Unit = {},
 		body: suspend (Int) -> Unit,
 	) = runBlocking {
 		val port = CompletableDeferred<Int>()
-		val server = RtspServer(PASSWORD, source, stopDelay = 100.milliseconds)
+		val server = RtspServer(PASSWORD, source, stopDelay = 100.milliseconds, onCamera = onCamera)
 		val job = launch(Dispatchers.IO) { server.run(0, port::complete) }
 		try {
 			withTimeout(30.seconds) { body(port.await()) }
@@ -197,6 +198,36 @@ class RtspServerTest {
 			}
 			waitFor { source.stops == 1 }
 			assertEquals(1, source.starts)
+		}
+	}
+
+	@Test
+	fun `it says when the camera is on, for as long as it really is`() {
+		val changes = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+		val source = FakeSource()
+		withServer(source, onCamera = { changes += it }) { port ->
+			RtspClient(port).use { client ->
+				assertEquals(emptyList(), changes.toList())
+				assertEquals(200, client.request("DESCRIBE", nonce = client.challenge()).status)
+				assertEquals(listOf(true), changes.toList())
+			}
+			waitFor { source.stops == 1 }
+			waitFor { changes.size == 2 }
+			assertEquals(listOf(true, false), changes.toList())
+		}
+	}
+
+	@Test
+	fun `a camera that is lost stops saying it is on`() {
+		val changes = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+		val source = FakeSource()
+		withServer(source, onCamera = { changes += it }) { port ->
+			RtspClient(port).use { client ->
+				client.request("DESCRIBE", nonce = client.challenge())
+				source.fail()
+				waitFor { changes.size == 2 }
+			}
+			assertEquals(listOf(true, false), changes.toList())
 		}
 	}
 

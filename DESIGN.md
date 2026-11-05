@@ -65,6 +65,7 @@ or add a word. They are white, and red is reserved for **Hang up**.
 - **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
   opposite **Answer**, so that a double tap does not end the call.
 - **Orientation:** always landscape.
+- **Camera on:** on the main screen the droid says it. The others, where it does not appear, show a red square at the top.
 
 ## Text
 

@@ -1,6 +1,8 @@
 package dev.xoa.marc2d
 
 import android.content.Context
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import java.io.IOException
 import kotlin.math.min
@@ -47,6 +49,9 @@ class PanelRuntime(
 	private val _listening = MutableStateFlow(false)
 	val listening: StateFlow<Boolean> = _listening.asStateFlow()
 
+	private val _cameraOn = MutableStateFlow(false)
+	val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
+
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
@@ -61,6 +66,15 @@ class PanelRuntime(
 	private val readings = PanelReadings(context)
 	private val link = PanelLink()
 	private val camera = PanelCamera(context)
+	private val presence = LightPresence()
+
+	// Deprecated for apps in front, which can use a window flag: this has to wake the screen from a service, with nobody there.
+	@Suppress("DEPRECATION")
+	private val screenOn =
+		context
+			.getSystemService(PowerManager::class.java)
+			.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "marc2d:camera")
+			.apply { setReferenceCounted(false) }
 	private val speaker =
 		PanelSpeaker(
 			context,
@@ -111,6 +125,7 @@ class PanelRuntime(
 		phone.onDoorbellAnswered = link::answer
 		scope.launch { keepListening() }
 		scope.launch { publishCamera() }
+		scope.launch { showCamera() }
 		link.report(PanelLink.SIREN, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
@@ -162,7 +177,7 @@ class PanelRuntime(
 					}
 					while (true) {
 						try {
-							val server = RtspServer(password, camera)
+							val server = RtspServer(password, camera, onCamera = { _cameraOn.value = it })
 							server.onProblem = { Log.w("marc2d", "RTSP client: $it") }
 							withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
 						} catch (e: CancellationException) {
@@ -176,16 +191,52 @@ class PanelRuntime(
 			}
 	}
 
+	/** A dark screen would hide that the camera is on: the droid has to be seen. */
+	private suspend fun showCamera() {
+		cameraOn.collect { on ->
+			presence.ignoreChanges(SystemClock.elapsedRealtime())
+			if (on) {
+				screenOn.acquire()
+			} else if (screenOn.isHeld) {
+				screenOn.release()
+			}
+		}
+	}
+
 	private fun handle(command: HaProtocol.PanelEvent) {
 		when (command) {
-			is HaProtocol.PanelEvent.Siren -> if (config.siren) siren.set(command.on)
-			is HaProtocol.PanelEvent.Mood -> HaMood.fromLabel(command.value)?.let { _haMood.value = it }
-			is HaProtocol.PanelEvent.Doorbell -> phone.doorbell(command.intercom, command.payload)
-			is HaProtocol.PanelEvent.Play -> if (config.speaker) speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
-			HaProtocol.PanelEvent.Stop -> speaker.stop()
-			is HaProtocol.PanelEvent.Volume -> speaker.setVolume(command.level)
-			is HaProtocol.PanelEvent.Brightness -> _brightness.value = (command.percent / 100).toFloat()
-			is HaProtocol.PanelEvent.Config -> Unit
+			is HaProtocol.PanelEvent.Siren -> {
+				if (config.siren) siren.set(command.on)
+			}
+
+			is HaProtocol.PanelEvent.Mood -> {
+				HaMood.fromLabel(command.value)?.let { _haMood.value = it }
+			}
+
+			is HaProtocol.PanelEvent.Doorbell -> {
+				phone.doorbell(command.intercom, command.payload)
+			}
+
+			is HaProtocol.PanelEvent.Play -> {
+				if (config.speaker) speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
+			}
+
+			HaProtocol.PanelEvent.Stop -> {
+				speaker.stop()
+			}
+
+			is HaProtocol.PanelEvent.Volume -> {
+				speaker.setVolume(command.level)
+			}
+
+			is HaProtocol.PanelEvent.Brightness -> {
+				presence.ignoreChanges(SystemClock.elapsedRealtime())
+				_brightness.value = (command.percent / 100).toFloat()
+			}
+
+			is HaProtocol.PanelEvent.Config -> {
+				Unit
+			}
 		}
 	}
 
@@ -210,9 +261,18 @@ class PanelRuntime(
 
 	private suspend fun publishLight() {
 		val reports = LightReports()
-		readings.light().collect { lux ->
+		// Latest: a new reading replaces the wait, which the new reading works out again.
+		readings.light().collectLatest { lux ->
 			_dark.value = lux < DARK_LUX
 			if (reports.shouldReport(lux, config.sensors)) reportReading("light", JsonPrimitive(lux.roundToInt()))
+			val now = SystemClock.elapsedRealtime()
+			presence.update(lux, now)
+			val remaining = presence.remaining(now)
+			reportReading("presence", JsonPrimitive(remaining > 0))
+			if (remaining > 0) {
+				delay(remaining)
+				reportReading("presence", JsonPrimitive(false))
+			}
 		}
 	}
 

@@ -52,6 +52,6 @@ class PanelLink {
 		const val PLAYING = "playing"
 		const val VOLUME = "volume"
 		const val ADDRESS = "address"
-		val SENSORS = listOf("light", "battery", "temperature", "charging")
+		val SENSORS = listOf("light", "battery", "temperature", "charging", "presence")
 	}
 }

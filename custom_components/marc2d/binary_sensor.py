@@ -1,4 +1,4 @@
-"""Whether the panel is charging."""
+"""Whether the panel is charging, and whether it thinks someone is in front."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SENSORS, is_enabled
-from .panel_hub import get_hub
+from .panel_hub import KEY_PRESENCE, get_hub
 
 
 async def async_setup_entry(
@@ -17,7 +17,10 @@ async def async_setup_entry(
 ) -> None:
     """Add the sensor, if the sensors are on."""
     if is_enabled(entry.options, FEATURE_SENSORS):
-        add_entities([PanelCharging(entry, get_hub(hass, entry.entry_id), "charging")])
+        hub = get_hub(hass, entry.entry_id)
+        add_entities(
+            [PanelCharging(entry, hub, "charging"), PanelPresence(entry, hub, KEY_PRESENCE)]
+        )
 
 
 class PanelCharging(PanelEntity, BinarySensorEntity):
@@ -25,6 +28,18 @@ class PanelCharging(PanelEntity, BinarySensorEntity):
 
     _attr_name = "Charging"
     _attr_device_class = BinarySensorDeviceClass.BATTERY_CHARGING
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the last reading."""
+        return self._hub.values.get(self._key)
+
+
+class PanelPresence(PanelEntity, BinarySensorEntity):
+    """A guess from sudden changes of light: it cannot see in the dark, or someone still."""
+
+    _attr_name = "Presence"
+    _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
 
     @property
     def is_on(self) -> bool | None:

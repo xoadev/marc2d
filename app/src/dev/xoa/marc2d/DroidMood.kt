@@ -25,14 +25,22 @@ object DroidMoods {
 		hasProblem: Boolean,
 		dark: Boolean,
 		listening: Boolean = false,
+		cameraOn: Boolean = false,
 	): DroidMood =
 		when {
 			ha == HaMood.Intruder -> DroidMood.Intruder
+
 			ha == HaMood.Alarm -> DroidMood.Alarm
-			ha == HaMood.Recording -> DroidMood.Recording
+
+			// Whoever is in front has to know, whatever else the panel would like to say.
+			ha == HaMood.Recording || cameraOn -> DroidMood.Recording
+
 			listening -> DroidMood.Listening
+
 			hasProblem -> DroidMood.Offline
+
 			dark -> DroidMood.Sleeping
+
 			else -> DroidMood.Walking
 		}
 }

@@ -16,7 +16,8 @@ KEY_PLAYING = "playing"
 KEY_VOLUME = "volume"
 KEY_ADDRESS = "address"
 KEY_CAMERA = "camera"
-SENSOR_KEYS = ("light", "battery", "temperature", "charging")
+KEY_PRESENCE = "presence"
+SENSOR_KEYS = ("light", "battery", "temperature", "charging", KEY_PRESENCE)
 REPORTED_KEYS = (*SENSOR_KEYS, KEY_SIREN, KEY_PLAYING, KEY_VOLUME, KEY_ADDRESS)
 
 DEFAULT_BRIGHTNESS = 100

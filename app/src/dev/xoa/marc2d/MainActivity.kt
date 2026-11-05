@@ -13,9 +13,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,7 +29,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
@@ -60,6 +70,7 @@ class MainActivity : ComponentActivity() {
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
 					val listening by runtime.listening.collectAsState()
+					val cameraOn by runtime.cameraOn.collectAsState()
 					val brightness by runtime.brightness.collectAsState()
 					LaunchedEffect(brightness) {
 						brightness?.let { level ->
@@ -160,13 +171,16 @@ class MainActivity : ComponentActivity() {
 							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
-								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark, listening = listening),
+								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark, listening = listening, cameraOn = cameraOn),
 								weather = weather,
 								onOpenMenu = { menuOpen = true },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
 						}
 					}
+					// The droid says it on the main screen: nothing fixed there, as the OLED would keep it.
+					val onMainScreen = activeCall == null && !camerasOpen && !scanOpen && !settingsOpen && !needsSetup && !menuOpen
+					if (cameraOn && !onMainScreen) RecordingMark()
 				}
 			}
 		}
@@ -213,5 +227,19 @@ class MainActivity : ComponentActivity() {
 			hide(WindowInsets.Type.systemBars())
 			systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 		}
+	}
+}
+
+/** The camera is on, on the screens where the droid is not. */
+@Composable
+private fun RecordingMark() {
+	Box(Modifier.fillMaxSize()) {
+		Box(
+			Modifier
+				.align(Alignment.TopCenter)
+				.padding(top = 8.dp)
+				.size(16.dp)
+				.background(Color(0xFFE02020)),
+		)
 	}
 }

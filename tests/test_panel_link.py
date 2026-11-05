@@ -75,6 +75,20 @@ async def test_readings_become_entities(hass, panel) -> None:
     assert hass.states.get("binary_sensor.kitchen_charging").state == "on"
 
 
+async def test_presence_follows_the_panel(hass, panel) -> None:
+    presence = "binary_sensor.kitchen_presence"
+    assert hass.states.get(presence).state == "unknown"
+    await panel.send_json({"id": 2, "type": "marc2d/state", "values": {"presence": True}})
+    await panel.receive_json()
+    await hass.async_block_till_done()
+    assert hass.states.get(presence).state == "on"
+    assert hass.states.get(presence).attributes["device_class"] == "occupancy"
+    await panel.send_json({"id": 3, "type": "marc2d/state", "values": {"presence": False}})
+    await panel.receive_json()
+    await hass.async_block_till_done()
+    assert hass.states.get(presence).state == "off"
+
+
 async def test_closing_the_connection_makes_it_unavailable(hass, panel) -> None:
     assert hass.states.get(LIGHT).state == "unknown"
     await panel.close()
