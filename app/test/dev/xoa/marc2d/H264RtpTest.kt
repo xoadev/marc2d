@@ -1,11 +1,23 @@
 package dev.xoa.marc2d
 
+import android.view.Surface
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+class FrameTurnTest {
+	/** The first version turned them the other way, and a panel in landscape saw the house upside down. */
+	@Test
+	fun `frames turn against the panel`() {
+		assertEquals(0f, frameTurn(Surface.ROTATION_0))
+		assertEquals(270f, frameTurn(Surface.ROTATION_90))
+		assertEquals(180f, frameTurn(Surface.ROTATION_180))
+		assertEquals(90f, frameTurn(Surface.ROTATION_270))
+	}
+}
 
 class H264RtpTest {
 	private fun frame(vararg units: ByteArray) = H264Frame(units.fold(ByteArray(0)) { all, unit -> all + byteArrayOf(0, 0, 0, 1) + unit }, 1_000_000, true)

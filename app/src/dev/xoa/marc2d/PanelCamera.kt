@@ -19,6 +19,7 @@ import android.media.MediaFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.PowerManager
 import android.util.Range
 import android.view.Display
 import android.view.Surface
@@ -30,6 +31,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
@@ -38,6 +40,14 @@ class PanelCamera(
 	private val context: Context,
 ) : H264Source {
 	@Volatile private var session: Session? = null
+	private val power = context.getSystemService(PowerManager::class.java)
+
+	// Deprecated for apps in front, which can use a window flag: this has to wake the screen from a service, with nobody there.
+	@Suppress("DEPRECATION")
+	private val screenOn =
+		power
+			.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "marc2d:camera")
+			.apply { setReferenceCounted(false) }
 
 	override suspend fun start(
 		onFrame: (H264Frame) -> Unit,
@@ -46,9 +56,14 @@ class PanelCamera(
 		if (context.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
 			throw IOException("No camera permission")
 		}
-		val started = Session(context, onFrame, onFailure)
-		session = started
+		// A dark screen would hide that the camera is on. Waking it first also gives the real rotation: asleep, Android reports
+		// the natural one, and the video would stay sideways for as long as it lasts.
+		val wasOff = !power.isInteractive
+		screenOn.acquire()
 		try {
+			if (wasOff) delay(ROTATION_SETTLES)
+			val started = Session(context, onFrame, onFailure)
+			session = started
 			return withTimeout(START_TIMEOUT) { started.open() }
 		} catch (e: TimeoutCancellationException) {
 			stop()
@@ -70,6 +85,7 @@ class PanelCamera(
 	override fun stop() {
 		session?.close()
 		session = null
+		if (screenOn.isHeld) screenOn.release()
 	}
 
 	private class Session(
@@ -107,7 +123,7 @@ class PanelCamera(
 			inputSurface = surface
 			codec.start()
 
-			val cameraSurface = onHandler { RotatingRenderer(surface, width, height, rotation, handler).also { renderer = it }.cameraSurface }
+			val cameraSurface = onHandler { RotatingRenderer(surface, width, height, rotation, handler, ::fail).also { renderer = it }.cameraSurface }
 			val device = openCamera(manager, id)
 			camera = device
 			capture = createSession(device, cameraSurface)
@@ -285,6 +301,7 @@ class PanelCamera(
 		fun close() {
 			handler.post {
 				closed = true
+				renderer?.stopDrawing()
 				// The errors from here on only say that something was already closing.
 				runCatching { capture?.close() }
 				runCatching { camera?.close() }
@@ -299,6 +316,7 @@ class PanelCamera(
 
 	private companion object {
 		val START_TIMEOUT = 8.seconds
+		val ROTATION_SETTLES = 2.seconds
 		const val LONG_SIDE = 1280
 		const val SHORT_SIDE = 720
 		const val BITRATE = 2_000_000
@@ -307,6 +325,18 @@ class PanelCamera(
 	}
 }
 
+/**
+ * How much to turn the frames so that they are upright with the panel turned by [rotation], in OpenGL's counterclockwise
+ * degrees. It undoes the panel's turn, so it goes clockwise. Measured on a Pixel 3a, against its accelerometer.
+ */
+internal fun frameTurn(rotation: Int): Float =
+	when (rotation) {
+		Surface.ROTATION_90 -> 270f
+		Surface.ROTATION_180 -> 180f
+		Surface.ROTATION_270 -> 90f
+		else -> 0f
+	}
+
 /** RTSP has no rotation flag, as a video file does: frames have to be drawn already turned to match the panel. */
 private class RotatingRenderer(
 	encoderSurface: Surface,
@@ -314,20 +344,16 @@ private class RotatingRenderer(
 	private val height: Int,
 	rotation: Int,
 	handler: Handler,
+	private val onError: (Exception) -> Unit,
 ) {
 	private val gl = EglEncoderSurface(encoderSurface)
 	private val texture = gl.createExternalTexture()
 	private val surfaceTexture = SurfaceTexture(texture)
 	private val program = gl.createProgram()
 	private val transform = FloatArray(16)
-	private val degrees =
-		when (rotation) {
-			Surface.ROTATION_90 -> 90f
-			Surface.ROTATION_180 -> 180f
-			Surface.ROTATION_270 -> 270f
-			else -> 0f
-		}
+	private val degrees = frameTurn(rotation)
 	private var lastFrameNs = 0L
+	private var closed = false
 
 	val cameraSurface = Surface(surfaceTexture)
 
@@ -337,7 +363,18 @@ private class RotatingRenderer(
 		surfaceTexture.setOnFrameAvailableListener({ draw() }, handler)
 	}
 
+	/** On this thread an exception would take the whole panel down, intercom included. */
 	private fun draw() {
+		if (closed) return
+		try {
+			drawFrame()
+		} catch (e: RuntimeException) {
+			// Android raises it for a frame still arriving when the camera closes.
+			if (!closed) onError(e)
+		}
+	}
+
+	private fun drawFrame() {
 		surfaceTexture.updateTexImage()
 		val time = surfaceTexture.timestamp
 		// Sensors may only offer more than the frames we want, and the encoder would spend on them.
@@ -347,8 +384,14 @@ private class RotatingRenderer(
 		gl.draw(program, texture, transform, degrees, width, height, time)
 	}
 
-	fun close() {
+	/** Before closing the camera: from then on, what it still has on the way is not a problem. */
+	fun stopDrawing() {
+		closed = true
 		surfaceTexture.setOnFrameAvailableListener(null)
+	}
+
+	fun close() {
+		stopDrawing()
 		cameraSurface.release()
 		surfaceTexture.release()
 		gl.release()

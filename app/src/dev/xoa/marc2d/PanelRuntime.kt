@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import java.io.IOException
@@ -67,14 +66,6 @@ class PanelRuntime(
 	private val link = PanelLink()
 	private val camera = PanelCamera(context)
 	private val presence = LightPresence()
-
-	// Deprecated for apps in front, which can use a window flag: this has to wake the screen from a service, with nobody there.
-	@Suppress("DEPRECATION")
-	private val screenOn =
-		context
-			.getSystemService(PowerManager::class.java)
-			.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "marc2d:camera")
-			.apply { setReferenceCounted(false) }
 	private val speaker =
 		PanelSpeaker(
 			context,
@@ -125,7 +116,7 @@ class PanelRuntime(
 		phone.onDoorbellAnswered = link::answer
 		scope.launch { keepListening() }
 		scope.launch { publishCamera() }
-		scope.launch { showCamera() }
+		scope.launch { cameraOn.collect { presence.ignoreChanges(SystemClock.elapsedRealtime()) } }
 		link.report(PanelLink.SIREN, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
@@ -189,18 +180,6 @@ class PanelRuntime(
 					}
 				}
 			}
-	}
-
-	/** A dark screen would hide that the camera is on: the droid has to be seen. */
-	private suspend fun showCamera() {
-		cameraOn.collect { on ->
-			presence.ignoreChanges(SystemClock.elapsedRealtime())
-			if (on) {
-				screenOn.acquire()
-			} else if (screenOn.isHeld) {
-				screenOn.release()
-			}
-		}
 	}
 
 	private fun handle(command: HaProtocol.PanelEvent) {
