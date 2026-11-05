@@ -14,6 +14,7 @@ FEATURE_SENSORS = "sensors"
 FEATURE_SIREN = "siren"
 FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
+FEATURE_RTSP = "rtsp"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
@@ -21,8 +22,13 @@ CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
+CONF_RTSP_PASSWORD = "rtsp_password"  # noqa: S105 - the name of a form field
 
 DEFAULT_INTERCOM_NUMBER = "8001"
+
+RTSP_USER = "marc2d"
+RTSP_PORT = 8554
+RTSP_PATH = "/camera"
 
 
 def is_enabled(options: Mapping[str, Any], feature: str) -> bool:
@@ -42,6 +48,8 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     # The only one off by default: it keeps the microphone open.
     if options.get(SECTION_FEATURES, {}).get(FEATURE_VOICE, False):
         config["voice"] = {key: value for key, value in _pipeline(options).items()}
+    if password := rtsp_password(options):
+        config["rtsp"] = {"password": password}
     if is_enabled(options, FEATURE_SIP):
         config["intercoms"] = [
             {
@@ -64,6 +72,13 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
         config["weather"] = weather
     return config
+
+
+def rtsp_password(options: Mapping[str, Any]) -> str | None:
+    """The stream's password, only if published: off by default, it is a camera in a home."""
+    if not options.get(SECTION_FEATURES, {}).get(FEATURE_RTSP, False):
+        return None
+    return options.get(CONF_RTSP_PASSWORD) or None
 
 
 def _pipeline(options: Mapping[str, Any]) -> dict[str, str]:

@@ -220,3 +220,34 @@ async def test_voice_page_saves(hass, entry) -> None:
     assert keys["enabled"] == {"suggested_value": False}
     done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": True})
     assert build_panel_config(done["data"])["voice"] == {}
+
+
+def test_the_camera_is_not_published_by_default() -> None:
+    assert "rtsp" not in build_panel_config(OPTIONS)
+    assert "rtsp" not in build_panel_config({**OPTIONS, "rtsp_password": "kept"})
+    on = {**OPTIONS, "features": {"rtsp": True}, "rtsp_password": "s3cr3t"}
+    assert build_panel_config(on)["rtsp"] == {"password": "s3cr3t"}
+
+
+async def test_publishing_generates_a_password_and_keeps_it(hass, entry) -> None:
+    form = await open_page(hass, entry, "rtsp")
+    assert "PASSWORD" in form["description_placeholders"]["url"]
+    done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": True})
+    assert done["type"] == "create_entry"
+    password = done["data"]["rtsp_password"]
+    assert len(password) >= 24
+    assert done["data"]["features"]["rtsp"] is True
+
+    form = await open_page(hass, entry, "rtsp")
+    assert password not in form["description_placeholders"]["url"]
+    done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": False})
+    assert done["data"]["rtsp_password"] == password
+    assert "rtsp" not in build_panel_config(done["data"])
+
+
+async def test_publishing_with_a_chosen_password(hass, entry) -> None:
+    form = await open_page(hass, entry, "rtsp")
+    done = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"enabled": True, "rtsp_password": "chosen"}
+    )
+    assert build_panel_config(done["data"])["rtsp"] == {"password": "chosen"}

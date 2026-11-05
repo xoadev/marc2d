@@ -3,7 +3,7 @@
   "name": "marc2d",
   "codeowners": ["@xoadev"],
   "config_flow": true,
-  "dependencies": ["http", "media_source", "websocket_api"],
+  "dependencies": ["camera", "http", "media_source", "stream", "websocket_api"],
   "documentation": "https://github.com/xoadev/marc2d",
   "integration_type": "device",
   "iot_class": "local_push",

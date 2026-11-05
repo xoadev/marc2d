@@ -17,9 +17,11 @@ from .panel_config import (
     FEATURE_SPEAKER,
     doorbell_buttons,
     is_enabled,
+    rtsp_password,
 )
 from .panel_hub import (
     DOORBELL_RING,
+    KEY_CAMERA,
     KEY_PLAYING,
     KEY_SIREN,
     SENSOR_KEYS,
@@ -32,6 +34,7 @@ from .websocket import CONF_USER_ID, async_register, config_event
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS = [
     Platform.BINARY_SENSOR,
+    Platform.CAMERA,
     Platform.MEDIA_PLAYER,
     Platform.NUMBER,
     Platform.SELECT,
@@ -79,6 +82,8 @@ def _remove_turned_off_entities(hass: HomeAssistant, entry: ConfigEntry) -> None
         off.add(KEY_SIREN)
     if not is_enabled(entry.options, FEATURE_SPEAKER):
         off.add(KEY_PLAYING)
+    if not rtsp_password(entry.options):
+        off.add(KEY_CAMERA)
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.unique_id.removeprefix(f"{entry.entry_id}_") in off:

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,11 +22,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 
 /** Connects the panel's pieces. It lives as long as the process; the service only keeps it running. */
 class PanelRuntime(
-	context: Context,
+	private val context: Context,
 ) {
 	val store = PanelStore(context)
 	val phone by lazy { IntercomPhone(context) }
@@ -58,6 +60,7 @@ class PanelRuntime(
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
 	private val link = PanelLink()
+	private val camera = PanelCamera(context)
 	private val speaker =
 		PanelSpeaker(
 			context,
@@ -107,6 +110,7 @@ class PanelRuntime(
 		}
 		phone.onDoorbellAnswered = link::answer
 		scope.launch { keepListening() }
+		scope.launch { publishCamera() }
 		link.report(PanelLink.SIREN, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
@@ -136,6 +140,38 @@ class PanelRuntime(
 						Log.w("marc2d", "Voice stopped: ${e::class.simpleName}")
 					}
 					delay(VOICE_RETRY)
+				}
+			}
+	}
+
+	/** The server only listens: it is the first client that turns the camera on. */
+	private suspend fun publishCamera() {
+		store.config
+			.map { it.rtsp?.password }
+			.distinctUntilChanged()
+			.collectLatest { password ->
+				if (password == null) {
+					link.forget(PanelLink.ADDRESS)
+					return@collectLatest
+				}
+				coroutineScope {
+					launch {
+						panelAddress(context).collect { address ->
+							if (address == null) link.forget(PanelLink.ADDRESS) else link.report(PanelLink.ADDRESS, JsonPrimitive(address))
+						}
+					}
+					while (true) {
+						try {
+							val server = RtspServer(password, camera)
+							server.onProblem = { Log.w("marc2d", "RTSP client: $it") }
+							withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
+						} catch (e: CancellationException) {
+							throw e
+						} catch (e: IOException) {
+							Log.w("marc2d", "RTSP server stopped: ${e::class.simpleName}")
+						}
+						delay(RTSP_RETRY)
+					}
 				}
 			}
 	}
@@ -215,6 +251,7 @@ class PanelRuntime(
 	private companion object {
 		const val DARK_LUX = 5f
 		val VOICE_RETRY = 60.seconds
+		val RTSP_RETRY = 30.seconds
 		const val ENROLL_ATTEMPTS = 3
 		val ENROLL_RETRY = 2.seconds
 		val BATTERY_INTERVAL = 1.minutes

@@ -4,8 +4,10 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
+from homeassistant.components.camera import async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
 INTERCOM = {
@@ -215,3 +217,69 @@ async def test_brightness_reaches_the_panel(hass, panel) -> None:
         blocking=True,
     )
     assert (await panel.receive_json())["event"] == {"kind": "brightness", "level": 40}
+
+
+RTSP = "camera.kitchen_camera"
+
+
+@pytest.fixture
+async def published(hass, entry):
+    """The same panel, publishing its camera."""
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "features": {"rtsp": True},
+            "rtsp_password": "p@ss/word",
+        },
+    )
+    await hass.async_block_till_done()
+    return entry
+
+
+async def _report_address(hass, panel, address: str, message_id: int = 90) -> None:
+    await panel.send_json(
+        {"id": message_id, "type": "marc2d/state", "values": {"address": address}}
+    )
+    await panel.receive_json()
+    await hass.async_block_till_done()
+
+
+async def test_no_camera_unless_it_is_published(hass, panel) -> None:
+    assert hass.states.get(RTSP) is None
+
+
+async def test_turning_it_off_removes_the_camera(hass, published) -> None:
+    assert hass.states.get(RTSP) is not None
+    hass.config_entries.async_update_entry(
+        published, options={**published.options, "features": {"rtsp": False}}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(RTSP) is None
+    assert er.async_get(hass).async_get(RTSP) is None
+
+
+async def test_the_camera_needs_the_panel_and_its_address(hass, published, hass_ws_client) -> None:
+    assert hass.states.get(RTSP).state == "unavailable"
+    user = await hass.auth.async_get_user(published.data["user_id"])
+    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
+    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
+    assert (await client.receive_json())["success"] is True
+    config = (await client.receive_json())["event"]["config"]
+    assert config["rtsp"] == {"password": "p@ss/word"}
+    await client.receive_json()
+    await client.receive_json()
+    await hass.async_block_till_done()
+    assert hass.states.get(RTSP).state == "unavailable"
+
+    await _report_address(hass, client, "192.0.2.20")
+    assert hass.states.get(RTSP).state != "unavailable"
+    source = await async_get_stream_source(hass, RTSP)
+    assert source == "rtsp://marc2d:p%40ss%2Fword@192.0.2.20:8554/camera"
+
+    await _report_address(hass, client, "192.0.2.21", 91)
+    assert "192.0.2.21" in await async_get_stream_source(hass, RTSP)
+
+    await _report_address(hass, client, "not an address@evil", 92)
+    assert hass.states.get(RTSP).state == "unavailable"

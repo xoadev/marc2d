@@ -70,6 +70,17 @@
           "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
         }
       },
+      "rtsp": {
+        "title": "Publish the camera",
+        "description": "Creates a camera entity in Home Assistant. The panel's camera is only on while something is watching: Frigate or anything that records keeps it on all the time. Anyone on the home network who has the password can see it. Others, such as Frigate, connect to `{url}`, so give the panel a fixed address.",
+        "data": {
+          "enabled": "On",
+          "rtsp_password": "Password"
+        },
+        "data_description": {
+          "rtsp_password": "Leave it empty to generate one. The user is always marc2d."
+        }
+      },
       "voice": {
         "title": "Voice commands",
         "description": "The panel listens for \"Oye Mark\" on the device. Only what follows is sent to Home Assistant. It downloads a 40 MB model the first time, and anyone near the panel can give orders to what is exposed to Assist.",

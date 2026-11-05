@@ -22,6 +22,14 @@ class PanelConfigTest {
 	}
 
 	@Test
+	fun `the stream's password arrives and stays out of logs`() {
+		val config = PanelConfig.fromStored("""{"rtsp":{"password":"s3cr3t"}}""")!!
+		assertEquals("s3cr3t", config.rtsp?.password)
+		assertFalse("s3cr3t" in config.toString())
+		assertNull(PanelConfig().rtsp)
+	}
+
+	@Test
 	fun `the password does not appear in logs`() {
 		assertFalse("s3cr3t" in intercom.toString())
 		assertFalse("s3cr3t" in PanelConfig(listOf(intercom)).toString())

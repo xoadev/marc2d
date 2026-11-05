@@ -41,7 +41,7 @@ class Kiosk(
 			},
 			ComponentName(activity, MainActivity::class.java),
 		)
-		listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS).forEach {
+		listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.CAMERA).forEach {
 			policies.setPermissionGrantState(admin, activity.packageName, it, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
 		}
 

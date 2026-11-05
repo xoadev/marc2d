@@ -51,6 +51,7 @@ class PanelLink {
 		const val SIREN = "siren"
 		const val PLAYING = "playing"
 		const val VOLUME = "volume"
+		const val ADDRESS = "address"
 		val SENSORS = listOf("light", "battery", "temperature", "charging")
 	}
 }

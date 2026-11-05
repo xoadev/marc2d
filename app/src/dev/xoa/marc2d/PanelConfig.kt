@@ -13,6 +13,7 @@ data class PanelConfig(
 	val siren: Boolean = true,
 	val speaker: Boolean = true,
 	val voice: VoiceConfig? = null,
+	val rtsp: RtspConfig? = null,
 ) {
 	companion object {
 		// A version of the app may have stored fields that this one no longer has.
@@ -33,6 +34,14 @@ data class PanelConfig(
 data class VoiceConfig(
 	val pipeline: String? = null,
 )
+
+/** Present only if the camera is published. */
+@Serializable
+data class RtspConfig(
+	val password: String,
+) {
+	override fun toString(): String = "RtspConfig"
+}
 
 @Serializable
 data class CameraConfig(

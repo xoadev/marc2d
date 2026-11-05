@@ -61,6 +61,7 @@ flowchart LR
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
     hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
+    ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
 ```
 
@@ -68,7 +69,7 @@ flowchart LR
 | ----------- | ------------- | -------------------------------------------------------- |
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
 | WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
-| RTSP        | Frigate       | reading the video from the panel's camera                |
+| RTSP        | HA or Frigate | reading the video; the camera is only on during it       |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
 intercom from reaching the panel.
@@ -76,7 +77,7 @@ intercom from reaching the panel.
 ## Stack
 
 Kotlin and Jetpack Compose on Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
-DataStore, Vosk, CameraX and ZXing, with RootEncoder and RTSP-Server planned for the camera. The reasons are in
+DataStore, Vosk, CameraX and ZXing, with our own small RTSP server for the camera. The reasons are in
 [SPEC.md](SPEC.md#decisions).
 
 ## Development

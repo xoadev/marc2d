@@ -99,6 +99,7 @@ depend on this connection once registered.
 | `select.*_state`               | droid state           | on change, decided by HA               |
 | `media_player.*_speaker`       | playing or idle       | on change                              |
 | `number.*_screen_brightness`   | brightness, in %      | decided by HA, sent on each connection |
+| `camera.*_camera`              | the panel's camera    | if published, while someone watches    |
 
 The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
 identify it by its user.
@@ -128,10 +129,21 @@ configuration; the panel does not use its own sensors.
 
 ## Camera
 
-The panel can publish its camera as an RTSP stream on the home network, to be consumed by Frigate or
-a similar system. It is disabled by default and enabled in the configuration. The panel only publishes the
-video: detection and recording are up to whoever consumes it. Stream authentication is still to be
-decided.
+The panel can publish its camera as an RTSP stream on the home network, and HA gets a `camera.*_camera` entity from it.
+It is off by default and turned on in the panel's form. The panel only publishes the video: detection and recording
+are up to whoever consumes it, in HA or in Frigate, which use the same URL:
+`rtsp://marc2d:<password>@<panel>:8554/camera`.
+
+- **On demand:** the panel always listens, and it is the first authenticated client that turns the camera on. It turns
+  off 10 seconds after the last one leaves, so that a client that connects twice in a row does not make it blink.
+  Anything that watches all the time, such as Frigate, keeps it on, and then the phone's heat has to be watched.
+- **Password:** RTSP Digest, with the user `marc2d`. The form generates a random password if none is given, and it reaches
+  the panel with its configuration.
+- **Address:** the panel reports its IPv4 address and HA follows it. Frigate does not: give the panel a fixed address.
+- **Pictures:** HA takes them from the stream, so a card turns the camera on while it is on screen.
+- **Video:** H.264 from the front camera, 15 fps at 2 Mbps, 720p, without audio and turned to match the panel when the
+  stream starts. Only RTP over the RTSP connection: other clients than HA and Frigate may need to ask for TCP.
+- The camera can only have one owner: scanning a QR code takes it, and clients are disconnected and retry.
 
 ## Device
 
@@ -143,8 +155,8 @@ decided.
   **Allow network access** in its Android settings.
 - When plugged in, Android does not enter Doze: the foreground service is enough not to miss calls.
 - The app is the home screen and starts by itself when the phone is turned on, with no screen lock. It is
-  the app that launches the service, of type `microphone`: Android 15 does not allow that type to start from
-  `BOOT_COMPLETED`. The service reconnects to HA and the intercoms by itself.
+  the app that launches the service, of type `microphone` and `camera`: Android 15 does not allow those types to start
+  from `BOOT_COMPLETED`. The service reconnects to HA and the intercoms by itself.
 - Kiosk mode: the app is the Device Owner and uses Lock Task, so you cannot leave for other apps.
   From the configuration you can open the Android settings, and the kiosk comes back on
   return, or leave it completely.
@@ -173,7 +185,8 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "sensors": true,
   "siren": true,
   "speaker": true,
-  "voice": { "pipeline": "01h..." }
+  "voice": { "pipeline": "01h..." },
+  "rtsp": { "password": "…" }
 }
 ```
 
@@ -190,6 +203,7 @@ only while it is on, and what a turned-off feature had is kept.
 | Siren    | HA deletes the entity and the panel ignores the command      |
 | Speaker  | HA deletes the entity and the panel ignores the audio        |
 | Voice    | no voice is sent: the panel does not open the microphone     |
+| Publish  | no password is sent: the panel stops, HA deletes the entity  |
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
@@ -197,8 +211,7 @@ only while it is on, and what a turned-off feature had is kept.
   way. Administrators can see them in the form, masked.
 - It is kept in the app's private storage, along with the connection, and never in the repo: the
   panel keeps handling calls even if HA is down.
-- The presence detector and camera publishing will be added to this response in their
-  deliveries.
+- The presence detector will be added to this response in its delivery.
 
 ## Delivery order
 
@@ -236,8 +249,10 @@ a broker or writing YAML. It requires HA 2026.10.
   downloaded, not committed.
 - QR codes with CameraX and ZXing core: ML Kit depends on Google services, and CameraX spares us the camera
   lifecycle.
-- RTSP with RootEncoder and RTSP-Server. They are maintained, but by a single author and published on
-  JitPack: the camera is optional and sits behind an interface so they can be replaced.
+- RTSP with our own small server and the Android APIs (Camera2, MediaCodec, OpenGL), without libraries. RTSP-Server does
+  not open its port until the encoder has produced the stream's parameters, so it needs the camera always on, which is
+  what we want to avoid, and it comes from a single author on JitPack. Tests run it against the real ffmpeg, which is what
+  HA and Frigate use.
 - Audio and screen with the Android APIs, without libraries.
 - The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.

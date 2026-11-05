@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 import probatio
@@ -14,14 +15,20 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
     ObjectSelector,
     ObjectSelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
+from .camera import panel_address, stream_url
 from .panel_config import (
     CONF_CAMERAS,
     CONF_INTERCOMS,
     CONF_PIPELINE,
+    CONF_RTSP_PASSWORD,
     CONF_WEATHER_ENTITY,
     FEATURE_CAMERAS,
+    FEATURE_RTSP,
     FEATURE_SENSORS,
     FEATURE_SIP,
     FEATURE_SIREN,
@@ -31,6 +38,7 @@ from .panel_config import (
     SECTION_FEATURES,
     is_enabled,
 )
+from .panel_hub import get_hub
 
 CONF_ENABLED = "enabled"
 # Forms cannot show fields depending on another: each feature gets a page, in any order.
@@ -41,6 +49,7 @@ MENU = {
     "weather": "Weather",
     "entities": "Sensors, siren and speaker",
     "voice": "Voice commands",
+    "rtsp": "Publish the camera",
 }
 
 
@@ -190,6 +199,35 @@ class Marc2dOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="voice",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
+        )
+
+    async def async_step_rtsp(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Publishing the camera: off until someone turns it on, and always with a password."""
+        if user_input is not None:
+            self._set_enabled(FEATURE_RTSP, user_input)
+            self._options[CONF_RTSP_PASSWORD] = user_input.get(CONF_RTSP_PASSWORD) or (
+                self._options.get(CONF_RTSP_PASSWORD) or secrets.token_urlsafe(24)
+            )
+            return self.async_create_entry(data=self._options)
+        features = self._options.get(SECTION_FEATURES, {})
+        suggested = {
+            CONF_ENABLED: features.get(FEATURE_RTSP, False),
+            CONF_RTSP_PASSWORD: self._options.get(CONF_RTSP_PASSWORD),
+        }
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_ENABLED, default=False): BooleanSelector(),
+                probatio.Optional(CONF_RTSP_PASSWORD): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+            }
+        )
+        # The placeholder and not the password: this text is not masked, the field below is.
+        address = panel_address(get_hub(self.hass, self.config_entry.entry_id)) or "PANEL_ADDRESS"
+        return self.async_show_form(
+            step_id="rtsp",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            description_placeholders={"url": stream_url(address, "PASSWORD")},
         )
 
     def _set_enabled(self, feature: str, user_input: dict[str, Any]) -> None:
