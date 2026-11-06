@@ -47,6 +47,7 @@ eye color only appears when something matters. When its state changes it stays w
 | Sound     | large red lens          | the panel, while it streams the microphone   |
 | Recording | red lens                | HA, or the panel while its camera is on      |
 | Listening | large, with a glint     | the panel, after the wake phrase             |
+| Thinking  | a glint going round     | the panel, until the answer starts sounding  |
 | Offline   | an X                    | the panel, if there is any warning on screen |
 | Sleeping  | closed                  | the panel, below 5 lx                        |
 | Walking   | looks where it is going | the panel, if nothing else applies           |

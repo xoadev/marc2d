@@ -220,6 +220,13 @@ class DroidMoodTest {
 	}
 
 	@Test
+	fun `between listening and answering it shows it is thinking`() {
+		assertEquals(DroidMood.Thinking, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = true, thinking = true))
+		assertEquals(DroidMood.Listening, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, listening = true, thinking = true))
+		assertEquals(DroidMood.Recording, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, cameraOn = true, thinking = true))
+	}
+
+	@Test
 	fun `sound has its own eye, but only with the camera on`() {
 		assertEquals(DroidMood.RecordingSound, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, cameraOn = true, cameraSound = true))
 		assertEquals(DroidMood.Walking, DroidMoods.resolve(HaMood.Normal, hasProblem = false, dark = false, cameraSound = true))

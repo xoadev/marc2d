@@ -16,12 +16,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
@@ -48,6 +50,16 @@ class PanelRuntime(
 	private val _listening = MutableStateFlow(false)
 	val listening: StateFlow<Boolean> = _listening.asStateFlow()
 
+	private val assistActive = MutableStateFlow(false)
+	private val speaking = MutableStateFlow(false)
+	private var assistEnd: Job? = null
+
+	/** From the end of what was said until the answer sounds: the wait that would otherwise look like nothing happening. */
+	val thinking: StateFlow<Boolean> by lazy {
+		combine(assistActive, _listening, speaking) { active, listening, playing -> active && !listening && !playing }
+			.stateIn(scope, SharingStarted.Eagerly, false)
+	}
+
 	private val _cameraOn = MutableStateFlow(false)
 	val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
 
@@ -63,7 +75,11 @@ class PanelRuntime(
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 	private var enrolling: Job? = null
 	private var updating: Job? = null
-	private val ha = HaClient().apply { onAssistTiming = { Log.i("marc2d", it) } }
+	private val ha =
+		HaClient().apply {
+			onAssistTiming = { Log.i("marc2d", it) }
+			onAssistActive = ::assistChanged
+		}
 	private val enrollment = EnrollmentClient()
 	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
@@ -75,7 +91,11 @@ class PanelRuntime(
 		PanelSpeaker(
 			context,
 			scope,
-			{ link.report(PanelLink.PLAYING, JsonPrimitive(it)) },
+			{ playing ->
+				speaking.value = playing
+				if (playing) assistActive.value = false
+				link.report(PanelLink.PLAYING, JsonPrimitive(playing))
+			},
 			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
 		)
 	private val voice = VoiceListener(VoiceModel(context.noBackupFilesDir), link::requestAssist) { _listening.value = it }
@@ -221,6 +241,20 @@ class PanelRuntime(
 			}
 	}
 
+	/**
+	 * The request ends a moment before its answer starts sounding, so it waits a little for it. A connection lost halfway
+	 * sends no end, hence the limit.
+	 */
+	private fun assistChanged(active: Boolean) {
+		assistEnd?.cancel()
+		if (active) assistActive.value = true
+		assistEnd =
+			scope.launch {
+				delay(if (active) MAX_ASSIST else ANSWER_GRACE)
+				assistActive.value = false
+			}
+	}
+
 	fun updateFailed() {
 		link.report(PanelLink.UPDATING, JsonPrimitive(false))
 	}
@@ -342,6 +376,8 @@ class PanelRuntime(
 		const val DARK_LUX = 5f
 		val VOICE_RETRY = 60.seconds
 		val RTSP_RETRY = 30.seconds
+		val MAX_ASSIST = 30.seconds
+		val ANSWER_GRACE = 3.seconds
 		const val ENROLL_ATTEMPTS = 3
 		val ENROLL_RETRY = 2.seconds
 		val BATTERY_INTERVAL = 1.minutes

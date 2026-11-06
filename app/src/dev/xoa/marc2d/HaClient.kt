@@ -48,6 +48,9 @@ class HaClient {
 
 	/** Each step of a voice request, with its time. It reaches the log from outside: this class also runs in plain JVM tests. */
 	var onAssistTiming: (String) -> Unit = {}
+
+	/** Whether a voice request is under way, from its start to its end, for the droid to show it is working on it. */
+	var onAssistActive: (Boolean) -> Unit = {}
 	private var onCommand: (HaProtocol.PanelEvent) -> Unit = {}
 
 	private val client =
@@ -101,6 +104,7 @@ class HaClient {
 		val run = assist ?: return
 		when (event) {
 			is HaProtocol.AssistEvent.Started -> {
+				onAssistActive(true)
 				launch {
 					for (chunk in run.audio) send(Frame.Binary(true, byteArrayOf(event.audioHandler) + chunk))
 					// The handler alone tells HA that the audio has ended.
@@ -118,6 +122,7 @@ class HaClient {
 
 			HaProtocol.AssistEvent.Ended -> {
 				run.onStopListening()
+				onAssistActive(false)
 				assist = null
 			}
 		}

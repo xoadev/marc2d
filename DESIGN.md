@@ -48,6 +48,7 @@ The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 | Recording | lens with a red center                      | blinks           |
 | Sound     | large lens with a wide red center           | blinks           |
 | Listening | large, with a glint                         | blinks           |
+| Thinking  | large, with a glint going round its corners | still            |
 
 ## Buttons
 

@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
 					val listening by runtime.listening.collectAsState()
+					val thinking by runtime.thinking.collectAsState()
 					val cameraOn by runtime.cameraOn.collectAsState()
 					val cameraSound by runtime.cameraSound.collectAsState()
 					val brightness by runtime.brightness.collectAsState()
@@ -172,7 +173,16 @@ class MainActivity : ComponentActivity() {
 							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
-								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark, listening = listening, cameraOn = cameraOn, cameraSound = cameraSound),
+								droid =
+									DroidMoods.resolve(
+										haMood,
+										hasProblem = warning != null,
+										dark = dark,
+										listening = listening,
+										cameraOn = cameraOn,
+										cameraSound = cameraSound,
+										thinking = thinking,
+									),
 								weather = weather,
 								onOpenMenu = { menuOpen = true },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
