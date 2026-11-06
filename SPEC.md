@@ -138,7 +138,8 @@ returns speech, which the panel plays. The eye shows when it is listening, for u
 microphone, and listening resumes when it ends. The first time, it downloads a 40 MB model, checked by its hash.
 
 Vosk only confirms the phrase after about a second of silence, and the request may have started by then: the panel keeps
-the last 2 seconds it heard and sends Home Assistant what came after the phrase, as Vosk tells when it ended.
+the last 2 seconds it heard and sends Home Assistant what came after the phrase, as Vosk tells when it ended. The request
+goes four times louder: from across the room the voice arrived at about -30 dBFS, and Whisper made up words from it.
 
 The phrase has to be said alone, with a pause before and after: inside a sentence it is someone talking. Vosk hears only
 what its grammar lists, so with few entries it fits nearly any speech into the phrase: the first grammar woke on 15 of 38

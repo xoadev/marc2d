@@ -299,3 +299,18 @@ class AudioHistoryTest {
 		assertContentEquals(bytes(18..24), history.since(17))
 	}
 }
+
+class AmplifyTest {
+	@Test
+	fun `raises the voice, in little-endian`() {
+		// -13 and 100, as the microphone gives them.
+		val quiet = byteArrayOf(0xF3.toByte(), 0xFF.toByte(), 100, 0)
+		assertContentEquals(byteArrayOf(0xCC.toByte(), 0xFF.toByte(), 0x90.toByte(), 0x01), amplify(quiet, 4))
+	}
+
+	@Test
+	fun `a loud sound stays at the top instead of wrapping round`() {
+		val loud = byteArrayOf(0x00, 0x40, 0x00, 0xC0.toByte())
+		assertContentEquals(byteArrayOf(0xFF.toByte(), 0x7F, 0x00, 0x80.toByte()), amplify(loud, 4))
+	}
+}

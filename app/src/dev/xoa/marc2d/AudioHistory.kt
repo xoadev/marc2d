@@ -29,3 +29,21 @@ class AudioHistory(
 		return ByteArray((total - from).toInt()) { ring[((from + it) % capacity).toInt()] }
 	}
 }
+
+/**
+ * Raises little-endian 16-bit audio by [gain], without wrapping around at the top. From across the room the panel's
+ * microphone gave the voice at about -30 dBFS, and Whisper made up words from it.
+ */
+fun amplify(
+	audio: ByteArray,
+	gain: Int,
+): ByteArray {
+	val out = ByteArray(audio.size)
+	for (i in 0 until audio.size - 1 step 2) {
+		val sample = ((audio[i + 1].toInt() shl 8) or (audio[i].toInt() and 0xFF)) * gain
+		val clamped = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+		out[i] = clamped.toByte()
+		out[i + 1] = (clamped shr 8).toByte()
+	}
+	return out
+}

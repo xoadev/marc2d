@@ -88,7 +88,7 @@ class VoiceListener(
 	) {
 		val audio = Channel<ByteArray>(Channel.UNLIMITED)
 		// What was said while Vosk waited for the silence that confirms the phrase.
-		if (already.isNotEmpty()) audio.trySend(already)
+		if (already.isNotEmpty()) audio.trySend(amplify(already, REQUEST_GAIN))
 		val finished = Channel<Unit>(Channel.CONFLATED)
 		onListening(true)
 		onWake(AssistRun(pipeline, audio, onStopListening = { finished.trySend(Unit) }))
@@ -96,7 +96,7 @@ class VoiceListener(
 		try {
 			while (started.elapsedNow() < MAX_REQUEST && finished.tryReceive().isFailure) {
 				currentCoroutineContext().ensureActive()
-				audio.trySend(buffer.copyOf(microphoneBytes(record.read(buffer, 0, buffer.size))))
+				audio.trySend(amplify(buffer.copyOf(microphoneBytes(record.read(buffer, 0, buffer.size))), REQUEST_GAIN))
 			}
 		} catch (e: CancellationException) {
 			throw e
@@ -111,6 +111,10 @@ class VoiceListener(
 		const val SAMPLE_RATE = 16_000
 		const val BUFFER_BYTES = 3_200
 		const val BYTES_PER_SAMPLE = 2
+
+		// Only for what goes to Assist: the wake phrase was measured as it comes. Four times, 12 dB, takes the voice from about
+		// -30 to -18 dBFS, and the room's noise stays well below it.
+		const val REQUEST_GAIN = 4
 
 		// Vosk confirms the phrase about a second after it ends: twice that is kept.
 		const val HISTORY_BYTES = SAMPLE_RATE * BYTES_PER_SAMPLE * 2
