@@ -137,6 +137,9 @@ leaves it only after that phrase, to `assist_pipeline/run`. HA transcribes it, r
 returns speech, which the panel plays. The eye shows when it is listening, for up to 10 seconds. A call takes the
 microphone, and listening resumes when it ends. The first time, it downloads a 40 MB model, checked by its hash.
 
+Vosk only confirms the phrase after about a second of silence, and the request may have started by then: the panel keeps
+the last 2 seconds it heard and sends Home Assistant what came after the phrase, as Vosk tells when it ended.
+
 The phrase has to be said alone, with a pause before and after: inside a sentence it is someone talking. Vosk hears only
 what its grammar lists, so with few entries it fits nearly any speech into the phrase: the first grammar woke on 15 of 38
 other sentences. The grammar now has general Spanish as decoys, not chosen for one phrase, and needs a confidence of 0.9.

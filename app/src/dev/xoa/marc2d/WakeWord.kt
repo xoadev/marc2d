@@ -44,6 +44,21 @@ class WakeWord(
 				}
 		}.getOrNull()
 
+	/** When the phrase ended, in seconds since the recognizer started: what comes after it is the request. */
+	fun end(result: String): Double? =
+		runCatching {
+			val json = Json.parseToJsonElement(result).jsonObject
+			if (json["text"]?.jsonPrimitive?.content != phrase) return null
+			json
+				.getValue("result")
+				.jsonArray
+				.last()
+				.jsonObject
+				.getValue("end")
+				.jsonPrimitive
+				.double
+		}.getOrNull()
+
 	companion object {
 		private const val MIN_CONFIDENCE = 0.9
 		private val NOT_IN_A_WORD = Regex("[^\\p{L}\\p{N} ]")

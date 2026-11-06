@@ -2,6 +2,7 @@ package dev.xoa.marc2d
 
 import java.time.Instant
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -182,6 +183,14 @@ class HaProtocolTest {
 	}
 
 	@Test
+	fun `knows when the phrase ended`() {
+		val wake = WakeWord("jarvis")
+		assertEquals(1.47, wake.end("""{"result":[{"conf":1.0,"word":"jarvis","start":0.6,"end":1.47}],"text":"jarvis"}"""))
+		assertEquals(null, wake.end("""{"result":[{"conf":1.0,"word":"hola","end":1.0}],"text":"hola"}"""))
+		assertEquals(null, wake.end("""{"result":[{"conf":1.0,"word":"jarvis"}],"text":"jarvis"}"""))
+	}
+
+	@Test
 	fun `the phrase can have several words, and the least clear one counts`() {
 		val wake = WakeWord("oye mark")
 		assertEquals(0.5, wake.confidence("""{"result":[{"conf":1.0,"word":"oye"},{"conf":0.5,"word":"mark"}],"text":"oye mark"}"""))
@@ -265,5 +274,28 @@ class AssistTimerTest {
 					"""{"event":{"type":"error","data":{"code":"stt-stream-failed","message":"abre la puerta"}}}""",
 				).jsonObject
 		assertEquals(HaProtocol.AssistStep("error", "stt-stream-failed"), HaProtocol.assistStep(failed))
+	}
+}
+
+class AudioHistoryTest {
+	private fun bytes(range: IntRange) = ByteArray(range.count()) { (range.first + it).toByte() }
+
+	/** Measured with the panel's model: "jarvis" ended at 1.47 s and was confirmed at 2.4 s, after "qué" had started. */
+	@Test
+	fun `gives back what came after a moment`() {
+		val history = AudioHistory(100)
+		history.add(bytes(0..39), 40)
+		history.add(bytes(40..59), 20)
+		assertEquals(60, history.total)
+		assertContentEquals(bytes(50..59), history.since(50))
+		assertContentEquals(ByteArray(0), history.since(60))
+	}
+
+	@Test
+	fun `only as much as it keeps, and always whole samples`() {
+		val history = AudioHistory(10)
+		history.add(bytes(0..24), 25)
+		assertContentEquals(bytes(16..24), history.since(0))
+		assertContentEquals(bytes(18..24), history.since(17))
 	}
 }
