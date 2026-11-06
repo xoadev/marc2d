@@ -74,10 +74,20 @@ class RtspServerTest {
 		onCamera: (Boolean) -> Unit = {},
 		audio: AacSource? = null,
 		onSound: (Boolean) -> Unit = {},
+		handshakeTimeout: kotlin.time.Duration = 5.seconds,
 		body: suspend (Int) -> Unit,
 	) = runBlocking {
 		val port = CompletableDeferred<Int>()
-		val server = RtspServer(PASSWORD, source, stopDelay = 100.milliseconds, onCamera = onCamera, audio = audio, onSound = onSound)
+		val server =
+			RtspServer(
+				PASSWORD,
+				source,
+				stopDelay = 100.milliseconds,
+				onCamera = onCamera,
+				audio = audio,
+				onSound = onSound,
+				handshakeTimeout = handshakeTimeout,
+			)
 		val job = launch(Dispatchers.IO) { server.run(0, port::complete) }
 		try {
 			withTimeout(30.seconds) { body(port.await()) }
@@ -219,6 +229,51 @@ class RtspServerTest {
 			}
 			delay(200.milliseconds)
 			assertEquals(0, source.starts)
+		}
+	}
+
+	@Test
+	fun `three wrong passwords end the connection`() {
+		withServer(FakeSource()) { port ->
+			RtspClient(port).use { client ->
+				val nonce = client.challenge()
+				assertEquals(401, client.request("DESCRIBE", password = "wrong1", nonce = nonce).status)
+				assertEquals(401, client.request("DESCRIBE", password = "wrong2", nonce = nonce).status)
+				assertEquals(401, client.request("DESCRIBE", password = "wrong3", nonce = nonce).status)
+				val closed =
+					withContext(Dispatchers.IO) {
+						try {
+							client.request("OPTIONS")
+							false
+						} catch (_: Exception) {
+							true
+						}
+					}
+				assertTrue(closed)
+			}
+		}
+	}
+
+	@Test
+	fun `a connection without the password does not keep its place`() {
+		withServer(FakeSource(), handshakeTimeout = 300.milliseconds) { port ->
+			Socket("127.0.0.1", port).use { socket ->
+				withContext(Dispatchers.IO) {
+					socket.soTimeout = 5000
+					assertEquals(-1, socket.getInputStream().read())
+				}
+			}
+		}
+	}
+
+	@Test
+	fun `once it has the password, a slow client keeps its connection`() {
+		withServer(FakeSource(), handshakeTimeout = 300.milliseconds) { port ->
+			RtspClient(port).use { client ->
+				assertEquals(200, client.request("DESCRIBE", nonce = client.challenge()).status)
+				delay(600.milliseconds)
+				assertEquals(200, client.request("OPTIONS").status)
+			}
 		}
 	}
 

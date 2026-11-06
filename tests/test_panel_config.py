@@ -287,3 +287,12 @@ async def test_the_wake_phrase_is_chosen_in_the_form(hass, entry) -> None:
         form["flow_id"], {"enabled": True, "wake_phrase": "oye mark"}
     )
     assert build_panel_config(done["data"])["voice"]["phrase"] == "oye mark"
+
+
+async def test_a_short_password_is_refused(hass, entry) -> None:
+    form = await open_page(hass, entry, "rtsp")
+    refused = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"enabled": True, "rtsp_password": "short"}
+    )
+    assert refused["type"] == "form"
+    assert refused["errors"] == {"rtsp_password": "too_short"}

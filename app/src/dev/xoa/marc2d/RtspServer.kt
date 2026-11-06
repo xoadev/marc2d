@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -75,6 +76,8 @@ class RtspServer(
 	private val audio: AacSource? = null,
 	/** Whether the microphone is being sent, as the panel shows that differently. */
 	private val onSound: (Boolean) -> Unit = {},
+	/** How long a connection may stay without a correct password: past it, it only takes a place. */
+	private val handshakeTimeout: Duration = HANDSHAKE_TIMEOUT,
 ) {
 	private val random = SecureRandom()
 	private val packetizer = H264Packetizer()
@@ -143,15 +146,24 @@ class RtspServer(
 			stopping?.cancel()
 			stopping = null
 			val current =
-				parameters ?: source
-					.start(
-						onFrame = ::deliver,
-						onFailure = { scope.launch { failed() } },
-					).also {
-						parameters = it
-						onCamera(true)
-						startSound(scope)
-					}
+				parameters ?: coroutineScope {
+					// At the same time: one after the other, a cold start could miss the time HA gives a picture.
+					val sound = async { startSound(scope) }
+					try {
+						source
+							.start(
+								onFrame = ::deliver,
+								onFailure = { scope.launch { failed() } },
+							).also {
+								parameters = it
+								onCamera(true)
+							}
+					} catch (e: Throwable) {
+						sound.await()
+						stopSound()
+						throw e
+					}.also { sound.await() }
+				}
 			users++
 			current
 		}
@@ -251,11 +263,15 @@ class RtspServer(
 		@Volatile private var soundChannel: Int? = null
 		private var acquired = false
 		private var playing = false
-		private var sawKeyFrame = false
+		private var authorized = false
+		private var failures = 0
+
+		// Read by the camera's and the microphone's threads.
+		@Volatile private var sawKeyFrame = false
 
 		suspend fun serve() {
 			try {
-				socket.soTimeout = HANDSHAKE_TIMEOUT
+				socket.soTimeout = handshakeTimeout.inWholeMilliseconds.toInt()
 				val input = BufferedInputStream(socket.getInputStream())
 				coroutineScope {
 					val watcher = launch { closeOnCancel(socket) }
@@ -355,8 +371,17 @@ class RtspServer(
 				return true
 			}
 			if (!isAuthorized(request)) {
+				if (request.headers["authorization"] != null) {
+					// A wrong password, not the first request that asks for one: each costs time, and a few end the connection.
+					failures++
+					delay(FAILURE_DELAY)
+				}
 				respond(UNAUTHORIZED, cseq, listOf("WWW-Authenticate" to "Digest realm=\"$REALM\", nonce=\"$nonce\""))
-				return true
+				return failures < MAX_FAILURES
+			}
+			if (!authorized) {
+				authorized = true
+				socket.soTimeout = SESSION_READ_TIMEOUT
 			}
 			if (!request.isForTheCamera()) {
 				respond(NOT_FOUND, cseq)
@@ -534,7 +559,10 @@ class RtspServer(
 		// About 4 seconds, counting the frames of both tracks.
 		private const val MAX_QUEUED_FRAMES = 120
 		private const val DEFAULT_SOUND_CHANNEL = 2
-		private const val HANDSHAKE_TIMEOUT = 30_000
+		private const val SESSION_READ_TIMEOUT = 30_000
+		private const val MAX_FAILURES = 3
+		private val FAILURE_DELAY = 1.seconds
+		private val HANDSHAKE_TIMEOUT = 5.seconds
 		private const val SESSION_TIMEOUT_SECONDS = 60
 
 		/** Clients often connect twice in a row to look at the stream first: the camera should not blink between them. */

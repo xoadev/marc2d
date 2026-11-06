@@ -36,7 +36,7 @@ internal fun copyVerifying(
 /** Android checks the signature, but only the hash says it is the file that HA was told about. */
 internal fun isUpdateUrl(url: String): Boolean = url.startsWith("https://")
 
-/** Installs without asking anyone if the panel is the Device Owner. Otherwise Android asks on its screen. */
+/** Installs without asking anyone, as the Device Owner. Otherwise Android refuses it, and HA shows it failed. */
 class PanelUpdater(
 	private val context: Context,
 ) {
@@ -96,25 +96,26 @@ class UpdateResultReceiver : BroadcastReceiver() {
 		context: Context,
 		intent: Intent,
 	) {
-		when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
-			PackageInstaller.STATUS_SUCCESS -> {
-				Unit
-			}
-
-			// Not the Device Owner: Android wants someone to confirm it on the panel.
-			PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-				intent
-					.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-					?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-			}
-
-			else -> {
-				Log.w("marc2d", "Update refused: $status")
-				(context.applicationContext as Marc2dApp).runtime.updateFailed()
-			}
+		val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+		if (updateOutcome(status) != UpdateOutcome.Installed) {
+			Log.w("marc2d", "Update not installed: $status")
+			(context.applicationContext as Marc2dApp).runtime.updateFailed()
 		}
 	}
 }
+
+enum class UpdateOutcome { Installed, NeedsSomeone, Failed }
+
+/**
+ * Only the Device Owner installs without anyone: otherwise Android asks on the screen, behind the lock screen where nobody
+ * sees it, and the panel shows that instead of itself. Not installing is better: HA shows it failed.
+ */
+internal fun updateOutcome(status: Int): UpdateOutcome =
+	when (status) {
+		PackageInstaller.STATUS_SUCCESS -> UpdateOutcome.Installed
+		PackageInstaller.STATUS_PENDING_USER_ACTION -> UpdateOutcome.NeedsSomeone
+		else -> UpdateOutcome.Failed
+	}
 
 /** Brings the panel back after an update: it is the home app, and Android lets it open from this broadcast. */
 class UpdatedReceiver : BroadcastReceiver() {

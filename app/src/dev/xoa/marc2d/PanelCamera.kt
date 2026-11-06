@@ -19,6 +19,7 @@ import android.media.MediaFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Range
 import android.view.Display
@@ -31,7 +32,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
@@ -41,6 +41,30 @@ class PanelCamera(
 ) : H264Source {
 	@Volatile private var session: Session? = null
 	private val power = context.getSystemService(PowerManager::class.java)
+	private val displays = context.getSystemService(DisplayManager::class.java)
+
+	/** Asleep, Android reports the natural rotation: the last one seen awake is the one the panel is mounted in. */
+	@Volatile private var awakeRotation: Int? = null
+
+	init {
+		rememberRotation()
+		displays.registerDisplayListener(
+			object : DisplayManager.DisplayListener {
+				override fun onDisplayChanged(displayId: Int) = rememberRotation()
+
+				override fun onDisplayAdded(displayId: Int) = Unit
+
+				override fun onDisplayRemoved(displayId: Int) = Unit
+			},
+			Handler(Looper.getMainLooper()),
+		)
+	}
+
+	private fun rememberRotation() {
+		if (power.isInteractive) awakeRotation = currentRotation()
+	}
+
+	private fun currentRotation(): Int = displays.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0
 
 	// Deprecated for apps in front, which can use a window flag: this has to wake the screen from a service, with nobody there.
 	@Suppress("DEPRECATION")
@@ -56,13 +80,12 @@ class PanelCamera(
 		if (context.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
 			throw IOException("No camera permission")
 		}
-		// A dark screen would hide that the camera is on. Waking it first also gives the real rotation: asleep, Android reports
-		// the natural one, and the video would stay sideways for as long as it lasts.
-		val wasOff = !power.isInteractive
+		// Before waking it: once awake, Android takes a moment to turn back to the panel's rotation.
+		val rotation = if (power.isInteractive) currentRotation() else awakeRotation ?: currentRotation()
+		// A dark screen would hide that the camera is on.
 		screenOn.acquire()
 		try {
-			if (wasOff) delay(ROTATION_SETTLES)
-			val started = Session(context, onFrame, onFailure)
+			val started = Session(context, rotation, onFrame, onFailure)
 			session = started
 			return withTimeout(START_TIMEOUT) { started.open() }
 		} catch (e: TimeoutCancellationException) {
@@ -90,6 +113,7 @@ class PanelCamera(
 
 	private class Session(
 		private val context: Context,
+		private val rotation: Int,
 		private val onFrame: (H264Frame) -> Unit,
 		private val onFailure: () -> Unit,
 	) {
@@ -111,7 +135,6 @@ class PanelCamera(
 					manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
 				} ?: manager.cameraIdList.firstOrNull() ?: throw IOException("No camera")
 			val fpsRange = fpsRange(manager.getCameraCharacteristics(id))
-			val rotation = displayRotation()
 			// The camera's frames arrive upright for the phone's natural orientation, which on a Pixel is portrait.
 			val sideways = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
 			val width = if (sideways) LONG_SIDE else SHORT_SIDE
@@ -199,12 +222,6 @@ class PanelCamera(
 			if (closed) return
 			if (!parameters.completeExceptionally(cause)) onFailure()
 		}
-
-		private fun displayRotation(): Int =
-			context
-				.getSystemService(DisplayManager::class.java)
-				.getDisplay(Display.DEFAULT_DISPLAY)
-				?.rotation ?: Surface.ROTATION_0
 
 		/** The lowest rate that reaches ours: more than that would only be thrown away, and it gives the sensor more light. */
 		private fun fpsRange(characteristics: CameraCharacteristics): Range<Int> =
@@ -316,7 +333,6 @@ class PanelCamera(
 
 	private companion object {
 		val START_TIMEOUT = 8.seconds
-		val ROTATION_SETTLES = 2.seconds
 		const val LONG_SIDE = 1280
 		const val SHORT_SIDE = 720
 		const val BITRATE = 2_000_000

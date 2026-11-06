@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
@@ -46,7 +45,15 @@ class IntercomPhone(
 
 	/** The intercom whose doorbell is ringing, notified by Home Assistant: there is no SIP call yet. */
 	private var ringing: IntercomConfig? = null
-	private var ringer: Ringtone? = null
+	private val ringer =
+		Ringer {
+			RingtoneManager
+				.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+				?.apply {
+					isLooping = true
+					play()
+				}?.let { tone -> Ringer.Sound { tone.stop() } }
+		}
 	private val main = Handler(Looper.getMainLooper())
 	private val ringTimeout = Runnable { stopDoorbell() }
 
@@ -61,8 +68,10 @@ class IntercomPhone(
 		Factory.instance().createCore(null, null, context).apply {
 			// The panel has no Google services, and the intercoms do not send push.
 			isPushNotificationEnabled = false
-			// The panel rings by itself, with the phone's ringtone, however the call arrives.
+			// The panel rings by itself, with the phone's ringtone, however the call arrives. Native ringing keeps Linphone's own
+			// out of the core, and this keeps its Android helper from ringing again on top.
 			isNativeRingingEnabled = true
+			config.setInt("sound", "disable_ringing", 1)
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -125,25 +134,13 @@ class IntercomPhone(
 		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
 		_call.value = IntercomCall(intercom.name, answered = false)
-		startRinger()
+		ringer.start()
 		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
-	}
-
-	private fun startRinger() {
-		if (ringer != null) return
-		ringer =
-			RingtoneManager
-				.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-				?.apply {
-					isLooping = true
-					play()
-				}
 	}
 
 	private fun silence() {
 		main.removeCallbacks(ringTimeout)
-		ringer?.stop()
-		ringer = null
+		ringer.stop()
 		ringing = null
 	}
 
@@ -255,7 +252,7 @@ class IntercomPhone(
 						activeCall = call
 						_call.value = IntercomCall(callName(call), answered = false)
 						// A call can arrive without HA having said anything: it has to ring by itself too.
-						startRinger()
+						ringer.start()
 					}
 
 					Call.State.Connected, Call.State.StreamsRunning -> {

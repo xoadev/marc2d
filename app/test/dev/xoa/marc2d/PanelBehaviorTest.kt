@@ -29,6 +29,53 @@ class PanelReadingsTest {
 	}
 }
 
+class RingerTest {
+	private var plays = 0
+	private var stops = 0
+	private val ringer =
+		Ringer {
+			plays++
+			Ringer.Sound { stops++ }
+		}
+
+	/** HA's doorbell and the SIP call that follows it both ask to ring: it used to sound twice. */
+	@Test
+	fun `it rings once however many ask`() {
+		ringer.start()
+		ringer.start()
+		assertEquals(1, plays)
+		assertTrue(ringer.isRinging)
+	}
+
+	@Test
+	fun `stopping silences it, and it can ring again`() {
+		ringer.start()
+		ringer.stop()
+		ringer.stop()
+		assertEquals(1, stops)
+		assertFalse(ringer.isRinging)
+		ringer.start()
+		assertEquals(2, plays)
+	}
+
+	@Test
+	fun `no ringtone on the phone is not ringing`() {
+		val silent = Ringer { null }
+		silent.start()
+		assertFalse(silent.isRinging)
+	}
+}
+
+class UpdateOutcomeTest {
+	/** Asking on the screen put the dialog behind the lock screen, and the panel showed that instead of itself. */
+	@Test
+	fun `only a silent install counts`() {
+		assertEquals(UpdateOutcome.Installed, updateOutcome(android.content.pm.PackageInstaller.STATUS_SUCCESS))
+		assertEquals(UpdateOutcome.NeedsSomeone, updateOutcome(android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION))
+		assertEquals(UpdateOutcome.Failed, updateOutcome(android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED))
+	}
+}
+
 class PanelUpdaterTest {
 	private val hello = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 

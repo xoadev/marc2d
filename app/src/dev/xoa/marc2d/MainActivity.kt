@@ -180,7 +180,8 @@ class MainActivity : ComponentActivity() {
 						}
 					}
 					// The droid says it on the main screen: nothing fixed there, as the OLED would keep it.
-					val onMainScreen = activeCall == null && !camerasOpen && !scanOpen && !settingsOpen && !needsSetup && !menuOpen
+					val showingCameras = camerasOpen && connection != null && cameras.isNotEmpty()
+					val onMainScreen = activeCall == null && !showingCameras && !scanOpen && !settingsOpen && !needsSetup && !menuOpen
 					if (cameraOn && !onMainScreen) RecordingMark()
 				}
 			}

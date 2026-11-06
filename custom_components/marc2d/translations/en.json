@@ -79,7 +79,7 @@
           "rtsp_audio": "Sound"
         },
         "data_description": {
-          "rtsp_password": "Leave it empty to generate one. The user is always marc2d.",
+          "rtsp_password": "At least 12 characters, or empty to generate one. The user is always marc2d.",
           "rtsp_audio": "Also sends the panel's microphone: whoever watches can hear the room. The droid's eye shows it. Check the law where you live before recording conversations."
         }
       },
@@ -98,7 +98,8 @@
       }
     },
     "error": {
-      "required": "Needed while this is on."
+      "required": "Needed while this is on.",
+      "too_short": "At least 12 characters: anyone on the home network can try it. Leave it empty to generate one."
     }
   }
 }

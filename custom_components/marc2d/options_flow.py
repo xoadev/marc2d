@@ -44,6 +44,7 @@ from .panel_config import (
 from .panel_hub import get_hub
 
 CONF_ENABLED = "enabled"
+MIN_RTSP_PASSWORD = 12
 # Forms cannot show fields depending on another: each feature gets a page, in any order.
 # With the labels here: a menu takes them from translations, and shows blank if those are stale.
 MENU = {
@@ -209,7 +210,12 @@ class Marc2dOptionsFlow(OptionsFlow):
 
     async def async_step_rtsp(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Publishing the camera: off until someone turns it on, and always with a password."""
-        if user_input is not None:
+        errors: dict[str, str] = {}
+        chosen = (user_input or {}).get(CONF_RTSP_PASSWORD)
+        # Anyone on the home network can try it, and it opens the camera and maybe the microphone.
+        if chosen and len(chosen) < MIN_RTSP_PASSWORD:
+            errors[CONF_RTSP_PASSWORD] = "too_short"
+        elif user_input is not None:
             self._set_enabled(FEATURE_RTSP, user_input)
             self._options[CONF_RTSP_PASSWORD] = user_input.get(CONF_RTSP_PASSWORD) or (
                 self._options.get(CONF_RTSP_PASSWORD) or secrets.token_urlsafe(24)
@@ -236,6 +242,7 @@ class Marc2dOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="rtsp",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
             description_placeholders={"url": stream_url(address, "PASSWORD")},
         )
 

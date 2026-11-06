@@ -459,3 +459,11 @@ async def test_no_internet_keeps_what_it_knew(hass, panel, aioclient_mock) -> No
     aioclient_mock.get(RELEASE_API, exc=TimeoutError())
     await _look_for_updates(hass)
     assert hass.states.get(APP).attributes["latest_version"] == "0.2.0"
+
+
+async def test_panels_share_one_look_for_the_release(hass, panel, aioclient_mock) -> None:
+    _mock_release(aioclient_mock)
+    await _look_for_updates(hass)
+    asked = aioclient_mock.call_count
+    await _look_for_updates(hass)
+    assert aioclient_mock.call_count == asked

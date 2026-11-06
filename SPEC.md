@@ -160,8 +160,9 @@ are up to whoever consumes it, in HA or in Frigate, which use the same URL:
 - **Seen:** whoever is in front has to know. While the camera is on, including those 10 seconds, the screen stays on and
   the droid shows the Recording state, above anything except an alarm, and the screens without the droid show a red square.
   HA can still set the brightness to 0.
-- **Password:** RTSP Digest, with the user `marc2d`. The form generates a random password if none is given, and it reaches
-  the panel with its configuration.
+- **Password:** RTSP Digest, with the user `marc2d`. The form generates a random password if none is given, and one
+  typed there needs 12 characters. It reaches the panel with its configuration. Each wrong password waits a second,
+  three end the connection, and one without a correct password within 5 seconds is closed: there are only 8 places.
 - **Address:** the panel reports its IPv4 address and HA follows it. Frigate does not: give the panel a fixed address.
 - **Pictures:** HA takes them from the stream, so a card turns the camera on while it is on screen.
 - **Sound:** off by default, with its own switch. AAC from the microphone at 16 kHz, in the same stream, and the droid
@@ -253,9 +254,9 @@ A version comes out when someone runs the release workflow on `main`, by hand, a
 its hash and the changelog, and nothing else: no stores. Without a `feat` or a `fix` since the last one, it stops.
 
 HA looks for the latest release every 6 hours and shows `update.*_app`. Pressing **Install** sends the panel the APK's URL
-and hash. The panel downloads it, checks the hash and installs it, and the app starts by itself afterwards. As the Device
-Owner it does so without asking. Otherwise Android first needs someone to allow installing apps and confirm it on the
-panel, and the dialog stays behind the lock screen. Android only accepts a newer version signed with the same key.
+and hash. The panel downloads it, checks the hash and installs it without asking, as the Device Owner, and the app starts
+by itself afterwards. A panel that is not would need someone to confirm it on its screen, behind the lock screen, so it
+does not install it and HA shows the update failed. Android only accepts a newer version signed with the same key.
 
 The signing key cannot be replaced: changing it means uninstalling the app, which removes the Device Owner, the enrollment
 and the kiosk. Keep a copy outside GitHub. Panels that run a debug build need that once, to move to the signed one.

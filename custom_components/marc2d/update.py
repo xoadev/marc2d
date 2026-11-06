@@ -16,13 +16,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
+from .enrollment import DOMAIN
 from .entity import PanelEntity
 from .panel_hub import KEY_APP_VERSION, KEY_UPDATING, get_hub
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(hours=6)
+DATA_RELEASE = f"{DOMAIN}_latest_release"
 LATEST_RELEASE = "https://api.github.com/repos/xoadev/marc2d/releases/latest"
 RELEASE_DOWNLOADS = "https://github.com/xoadev/marc2d/releases/download/"
 APK_ASSET = "marc2d.apk"
@@ -67,32 +70,46 @@ class PanelAppUpdate(PanelEntity, UpdateEntity):
 
     async def async_update(self) -> None:
         """Look for the latest release: without one, or without Internet, keep what it knew."""
-        session = async_get_clientsession(self.hass)
-        try:
-            async with session.get(LATEST_RELEASE, timeout=_TIMEOUT) as response:
-                if response.status != HTTPStatus.OK:
-                    return
-                release = await response.json()
-            assets = {asset["name"]: asset["browser_download_url"] for asset in release["assets"]}
-            url = assets[APK_ASSET]
-            # A release is only offered whole, and only from this project.
-            if not url.startswith(RELEASE_DOWNLOADS):
-                return
-            async with session.get(assets[HASH_ASSET], timeout=_TIMEOUT) as response:
-                response.raise_for_status()
-                sha256 = (await response.text()).split()[0].lower()
-        except (ClientError, TimeoutError, KeyError, IndexError, ValueError) as err:
-            _LOGGER.debug("Could not read the latest release: %s", err)
+        release = await async_latest_release(self.hass)
+        if release is None:
             return
-        if not SHA256.fullmatch(sha256):
-            return
-        self._apk_url = url
-        self._apk_sha256 = sha256
-        self._attr_latest_version = release["tag_name"].removeprefix("v")
-        self._attr_release_url = release.get("html_url")
+        self._attr_latest_version, self._apk_url, self._apk_sha256, self._attr_release_url = release
 
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         """Ask the panel to install the latest version."""
         if self._apk_url is None or self._apk_sha256 is None:
             raise HomeAssistantError("No release is known yet")
         self._hub.send({"kind": "update", "url": self._apk_url, "sha256": self._apk_sha256})
+
+
+type Release = tuple[str, str, str, str | None]
+
+
+async def async_latest_release(hass: HomeAssistant) -> Release | None:
+    """Shared by every panel: they all follow the same release, so one request is enough."""
+    cached = hass.data.get(DATA_RELEASE)
+    if cached and dt_util.utcnow() - cached[0] < SCAN_INTERVAL - timedelta(minutes=1):
+        return cached[1]
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(LATEST_RELEASE, timeout=_TIMEOUT) as response:
+            if response.status != HTTPStatus.OK:
+                return None
+            release = await response.json()
+        assets = {asset["name"]: asset["browser_download_url"] for asset in release["assets"]}
+        url = assets[APK_ASSET]
+        # A release is only offered whole, and only from this project.
+        if not url.startswith(RELEASE_DOWNLOADS):
+            return None
+        async with session.get(assets[HASH_ASSET], timeout=_TIMEOUT) as response:
+            response.raise_for_status()
+            sha256 = (await response.text()).split()[0].lower()
+    except (ClientError, TimeoutError, KeyError, IndexError, ValueError) as err:
+        _LOGGER.debug("Could not read the latest release: %s", err)
+        return None
+    if not SHA256.fullmatch(sha256):
+        return None
+    result = (release["tag_name"].removeprefix("v"), url, sha256, release.get("html_url"))
+    # Only what worked: a failure is asked again by the next panel, not kept for hours.
+    hass.data[DATA_RELEASE] = (dt_util.utcnow(), result)
+    return result
