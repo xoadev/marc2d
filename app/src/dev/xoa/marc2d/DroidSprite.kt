@@ -84,6 +84,8 @@ fun BoxWithConstraintsScope.DroidSprite(
 
 	LaunchedEffect(mood) {
 		moving = false
+		// A state that blinks may end halfway through a blink: otherwise the next one starts with the eye closed.
+		blink = false
 		when (mood) {
 			DroidMood.Walking -> {
 				while (true) {
