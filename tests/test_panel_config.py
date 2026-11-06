@@ -248,9 +248,9 @@ async def test_publishing_generates_a_password_and_keeps_it(hass, entry) -> None
 async def test_publishing_with_a_chosen_password(hass, entry) -> None:
     form = await open_page(hass, entry, "rtsp")
     done = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"enabled": True, "rtsp_password": "chosen"}
+        form["flow_id"], {"enabled": True, "rtsp_password": "chosen-password"}
     )
-    assert build_panel_config(done["data"])["rtsp"] == {"password": "chosen"}
+    assert build_panel_config(done["data"])["rtsp"] == {"password": "chosen-password"}
 
 
 def test_sound_is_left_out_unless_it_is_on() -> None:
