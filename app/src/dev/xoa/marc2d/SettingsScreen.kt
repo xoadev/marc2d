@@ -2,6 +2,7 @@ package dev.xoa.marc2d
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,53 +54,73 @@ fun SettingsScreen(
 			unfocusedLabelColor = SettingsGray,
 			cursorColor = PixelWhite,
 		)
-	Column(
-		modifier =
-			modifier
-				.fillMaxSize()
-				.background(Color.Black)
-				.verticalScroll(rememberScrollState())
-				.padding(24.dp),
-		verticalArrangement = Arrangement.spacedBy(16.dp),
-	) {
-		Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-			Text("Home Assistant connection", color = PixelWhite, fontSize = 28.sp, modifier = Modifier.weight(1f))
-			if (onClose != null) PixelButton(PixelIcon.Close, "Close", onClose, size = CLOSE_BUTTON)
+	val connect: @Composable (Modifier) -> Unit = { columnModifier ->
+		Column(columnModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+			// First: after scanning, the panel returns here with the screen scrolled to the top.
+			if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 18.sp)
+			Text("Add this panel in the marc2d integration of Home Assistant, and scan the code it shows.", color = SettingsGray, fontSize = 16.sp)
+			PixelTextButton("Scan QR code", onScan, Modifier.fillMaxWidth())
+			OutlinedTextField(
+				value = url,
+				onValueChange = { url = it },
+				label = { Text("URL") },
+				singleLine = true,
+				shape = RectangleShape,
+				colors = fieldColors,
+				modifier = Modifier.fillMaxWidth(),
+			)
+			OutlinedTextField(
+				value = code,
+				onValueChange = { code = it },
+				label = { Text("Code") },
+				singleLine = true,
+				shape = RectangleShape,
+				colors = fieldColors,
+				modifier = Modifier.fillMaxWidth(),
+			)
+			PixelTextButton(
+				label = "Connect",
+				onClick = { onEnroll(EnrollmentInvite(url.trim(), code.trim())) },
+				enabled = url.isNotBlank() && code.isNotBlank(),
+				modifier = Modifier.fillMaxWidth(),
+			)
 		}
-		Text("Add this panel in Home Assistant, in the marc2d integration, and scan the code it shows.", color = SettingsGray, fontSize = 20.sp)
-		PixelTextButton("Scan QR code", onScan, Modifier.fillMaxWidth())
-		OutlinedTextField(
-			value = url,
-			onValueChange = { url = it },
-			label = { Text("URL") },
-			singleLine = true,
-			shape = RectangleShape,
-			colors = fieldColors,
-			modifier = Modifier.fillMaxWidth(),
-		)
-		OutlinedTextField(
-			value = code,
-			onValueChange = { code = it },
-			label = { Text("Code") },
-			singleLine = true,
-			shape = RectangleShape,
-			colors = fieldColors,
-			modifier = Modifier.fillMaxWidth(),
-		)
-		PixelTextButton(
-			label = "Connect",
-			onClick = { onEnroll(EnrollmentInvite(url.trim(), code.trim())) },
-			enabled = url.isNotBlank() && code.isNotBlank(),
-			modifier = Modifier.fillMaxWidth(),
-		)
-		if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 20.sp)
-		Text(status, color = SettingsGray, fontSize = 20.sp)
-		intercoms.forEach { (name, intercom) ->
-			Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 20.sp)
+	}
+	val device: @Composable (Modifier) -> Unit = { columnModifier ->
+		Column(columnModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+			Text(status, color = SettingsGray, fontSize = 16.sp)
+			intercoms.forEach { (name, intercom) ->
+				Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 16.sp)
+			}
+			PixelTextButton("Android settings", onOpenAndroidSettings, Modifier.fillMaxWidth())
+			if (onLeaveKiosk != null) {
+				PixelTextButton("Exit kiosk mode", onLeaveKiosk, Modifier.fillMaxWidth())
+			}
 		}
-		PixelTextButton("Android settings", onOpenAndroidSettings, Modifier.fillMaxWidth())
-		if (onLeaveKiosk != null) {
-			PixelTextButton("Exit kiosk mode", onLeaveKiosk, Modifier.fillMaxWidth())
+	}
+	BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
+		val landscape = maxWidth > maxHeight
+		Column(
+			modifier =
+				Modifier
+					.fillMaxSize()
+					.verticalScroll(rememberScrollState())
+					.padding(horizontal = 24.dp, vertical = 16.dp),
+			verticalArrangement = Arrangement.spacedBy(16.dp),
+		) {
+			Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+				Text("Home Assistant connection", color = PixelWhite, fontSize = 24.sp, modifier = Modifier.weight(1f))
+				if (onClose != null) PixelButton(PixelIcon.Close, "Close", onClose, size = CLOSE_BUTTON)
+			}
+			if (landscape) {
+				Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+					connect(Modifier.weight(1f))
+					device(Modifier.weight(1f))
+				}
+			} else {
+				connect(Modifier.fillMaxWidth())
+				device(Modifier.fillMaxWidth())
+			}
 		}
 	}
 }

@@ -1,7 +1,8 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.os.Build
+import android.os.SystemClock
+import android.util.Log
 import java.io.IOException
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -10,18 +11,26 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Connects the panel's pieces. It lives as long as the process; the service only keeps it running. */
 class PanelRuntime(
-	context: Context,
+	private val context: Context,
 ) {
 	val store = PanelStore(context)
 	val phone by lazy { IntercomPhone(context) }
@@ -35,47 +44,107 @@ class PanelRuntime(
 	private val _haMood = MutableStateFlow(HaMood.Normal)
 	val haMood: StateFlow<HaMood> = _haMood.asStateFlow()
 
+	private val _brightness = MutableStateFlow<Float?>(null)
+	val brightness: StateFlow<Float?> = _brightness.asStateFlow()
+
+	private val _listening = MutableStateFlow(false)
+	val listening: StateFlow<Boolean> = _listening.asStateFlow()
+
+	private val assistActive = MutableStateFlow(false)
+	private val speaking = MutableStateFlow(false)
+	private var assistEnd: Job? = null
+
+	/** From the end of what was said until the answer sounds: the wait that would otherwise look like nothing happening. */
+	val thinking: StateFlow<Boolean> by lazy {
+		combine(assistActive, _listening, speaking) { active, listening, playing -> active && !listening && !playing }
+			.stateIn(scope, SharingStarted.Eagerly, false)
+	}
+
+	private val _cameraOn = MutableStateFlow(false)
+	val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
+
+	private val _cameraSound = MutableStateFlow(false)
+	val cameraSound: StateFlow<Boolean> = _cameraSound.asStateFlow()
+
 	private val _dark = MutableStateFlow(false)
 	val dark: StateFlow<Boolean> = _dark.asStateFlow()
 
+	private val _enrollmentMessage = MutableStateFlow<String?>(null)
+	val enrollmentMessage: StateFlow<String?> = _enrollmentMessage.asStateFlow()
+
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-	private val ha = HaClient()
+	private var enrolling: Job? = null
+	private var updating: Job? = null
+	private val ha =
+		HaClient().apply {
+			onAssistTiming = { Log.i("marc2d", it) }
+			onAssistActive = ::assistChanged
+		}
 	private val enrollment = EnrollmentClient()
-	private val siren = PanelSiren(context) { on -> publishSiren(on) }
+	private val siren = PanelSiren(context) { on -> link.report(PanelLink.SIREN, JsonPrimitive(on)) }
 	private val readings = PanelReadings(context)
-	val mqtt = PanelMqtt(scope, Build.MODEL, siren::set, { intercom, payload -> phone.doorbell(intercom, payload) }, ::setHaMood)
+	private val link = PanelLink()
+	private val camera = PanelCamera(context)
+	private val presence = LightPresence()
+	private val updater = PanelUpdater(context)
+	private val speaker =
+		PanelSpeaker(
+			context,
+			scope,
+			{ playing ->
+				speaking.value = playing
+				if (playing) assistActive.value = false
+				link.report(PanelLink.PLAYING, JsonPrimitive(playing))
+			},
+			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
+		)
+	private val voice = VoiceListener(VoiceModel(context.noBackupFilesDir), link::requestAssist) { _listening.value = it }
+	private var config = PanelConfig()
+	private var haUrl = ""
 	private var started = false
 
-	/** Returns what to tell the user, or nothing if the panel is now connected. */
-	suspend fun enroll(invite: EnrollmentInvite): String? =
-		try {
-			store.saveConnection(enrollment.enroll(invite))
-			null
-		} catch (_: EnrollmentRejectedException) {
-			"The code is not valid or has expired"
-		} catch (_: IOException) {
-			"Cannot reach Home Assistant at that address"
-		} catch (_: IllegalArgumentException) {
-			// Includes an answer that is not JSON: a typed address may be any other server.
-			"That address is not a Home Assistant with marc2d"
-		} catch (_: IllegalStateException) {
-			"That address is not a Home Assistant with marc2d"
+	/** Not tied to the screen: rotating recreates it, and a code that was already redeemed cannot be used again. */
+	fun enroll(invite: EnrollmentInvite) {
+		if (enrolling?.isActive == true) return
+		enrolling =
+			scope.launch {
+				_enrollmentMessage.value = "Connecting…"
+				_enrollmentMessage.value = enrollmentProblem(invite) { store.saveConnection(enrollWithRetries(invite)) }
+			}
+	}
+
+	/** A `.local` name may fail while the network has not looked it up yet, and one person is waiting for the result. */
+	private suspend fun enrollWithRetries(invite: EnrollmentInvite): HaConnection {
+		repeat(ENROLL_ATTEMPTS - 1) {
+			try {
+				return enrollment.enroll(invite)
+			} catch (_: IOException) {
+				delay(ENROLL_RETRY)
+			}
 		}
+		return enrollment.enroll(invite)
+	}
 
 	fun start() {
 		if (started) return
 		started = true
 
 		scope.launch {
-			store.config.collect { phone.apply(it) }
+			store.config.collect {
+				config = it
+				phone.apply(it)
+				if (!it.siren) siren.set(false)
+				if (!it.speaker) speaker.stop()
+				if (!it.sensors) PanelLink.SENSORS.forEach(link::forget)
+			}
 		}
-		scope.launch {
-			combine(store.config, store.connection) { config, connection -> config.mqtt to connection?.panel }
-				.collect { (config, panel) -> mqtt.apply(config.takeIf { panel != null }, panel.orEmpty()) }
-		}
-		phone.onDoorbellAnswered = mqtt::doorbellAnswered
-		publishSiren(false)
-		mqtt.publish(PanelTopics::mood, HaMood.Normal.label)
+		phone.onDoorbellAnswered = link::answer
+		scope.launch { keepListening() }
+		scope.launch { publishCamera() }
+		scope.launch { cameraOn.collect { presence.ignoreChanges(SystemClock.elapsedRealtime()) } }
+		link.report(PanelLink.SIREN, JsonPrimitive(false))
+		readings.appVersion()?.let { link.report(PanelLink.APP_VERSION, JsonPrimitive(it)) }
+		link.report(PanelLink.UPDATING, JsonPrimitive(false))
 		scope.launch { publishBattery() }
 		scope.launch { publishLight() }
 		scope.launch {
@@ -89,40 +158,190 @@ class PanelRuntime(
 		}
 	}
 
-	private fun setHaMood(label: String) {
-		val mood = HaMood.fromLabel(label) ?: return
-		_haMood.value = mood
-		mqtt.publish(PanelTopics::mood, mood.label)
+	/** Only one can hold the microphone: a call, or the wake phrase, which waits for the call to end. */
+	private suspend fun keepListening() {
+		combine(store.config.map { it.voice }, phone.call.map { it != null }) { voice, inCall -> voice.takeUnless { inCall } }
+			.distinctUntilChanged()
+			.collectLatest { config ->
+				if (config == null) return@collectLatest
+				while (true) {
+					try {
+						voice.run(config.pipeline, config.phrase)
+					} catch (e: CancellationException) {
+						throw e
+					} catch (e: Exception) {
+						Log.w("marc2d", "Voice stopped: ${e::class.simpleName}")
+					}
+					delay(VOICE_RETRY)
+				}
+			}
 	}
 
-	private fun publishSiren(on: Boolean) {
-		mqtt.publish(PanelTopics::siren, if (on) PanelTopics.ON else PanelTopics.OFF)
+	/** The server only listens: it is the first client that turns the camera on. */
+	private suspend fun publishCamera() {
+		store.config
+			.map { it.rtsp }
+			.distinctUntilChanged()
+			.collectLatest { rtsp ->
+				if (rtsp == null) {
+					link.forget(PanelLink.ADDRESS)
+					link.forget(PanelLink.CAMERA_ON)
+					return@collectLatest
+				}
+				link.report(PanelLink.CAMERA_ON, JsonPrimitive(false))
+				coroutineScope {
+					launch {
+						panelAddress(context).collect { address ->
+							if (address == null) link.forget(PanelLink.ADDRESS) else link.report(PanelLink.ADDRESS, JsonPrimitive(address))
+						}
+					}
+					while (true) {
+						try {
+							val server =
+								RtspServer(
+									rtsp.password,
+									camera,
+									onCamera = { on ->
+										_cameraOn.value = on
+										link.report(PanelLink.CAMERA_ON, JsonPrimitive(on))
+									},
+									audio = if (rtsp.audio) PanelMicrophone(context) else null,
+									onSound = { _cameraSound.value = it },
+								)
+							server.onProblem = { Log.w("marc2d", "RTSP client: $it") }
+							withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
+						} catch (e: CancellationException) {
+							throw e
+						} catch (e: IOException) {
+							Log.w("marc2d", "RTSP server stopped: ${e::class.simpleName}")
+						}
+						delay(RTSP_RETRY)
+					}
+				}
+			}
+	}
+
+	/** A new version replaces the process, so success needs no answer: the new one reports again. */
+	private fun update(
+		url: String,
+		sha256: String,
+	) {
+		if (updating?.isActive == true) return
+		updating =
+			scope.launch {
+				link.report(PanelLink.UPDATING, JsonPrimitive(true))
+				try {
+					updater.install(url, sha256)
+				} catch (e: CancellationException) {
+					throw e
+				} catch (e: Exception) {
+					Log.w("marc2d", "Update failed: ${e::class.simpleName}")
+					updateFailed()
+				}
+			}
+	}
+
+	/**
+	 * The request ends a moment before its answer starts sounding, so it waits a little for it. A connection lost halfway
+	 * sends no end, hence the limit.
+	 */
+	private fun assistChanged(active: Boolean) {
+		assistEnd?.cancel()
+		if (active) assistActive.value = true
+		assistEnd =
+			scope.launch {
+				delay(if (active) MAX_ASSIST else ANSWER_GRACE)
+				assistActive.value = false
+			}
+	}
+
+	fun updateFailed() {
+		link.report(PanelLink.UPDATING, JsonPrimitive(false))
+	}
+
+	private fun handle(command: HaProtocol.PanelEvent) {
+		when (command) {
+			is HaProtocol.PanelEvent.Siren -> {
+				if (config.siren) siren.set(command.on)
+			}
+
+			is HaProtocol.PanelEvent.Mood -> {
+				HaMood.fromLabel(command.value)?.let { _haMood.value = it }
+			}
+
+			is HaProtocol.PanelEvent.Doorbell -> {
+				phone.doorbell(command.intercom, command.payload)
+			}
+
+			is HaProtocol.PanelEvent.Play -> {
+				if (config.speaker) speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
+			}
+
+			HaProtocol.PanelEvent.Stop -> {
+				speaker.stop()
+			}
+
+			is HaProtocol.PanelEvent.Update -> {
+				update(command.url, command.sha256)
+			}
+
+			is HaProtocol.PanelEvent.Volume -> {
+				speaker.setVolume(command.level)
+			}
+
+			is HaProtocol.PanelEvent.Brightness -> {
+				presence.ignoreChanges(SystemClock.elapsedRealtime())
+				_brightness.value = (command.percent / 100).toFloat()
+			}
+
+			is HaProtocol.PanelEvent.Config -> {
+				Unit
+			}
+		}
+	}
+
+	private fun reportReading(
+		key: String,
+		value: JsonPrimitive,
+	) {
+		if (config.sensors) link.report(key, value)
 	}
 
 	private suspend fun publishBattery() {
+		val signals = SignalReports()
 		while (true) {
+			readings.wifiSignal()?.let { signal ->
+				if (signals.shouldReport(signal, config.sensors)) reportReading("wifi_signal", JsonPrimitive(signal))
+			}
 			val battery = readings.battery()
 			if (battery != null) {
-				mqtt.publishReading(PanelTopics::battery, battery.level.toString())
-				mqtt.publishReading(PanelTopics::temperature, battery.temperature.toString())
-				mqtt.publishReading(PanelTopics::charging, if (battery.charging) PanelTopics.ON else PanelTopics.OFF)
+				reportReading("battery", JsonPrimitive(battery.level))
+				reportReading("temperature", JsonPrimitive(battery.temperature))
+				reportReading("charging", JsonPrimitive(battery.charging))
 			}
 			delay(BATTERY_INTERVAL)
 		}
 	}
 
 	private suspend fun publishLight() {
-		var last: Float? = null
-		readings.light().collect { lux ->
+		val reports = LightReports()
+		// Latest: a new reading replaces the wait, which the new reading works out again.
+		readings.light().collectLatest { lux ->
 			_dark.value = lux < DARK_LUX
-			if (PanelReadings.isSignificant(last, lux)) {
-				last = lux
-				mqtt.publishReading(PanelTopics::light, lux.roundToInt().toString())
+			if (reports.shouldReport(lux, config.sensors)) reportReading("light", JsonPrimitive(lux.roundToInt()))
+			val now = SystemClock.elapsedRealtime()
+			presence.update(lux, now)
+			val remaining = presence.remaining(now)
+			reportReading("presence", JsonPrimitive(remaining > 0))
+			if (remaining > 0) {
+				delay(remaining)
+				reportReading("presence", JsonPrimitive(false))
 			}
 		}
 	}
 
 	private suspend fun keepConnected(connection: HaConnection) {
+		haUrl = connection.url
 		var wait = MIN_RETRY
 		// Only at the start: during retries the warning from the last disconnection stays.
 		_haStatus.value = HaStatus.Connecting
@@ -130,6 +349,8 @@ class PanelRuntime(
 			try {
 				ha.run(
 					connection = connection,
+					link = link,
+					onCommand = ::handle,
 					onStatus = { status ->
 						_haStatus.value = status
 						wait = MIN_RETRY
@@ -153,6 +374,12 @@ class PanelRuntime(
 
 	private companion object {
 		const val DARK_LUX = 5f
+		val VOICE_RETRY = 60.seconds
+		val RTSP_RETRY = 30.seconds
+		val MAX_ASSIST = 30.seconds
+		val ANSWER_GRACE = 3.seconds
+		const val ENROLL_ATTEMPTS = 3
+		val ENROLL_RETRY = 2.seconds
 		val BATTERY_INTERVAL = 1.minutes
 		val MIN_RETRY = 5.seconds
 		val MAX_RETRY = 60.seconds

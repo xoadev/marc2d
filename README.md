@@ -18,13 +18,15 @@ It's a half-joking personal project, shared in case it's useful to someone.
   Dahua VTO2202F.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
 - **Sensors and siren** in Home Assistant: light, battery and a siren on the alarm channel.
+- **A speaker** for `tts.speak` and any other audio from Home Assistant.
+- **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what
+  follows to Assist.
 - **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of
   its eye.
 
 ## Status
 
-In testing, with a single panel and no releases. Things still break freely. Next up is a Home
-Assistant integration to add panels with a QR code.
+In testing, with a single panel and no releases. Things still break freely.
 
 ## What you need
 
@@ -42,36 +44,36 @@ flowchart LR
             svc["Foreground service"]
             sip["Linphone SDK"]
             hac["HA client<br/>Ktor"]
-            mq["MQTT client"]
             rtsp["RTSP server<br/>optional"]
-            sys["Android<br/>TTS, audio, screen, camera"]
+            voice["Vosk<br/>wake phrase"]
+            sys["Android<br/>audio, screen, camera"]
         end
         vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
-        broker["Mosquitto"]
         frigate["Frigate or similar"]
     end
 
     ui <--> svc
     svc --> sip
     svc --> hac
-    svc --> mq
     svc --> rtsp
+    svc --> voice
     svc --> sys
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
-    hac <-- "WebSocket<br/>entities, events, Assist" --> ha
-    mq <-- "MQTT<br/>sensors, siren" --> broker
-    broker <--> ha
+    hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
+    ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
+    ha -- "HTTPS<br/>latest version" --> github["GitHub releases"]
+    svc -- "HTTPS<br/>signed APK" --> github
 ```
 
 | Connection  | Who starts it | What for                                                 |
 | ----------- | ------------- | -------------------------------------------------------- |
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
-| WebSocket   | the panel     | configuration, `weather.*`, `binary_sensor.*`, Assist    |
-| MQTT        | the panel     | entity creation, sensors, siren and availability         |
-| RTSP        | Frigate       | reading the video from the panel's camera                |
+| WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
+| RTSP        | HA or Frigate | reading the video; the camera is only on during it       |
+| HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK   |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
 intercom from reaching the panel.
@@ -79,7 +81,8 @@ intercom from reaching the panel.
 ## Stack
 
 Kotlin and Jetpack Compose on Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
-DataStore, RootEncoder and RTSP-Server. The reasons are in [SPEC.md](SPEC.md#decisions).
+DataStore, Vosk, CameraX and ZXing, with our own small RTSP server for the camera. The reasons are in
+[SPEC.md](SPEC.md#decisions).
 
 ## Development
 
@@ -111,8 +114,8 @@ CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS
 4. In Home Assistant, add the marc2d integration, name the panel, scan its QR code from the app and set the
    panel up in the integration's options.
 
-While the app is the device owner, Android will not let you uninstall it. To undo this: long-press the
-clock and choose **Exit kiosk mode**.
+While the app is the device owner, Android will not let you uninstall it. To undo this: tap the
+clock, open **Settings** and choose **Exit kiosk mode**.
 
 ## License
 

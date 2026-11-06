@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import android.content.Context
-import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
@@ -42,11 +41,20 @@ class IntercomPhone(
 	val call: StateFlow<IntercomCall?> = _call.asStateFlow()
 
 	private var applied: PanelConfig? = null
+	private val ownAudio = IntercomAudio(context)
 	private var activeCall: Call? = null
 
-	/** The intercom whose doorbell is ringing, notified over MQTT: there is no SIP call yet. */
+	/** The intercom whose doorbell is ringing, notified by Home Assistant: there is no SIP call yet. */
 	private var ringing: IntercomConfig? = null
-	private var ringer: Ringtone? = null
+	private val ringer =
+		Ringer {
+			RingtoneManager
+				.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+				?.apply {
+					isLooping = true
+					play()
+				}?.let { tone -> Ringer.Sound { tone.stop() } }
+		}
 	private val main = Handler(Looper.getMainLooper())
 	private val ringTimeout = Runnable { stopDoorbell() }
 
@@ -61,6 +69,14 @@ class IntercomPhone(
 		Factory.instance().createCore(null, null, context).apply {
 			// The panel has no Google services, and the intercoms do not send push.
 			isPushNotificationEnabled = false
+			// The panel rings by itself, with the phone's ringtone, however the call arrives. Native ringing keeps Linphone's own
+			// out of the core, and this keeps its Android helper from ringing again on top.
+			isNativeRingingEnabled = true
+			config.setInt("sound", "disable_ringing", 1)
+			// A fixed port, so that the panel's own audio can share it for intercoms whose audio Linphone cannot play. With
+			// its microphone muted Linphone then sends nothing, which would otherwise reach the intercom as noise.
+			audioPort = AUDIO_PORT
+			config.setInt("rtp", "rtp_no_xmit_on_audio_mute", 1)
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -113,30 +129,23 @@ class IntercomPhone(
 		payload: String,
 	) {
 		when (payload) {
-			PanelTopics.RING -> ring(intercom)
-			PanelTopics.ANSWERED -> if (ringing?.let { PanelTopics.slug(it.name) } == intercom) stopDoorbell()
+			RING -> ring(intercom)
+			ANSWERED -> if (ringing?.name == intercom) stopDoorbell()
 		}
 	}
 
-	private fun ring(slug: String) {
+	private fun ring(name: String) {
 		if (activeCall != null || ringing != null) return
-		val intercom = applied?.intercoms?.firstOrNull { PanelTopics.slug(it.name) == slug } ?: return
+		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
 		_call.value = IntercomCall(intercom.name, answered = false)
-		ringer =
-			RingtoneManager
-				.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-				?.apply {
-					isLooping = true
-					play()
-				}
+		ringer.start()
 		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
 	}
 
 	private fun silence() {
 		main.removeCallbacks(ringTimeout)
-		ringer?.stop()
-		ringer = null
+		ringer.stop()
 		ringing = null
 	}
 
@@ -148,7 +157,7 @@ class IntercomPhone(
 	/** The VTO picks up by itself and provides audio and video: the panel starts the call on answering. */
 	private fun dial(intercom: IntercomConfig) {
 		silence()
-		onDoorbellAnswered(PanelTopics.slug(intercom.name))
+		onDoorbellAnswered(intercom.name)
 		_call.value = IntercomCall(intercom.name, answered = true)
 		dialing = intercom
 		dialDeadline = SystemClock.elapsedRealtime() + DIAL_TIMEOUT_MILLIS
@@ -247,9 +256,13 @@ class IntercomPhone(
 						silence()
 						activeCall = call
 						_call.value = IntercomCall(callName(call), answered = false)
+						// A call can arrive without HA having said anything: it has to ring by itself too.
+						ringer.start()
 					}
 
 					Call.State.Connected, Call.State.StreamsRunning -> {
+						silence()
+						if (state == Call.State.StreamsRunning) startOwnAudio(call)
 						activeCall = call
 						dialing = null
 						routeToSpeaker(call)
@@ -258,6 +271,8 @@ class IntercomPhone(
 
 					Call.State.End, Call.State.Error, Call.State.Released -> {
 						if (activeCall == call) {
+							silence()
+							stopOwnAudio()
 							activeCall = null
 							retryOrEnd()
 						}
@@ -269,10 +284,15 @@ class IntercomPhone(
 		}
 
 	private companion object {
+		const val RING = "RING"
+
+		const val ANSWERED = "ANSWERED"
+
 		// The same time the VTO lets it ring.
 		const val RING_TIMEOUT_MILLIS = 45_000L
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
+		const val AUDIO_PORT = 7078
 	}
 
 	/** There is no earpiece on the wall: always use the speaker. */
@@ -287,10 +307,22 @@ class IntercomPhone(
 		return applied?.intercoms?.firstOrNull { it.server == server }?.name
 	}
 
-	private fun callName(call: Call): String {
+	private fun intercomFor(call: Call): IntercomConfig? {
 		val server = call.remoteAddress.domain
-		return applied?.intercoms?.firstOrNull { it.server == server }?.name
-			?: call.remoteAddress.displayName
-			?: "Intercom"
+		return applied?.intercoms?.firstOrNull { it.server == server }
+	}
+
+	private fun callName(call: Call): String = intercomFor(call)?.name ?: call.remoteAddress.displayName ?: "Intercom"
+
+	/** Only for an intercom configured with its own format: the standard audio stays with Linphone. */
+	private fun startOwnAudio(call: Call) {
+		val format = intercomFor(call)?.audio?.let(PcmFormat::parse) ?: return
+		core.isMicEnabled = false
+		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
+	}
+
+	private fun stopOwnAudio() {
+		ownAudio.stop()
+		core.isMicEnabled = true
 	}
 }

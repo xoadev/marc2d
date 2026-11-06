@@ -82,8 +82,8 @@ class Marc2dConfigFlow(ConfigFlow, domain=DOMAIN):
                     probatio.Optional("qr"): QrCodeSelector(
                         QrCodeSelectorConfig(
                             data=f"marc2d://enroll?{payload}",
-                            scale=6,
-                            error_correction_level=QrErrorCorrectionLevel.MEDIUM,
+                            scale=8,
+                            error_correction_level=QrErrorCorrectionLevel.LOW,
                         )
                     )
                 }

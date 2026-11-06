@@ -36,6 +36,7 @@ private const val STOP_CHANCE = 0.04f
 private const val MAX_PAUSE = 6
 private val STEP_TIME = 500.milliseconds
 private val SLEEP_TIME = 20.minutes
+private val THINKING_GLINT = listOf(6 to 5, 8 to 5, 8 to 7, 6 to 7)
 
 private val Head = Color(0xFFD8D8D8)
 private val Base = Color(0xFF707070)
@@ -79,9 +80,12 @@ fun BoxWithConstraintsScope.DroidSprite(
 	var frame by remember { mutableIntStateOf(0) }
 	var moving by remember { mutableStateOf(false) }
 	var blink by remember { mutableStateOf(false) }
+	var phase by remember { mutableIntStateOf(0) }
 
 	LaunchedEffect(mood) {
 		moving = false
+		// A state that blinks may end halfway through a blink: otherwise the next one starts with the eye closed.
+		blink = false
 		when (mood) {
 			DroidMood.Walking -> {
 				while (true) {
@@ -122,9 +126,16 @@ fun BoxWithConstraintsScope.DroidSprite(
 				}
 			}
 
-			DroidMood.Alarm, DroidMood.Intruder, DroidMood.Recording -> {
+			DroidMood.Alarm, DroidMood.Intruder, DroidMood.Recording, DroidMood.RecordingSound, DroidMood.Listening -> {
 				while (true) {
 					blink = !blink
+					delay(STEP_TIME)
+				}
+			}
+
+			DroidMood.Thinking -> {
+				while (true) {
+					phase++
 					delay(STEP_TIME)
 				}
 			}
@@ -151,7 +162,7 @@ fun BoxWithConstraintsScope.DroidSprite(
 				if (cell != '.') dot(pixel, x, y, if (cell == 'w') Head else Base)
 			}
 		}
-		eye(pixel, mood, direction, moving, blink)
+		eye(pixel, mood, direction, moving, blink, phase)
 	}
 }
 
@@ -179,6 +190,7 @@ private fun DrawScope.eye(
 	direction: Int,
 	moving: Boolean,
 	blink: Boolean,
+	phase: Int,
 ) {
 	when (mood) {
 		DroidMood.Sleeping -> {
@@ -201,6 +213,23 @@ private fun DrawScope.eye(
 		DroidMood.Recording -> {
 			block(pixel, 5..10, 4..8, Color.Black)
 			block(pixel, 7..8, 5..7, if (blink) Red else DimRed)
+		}
+
+		DroidMood.RecordingSound -> {
+			block(pixel, 4..11, 3..9, Color.Black)
+			block(pixel, 6..9, 5..7, if (blink) Red else DimRed)
+		}
+
+		DroidMood.Thinking -> {
+			// A glint going round the eye, one corner per step: working on it.
+			block(pixel, 5..10, 4..9, Color.Black)
+			val (x, y) = THINKING_GLINT[phase % THINKING_GLINT.size]
+			block(pixel, x..(x + 1), y..(y + 1), Head)
+		}
+
+		DroidMood.Listening -> {
+			block(pixel, 5..10, 4..9, Color.Black)
+			block(pixel, 7..8, 6..7, if (blink) Head else Color.Black)
 		}
 
 		DroidMood.Offline -> {

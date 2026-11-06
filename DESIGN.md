@@ -46,6 +46,9 @@ The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 | Alarm     | yellow                                      | blinks           |
 | Intruder  | red band                                    | blinks           |
 | Recording | lens with a red center                      | blinks           |
+| Sound     | large lens with a wide red center           | blinks           |
+| Listening | large, with a glint                         | blinks           |
+| Thinking  | large, with a glint going round its corners | still            |
 
 ## Buttons
 
@@ -64,8 +67,9 @@ or add a word. They are white, and red is reserved for **Hang up**.
 - **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
   opposite **Answer**, so that a double tap does not end the call.
 - **Orientation:** always landscape.
+- **Camera on:** on the main screen the droid says it. The others, where it does not appear, show a red square at the top.
 
 ## Text
 
-In English, with short sentences and no technical jargon on screen: "No connection to MQTT" is the limit. Technical
+In English, with short sentences and no technical jargon on screen: "No connection to Home Assistant" is the limit. Technical
 detail goes in the settings, not on the main screen.

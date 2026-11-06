@@ -48,6 +48,7 @@ fun ClockScreen(
 	weather: WeatherReport?,
 	droid: DroidMood,
 	onOpenMenu: () -> Unit,
+	onFixPermissions: (() -> Unit)?,
 	modifier: Modifier = Modifier,
 ) {
 	// The order of day and month depends on the language: the device decides it.
@@ -122,6 +123,18 @@ fun ClockScreen(
 			size = maxWidth * DROID_WIDTH,
 			modifier = Modifier.offset(offsetX.dp, offsetY.dp),
 		)
+		if (onFixPermissions != null) {
+			PixelButton(
+				icon = PixelIcon.Warning,
+				description = "Grant the missing permissions",
+				onClick = onFixPermissions,
+				size = CLOSE_BUTTON,
+				modifier =
+					Modifier
+						.align(Alignment.TopStart)
+						.padding(16.dp),
+			)
+		}
 		if (warning != null) {
 			Text(
 				text = warning,

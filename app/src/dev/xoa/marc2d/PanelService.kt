@@ -1,5 +1,6 @@
 package dev.xoa.marc2d
 
+import android.Manifest
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,6 +8,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import kotlinx.coroutines.CoroutineScope
@@ -17,8 +19,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps the SIP registration and the connection to Home Assistant, because the intercom does not send push.
- * It is of type `microphone` and the home screen starts it: Android 15 does not allow launching this type
- * from `BOOT_COMPLETED`.
+ * It is of type `microphone` and `camera`, and the home screen starts it: Android 15 does not allow launching these
+ * types from `BOOT_COMPLETED`, and without them it could not use either while the screen is off.
  */
 class PanelService : Service() {
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -38,13 +40,7 @@ class PanelService : Service() {
 			},
 		)
 
-		try {
-			startForeground(NOTIFICATION_RUNNING, runningNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-		} catch (_: ForegroundServiceStartNotAllowedException) {
-			// The home screen will start it again when it is visible.
-			stopSelf()
-			return
-		}
+		if (!promote()) return
 
 		val runtime = (application as Marc2dApp).runtime
 		runtime.start()
@@ -63,7 +59,24 @@ class PanelService : Service() {
 		intent: Intent?,
 		flags: Int,
 		startId: Int,
-	): Int = START_NOT_STICKY
+	): Int {
+		// The camera permission may have arrived later, when scanning the QR code: the home screen is visible now.
+		promote()
+		return START_NOT_STICKY
+	}
+
+	private fun promote(): Boolean {
+		val camera = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+		val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or (if (camera) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
+		return try {
+			startForeground(NOTIFICATION_RUNNING, runningNotification(), types)
+			true
+		} catch (_: ForegroundServiceStartNotAllowedException) {
+			// The home screen will start it again when it is visible.
+			stopSelf()
+			false
+		}
+	}
 
 	override fun onDestroy() {
 		scope.cancel()

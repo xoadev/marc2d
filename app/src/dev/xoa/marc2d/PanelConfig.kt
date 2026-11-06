@@ -1,15 +1,54 @@
 package dev.xoa.marc2d
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /** The panel's configuration, pushed by the marc2d integration. What is turned off there does not arrive. */
 @Serializable
 data class PanelConfig(
 	val intercoms: List<IntercomConfig> = emptyList(),
 	val weather: String? = null,
-	val mqtt: MqttConfig? = null,
 	val cameras: List<CameraConfig> = emptyList(),
-)
+	val sensors: Boolean = true,
+	val siren: Boolean = true,
+	val speaker: Boolean = true,
+	val voice: VoiceConfig? = null,
+	val rtsp: RtspConfig? = null,
+) {
+	companion object {
+		// A version of the app may have stored fields that this one no longer has.
+		private val STORED = Json { ignoreUnknownKeys = true }
+
+		/** Nothing if a version of the app stored it differently: HA sends it again on connecting, so this must not stop the app. */
+		fun fromStored(json: String): PanelConfig? =
+			try {
+				STORED.decodeFromString<PanelConfig>(json)
+			} catch (_: IllegalArgumentException) {
+				null
+			}
+	}
+}
+
+/** Present only if voice commands are on. Without a pipeline, HA uses its preferred one. */
+@Serializable
+data class VoiceConfig(
+	val pipeline: String? = null,
+	val phrase: String = DEFAULT_PHRASE,
+) {
+	companion object {
+		const val DEFAULT_PHRASE = "jarvis"
+	}
+}
+
+/** Present only if the camera is published. */
+@Serializable
+data class RtspConfig(
+	val password: String,
+	/** Whether the stream carries the microphone. */
+	val audio: Boolean = false,
+) {
+	override fun toString(): String = "RtspConfig"
+}
 
 @Serializable
 data class CameraConfig(
@@ -20,18 +59,6 @@ data class CameraConfig(
 )
 
 @Serializable
-data class MqttConfig(
-	val server: String,
-	val port: Int = 1883,
-	val username: String,
-	val password: String,
-	val sensors: Boolean = true,
-	val siren: Boolean = true,
-) {
-	override fun toString(): String = "MqttConfig(server=$server, port=$port, username=$username, sensors=$sensors, siren=$siren)"
-}
-
-@Serializable
 data class IntercomConfig(
 	val name: String,
 	val server: String,
@@ -39,6 +66,8 @@ data class IntercomConfig(
 	val password: String,
 	/** The intercom's own number: it is called on answering. */
 	val number: String = "8001",
+	/** The standard audio, or the uncompressed format it sends however the call is negotiated: see [PcmFormat]. */
+	val audio: String = PcmFormat.STANDARD,
 ) {
 	/** Dahua uses extensions like `9901#1`: the `#` is escaped in the URI and literal in the Digest. */
 	val sipIdentity: String

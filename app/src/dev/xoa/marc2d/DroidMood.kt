@@ -1,9 +1,9 @@
 package dev.xoa.marc2d
 
 /** What the droid on the main screen shows. */
-enum class DroidMood { Walking, Sleeping, Offline, Recording, Alarm, Intruder }
+enum class DroidMood { Walking, Sleeping, Offline, Listening, Thinking, Recording, RecordingSound, Alarm, Intruder }
 
-/** The states HA sends over MQTT, with the `select.*_state` entity. */
+/** The states HA sends, with the `select.*_state` entity. */
 enum class HaMood(
 	val label: String,
 ) {
@@ -24,13 +24,29 @@ object DroidMoods {
 		ha: HaMood,
 		hasProblem: Boolean,
 		dark: Boolean,
+		listening: Boolean = false,
+		cameraOn: Boolean = false,
+		cameraSound: Boolean = false,
+		thinking: Boolean = false,
 	): DroidMood =
 		when {
 			ha == HaMood.Intruder -> DroidMood.Intruder
+
 			ha == HaMood.Alarm -> DroidMood.Alarm
-			ha == HaMood.Recording -> DroidMood.Recording
+
+			// Whoever is in front has to know, whatever else the panel would like to say.
+			cameraOn && cameraSound -> DroidMood.RecordingSound
+
+			ha == HaMood.Recording || cameraOn -> DroidMood.Recording
+
+			listening -> DroidMood.Listening
+
+			thinking -> DroidMood.Thinking
+
 			hasProblem -> DroidMood.Offline
+
 			dark -> DroidMood.Sleeping
+
 			else -> DroidMood.Walking
 		}
 }

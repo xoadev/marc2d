@@ -8,7 +8,7 @@ object PanelWarnings {
 			HaStatus.Connecting -> "Connecting to Home Assistant…"
 			HaStatus.Connected -> "Connected to Home Assistant"
 			HaStatus.AuthFailed -> "Home Assistant rejected this panel: add it again"
-			HaStatus.NotAdded -> "This panel is not in the marc2d integration of Home Assistant"
+			HaStatus.NotAdded -> "Waiting for Home Assistant: press Submit in the marc2d form"
 			is HaStatus.InvalidConfig -> "Panel configuration: ${status.reason}"
 			is HaStatus.Disconnected -> "No connection to Home Assistant (${status.reason})"
 		}
@@ -18,13 +18,11 @@ object PanelWarnings {
 		ha: HaStatus,
 		intercoms: Map<String, IntercomStatus>,
 		micGranted: Boolean,
-		mqtt: MqttStatus = MqttStatus.Off,
 	): String? {
 		val lines =
 			buildList {
 				if (!micGranted) add("Microphone permission is missing")
 				if (ha != HaStatus.Connected && ha != HaStatus.Connecting) add(haStatus(ha))
-				if (mqtt == MqttStatus.Connecting) add("No connection to MQTT")
 				intercoms
 					.filterValues { it != IntercomStatus.Registered }
 					.keys

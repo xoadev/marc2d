@@ -22,37 +22,84 @@
   },
   "options": {
     "step": {
+      "intercoms": {
+        "title": "Intercoms",
+        "description": "The panel registers with them over SIP, to answer the door and talk to it. DMSS is not affected. You can leave the list empty.",
+        "data": {
+          "enabled": "On",
+          "intercoms": "Intercoms"
+        },
+        "data_description": {
+          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed. Leave Audio as standard unless the intercom is heard as noise: some, such as Dahua's, send uncompressed audio whatever the call agreed."
+        }
+      },
+      "cameras": {
+        "title": "Cameras",
+        "description": "Their video is shown in the panel's menu. You can leave the list empty.",
+        "data": {
+          "enabled": "On",
+          "cameras": "Cameras"
+        },
+        "data_description": {
+          "cameras": "If you have intercoms, choose one to offer Talk on that camera."
+        }
+      },
+      "weather": {
+        "title": "Weather",
+        "description": "The weather and the forecast next to the clock.",
+        "data": {
+          "enabled": "On",
+          "weather_entity": "Weather entity"
+        }
+      },
       "init": {
         "title": "Panel settings",
-        "description": "The panel applies these as soon as you save them. MQTT carries the doorbell, the sensors and the siren: without it those stop too.",
+        "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
+      },
+      "entities": {
+        "title": "Sensors, siren and speaker",
+        "description": "What this panel exposes in Home Assistant.",
         "data": {
-          "intercoms": "Intercoms (SIP)",
-          "cameras": "Cameras",
-          "weather_entity": "Weather entity"
+          "sensors": "Publish sensors",
+          "siren": "Siren",
+          "speaker": "Speaker"
         },
-        "sections": {
-          "features": {
-            "name": "Features",
-            "data": {
-              "sip": "Intercom (SIP)",
-              "cameras": "Cameras",
-              "weather": "Weather",
-              "mqtt": "MQTT",
-              "sensors": "Publish sensors",
-              "siren": "Siren"
-            }
-          },
-          "mqtt": {
-            "name": "MQTT broker",
-            "data": {
-              "server": "Address",
-              "port": "Port",
-              "username": "User",
-              "password": "Password"
-            }
-          }
+        "data_description": {
+          "sensors": "Light, battery and its temperature, overheating, charging, Wi-Fi signal, app version and presence, guessed from sudden changes of light. Off: Home Assistant removes those entities.",
+          "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command.",
+          "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
+        }
+      },
+      "rtsp": {
+        "title": "Publish the camera",
+        "description": "Creates a camera entity in Home Assistant. The panel's camera is only on while something is watching, and the panel shows it and keeps its screen on: Frigate or anything that records keeps it on all the time. Anyone on the home network who has the password can see it. Others, such as Frigate, connect to `{url}`, so give the panel a fixed address.",
+        "data": {
+          "enabled": "On",
+          "rtsp_password": "Password",
+          "rtsp_audio": "Sound"
+        },
+        "data_description": {
+          "rtsp_password": "At least 12 characters, or empty to generate one. The user is always marc2d.",
+          "rtsp_audio": "Also sends the panel's microphone: whoever watches can hear the room. The droid's eye shows it. Check the law where you live before recording conversations."
+        }
+      },
+      "voice": {
+        "title": "Voice commands",
+        "description": "The panel listens for its wake phrase on the device. Only what follows is sent to Home Assistant. It downloads a 40 MB model the first time, and anyone near the panel can give orders to what is exposed to Assist.",
+        "data": {
+          "enabled": "On",
+          "pipeline": "Assistant",
+          "wake_phrase": "Wake phrase"
+        },
+        "data_description": {
+          "pipeline": "Needs speech-to-text. Empty uses the preferred assistant.",
+          "wake_phrase": "Say it alone, with a pause before and after. Short, unusual phrases work best. It has to use words of the panel's Spanish model: with any other word it never reacts. Empty uses jarvis."
         }
       }
+    },
+    "error": {
+      "required": "Needed while this is on.",
+      "too_short": "At least 12 characters: anyone on the home network can try it. Leave it empty to generate one."
     }
   }
 }

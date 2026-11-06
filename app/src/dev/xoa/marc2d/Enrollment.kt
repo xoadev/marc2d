@@ -8,8 +8,10 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import java.io.IOException
 import java.net.URI
 import java.net.URLDecoder
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -40,6 +42,28 @@ data class EnrollmentInvite(
 }
 
 class EnrollmentRejectedException : Exception("Home Assistant rejected the code")
+
+/** Returns what to tell the user, or nothing if it worked. */
+suspend fun enrollmentProblem(
+	invite: EnrollmentInvite,
+	attempt: suspend () -> Unit,
+): String? =
+	try {
+		attempt()
+		null
+	} catch (e: CancellationException) {
+		// It is an IllegalStateException: without this, it would read as a wrong address.
+		throw e
+	} catch (_: EnrollmentRejectedException) {
+		"The code is not valid or has expired"
+	} catch (e: IOException) {
+		"Cannot reach Home Assistant at ${invite.url} (${e::class.simpleName})"
+	} catch (_: IllegalArgumentException) {
+		// Includes an answer that is not JSON: a typed address may be any other server.
+		"That address is not a Home Assistant with marc2d"
+	} catch (_: IllegalStateException) {
+		"That address is not a Home Assistant with marc2d"
+	}
 
 /** Exchanges the one-time code for the panel's own token. */
 class EnrollmentClient {
