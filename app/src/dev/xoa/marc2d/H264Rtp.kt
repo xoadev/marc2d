@@ -48,7 +48,7 @@ private val ByteArray.nalType: Int
 	get() = this[0].toInt() and 0x1F
 
 /** What both tracks share: the RTP header, and the reports that let clients line up their clocks. */
-private class RtpWriter(
+internal class RtpWriter(
 	private val payloadType: Int,
 	private val clockRate: Int,
 	private val ssrc: Int,

@@ -67,6 +67,23 @@ INTERCOM_FIELDS = {
     "extension": _field("Panel extension", {"text": {}}),
     "password": _field("Extension password", {"text": {"type": "password"}}),
     "number": _field("Intercom number (default 8001)", {"text": {}}, required=False),
+    # Standard intercoms need nothing here: Linphone negotiates their audio.
+    # Some send uncompressed audio whatever is agreed.
+    "audio": _field(
+        "Audio",
+        {
+            "select": {
+                "options": [
+                    {"value": "standard", "label": "Standard (default)"},
+                    {"value": "pcm_le_16000", "label": "PCM 16 kHz, little-endian (Dahua)"},
+                    {"value": "pcm_le_8000", "label": "PCM 8 kHz, little-endian"},
+                    {"value": "l16_16000", "label": "L16 16 kHz, big-endian"},
+                    {"value": "l16_8000", "label": "L16 8 kHz, big-endian"},
+                ]
+            }
+        },
+        required=False,
+    ),
     "doorbell": _field(
         "Doorbell button",
         {"entity": {"domain": ["binary_sensor", "event"]}},

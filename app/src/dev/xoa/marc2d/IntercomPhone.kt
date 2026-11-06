@@ -41,6 +41,7 @@ class IntercomPhone(
 	val call: StateFlow<IntercomCall?> = _call.asStateFlow()
 
 	private var applied: PanelConfig? = null
+	private val ownAudio = IntercomAudio(context)
 	private var activeCall: Call? = null
 
 	/** The intercom whose doorbell is ringing, notified by Home Assistant: there is no SIP call yet. */
@@ -72,6 +73,10 @@ class IntercomPhone(
 			// out of the core, and this keeps its Android helper from ringing again on top.
 			isNativeRingingEnabled = true
 			config.setInt("sound", "disable_ringing", 1)
+			// A fixed port, so that the panel's own audio can share it for intercoms whose audio Linphone cannot play. With
+			// its microphone muted Linphone then sends nothing, which would otherwise reach the intercom as noise.
+			audioPort = AUDIO_PORT
+			config.setInt("rtp", "rtp_no_xmit_on_audio_mute", 1)
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -257,6 +262,7 @@ class IntercomPhone(
 
 					Call.State.Connected, Call.State.StreamsRunning -> {
 						silence()
+						if (state == Call.State.StreamsRunning) startOwnAudio(call)
 						activeCall = call
 						dialing = null
 						routeToSpeaker(call)
@@ -266,6 +272,7 @@ class IntercomPhone(
 					Call.State.End, Call.State.Error, Call.State.Released -> {
 						if (activeCall == call) {
 							silence()
+							stopOwnAudio()
 							activeCall = null
 							retryOrEnd()
 						}
@@ -285,6 +292,7 @@ class IntercomPhone(
 		const val RING_TIMEOUT_MILLIS = 45_000L
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
+		const val AUDIO_PORT = 7078
 	}
 
 	/** There is no earpiece on the wall: always use the speaker. */
@@ -299,10 +307,22 @@ class IntercomPhone(
 		return applied?.intercoms?.firstOrNull { it.server == server }?.name
 	}
 
-	private fun callName(call: Call): String {
+	private fun intercomFor(call: Call): IntercomConfig? {
 		val server = call.remoteAddress.domain
-		return applied?.intercoms?.firstOrNull { it.server == server }?.name
-			?: call.remoteAddress.displayName
-			?: "Intercom"
+		return applied?.intercoms?.firstOrNull { it.server == server }
+	}
+
+	private fun callName(call: Call): String = intercomFor(call)?.name ?: call.remoteAddress.displayName ?: "Intercom"
+
+	/** Only for an intercom configured with its own format: the standard audio stays with Linphone. */
+	private fun startOwnAudio(call: Call) {
+		val format = intercomFor(call)?.audio?.let(PcmFormat::parse) ?: return
+		core.isMicEnabled = false
+		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
+	}
+
+	private fun stopOwnAudio() {
+		ownAudio.stop()
+		core.isMicEnabled = true
 	}
 }

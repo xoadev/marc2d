@@ -30,7 +30,7 @@
           "intercoms": "Intercoms"
         },
         "data_description": {
-          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed."
+          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed. Leave Audio as standard unless the intercom is heard as noise: some, such as Dahua's, send uncompressed audio whatever the call agreed."
         }
       },
       "cameras": {

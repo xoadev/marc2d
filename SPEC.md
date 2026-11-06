@@ -63,6 +63,12 @@ whatever alarm was active.
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
   video. If HA goes down, the panels do not ring, but DMSS keeps working.
 - An incoming SIP call to the extension is also handled.
+- **Audio:** standard by default: Linphone negotiates it and plays it. Some intercoms send uncompressed audio whatever
+  the call agreed, and Linphone drops it, so each intercom has an Audio setting for that: PCM or L16, at 8 or 16 kHz,
+  little or big-endian. Then the panel plays and sends that audio itself, on Linphone's audio port, and Linphone only
+  keeps the call and the video, with its microphone muted so that it sends nothing. The payload type, and where to send,
+  are learnt from the intercom's first packets. The Android API of Linphone cannot read the intercom's offer, so this is
+  a setting and not automatic.
 - From its camera, **Talk** calls the intercom without the doorbell having been pressed.
 - Home network only. From outside, over Tailscale, the subnet router does SNAT and the
   intercom cannot reach the panel's `Contact`.
@@ -70,7 +76,7 @@ whatever alarm was active.
 
 ### Dahua VTO
 
-Verified against a VTO2202F (UDP 5060), which is Asterisk inside:
+Verified against a VTO2202F-P-S3 (UDP 5060), which is Asterisk inside:
 
 - Extension `9901#1` registers (`200 OK`) with the URI `sip:9901%231@<vto>`, with the
   `#` escaped, and the Digest user `9901#1`, literal.
@@ -78,7 +84,10 @@ Verified against a VTO2202F (UDP 5060), which is Asterisk inside:
 - The button calls group `9901`, and no extension receives that `INVITE`: the server stays at
   `100 Trying`. Direct calls to an extension do arrive. The button number is not changed
   so as not to risk DMSS, which receives the doorbell by another route.
-- The VTO accepts calls to `8001`: two-way PCMU audio and H.264 video to the panel. Right
+- Its audio is `PCM/16000`, payload type 97, little-endian, whatever the call agrees: measured on a call, as the other
+  byte order gives nonsense. It plays what it receives as that too, so PCMA reached the street as noise. It needs the
+  Audio setting `pcm_le_16000`.
+- The VTO accepts calls to `8001`, with that audio and H.264 video to the panel. Right
   after a button press it does not answer, while its own group call lasts: the panel retries every 2
   seconds, for up to 45.
 - A device that reaches the VTO through the Tailscale subnet route (`--accept-routes`) leaves with SNAT

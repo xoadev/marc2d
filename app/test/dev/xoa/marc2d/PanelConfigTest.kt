@@ -22,6 +22,13 @@ class PanelConfigTest {
 	}
 
 	@Test
+	fun `an intercom's audio is standard unless it says otherwise`() {
+		assertEquals(PcmFormat.STANDARD, intercom.audio)
+		val stored = PanelConfig.fromStored("""{"intercoms":[{"name":"P","server":"s","extension":"e","password":"p","audio":"pcm_le_16000"}]}""")
+		assertEquals(PcmFormat(16_000, true), PcmFormat.parse(stored!!.intercoms.single().audio))
+	}
+
+	@Test
 	fun `the wake phrase comes from Home Assistant, or is the default`() {
 		assertEquals("oye mark", PanelConfig.fromStored("""{"voice":{"phrase":"oye mark"}}""")?.voice?.phrase)
 		assertEquals(VoiceConfig.DEFAULT_PHRASE, PanelConfig.fromStored("""{"voice":{}}""")?.voice?.phrase)

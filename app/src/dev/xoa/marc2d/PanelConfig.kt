@@ -66,6 +66,8 @@ data class IntercomConfig(
 	val password: String,
 	/** The intercom's own number: it is called on answering. */
 	val number: String = "8001",
+	/** The standard audio, or the uncompressed format it sends however the call is negotiated: see [PcmFormat]. */
+	val audio: String = PcmFormat.STANDARD,
 ) {
 	/** Dahua uses extensions like `9901#1`: the `#` is escaped in the URI and literal in the Digest. */
 	val sipIdentity: String
