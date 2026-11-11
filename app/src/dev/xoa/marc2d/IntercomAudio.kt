@@ -13,8 +13,6 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import java.net.DatagramSocket
-import java.net.InetSocketAddress
-import java.net.StandardSocketOptions
 
 /**
  * The microphone and the speaker for an intercom whose audio Linphone cannot play, through [PcmRtpLink]. Started and stopped
@@ -25,6 +23,7 @@ class IntercomAudio(
 ) {
 	private var socket: DatagramSocket? = null
 	private var threads: List<Thread> = emptyList()
+	private var link: PcmRtpLink? = null
 
 	@Volatile private var running = false
 
@@ -37,11 +36,7 @@ class IntercomAudio(
 		if (socket != null) return
 		val shared =
 			try {
-				DatagramSocket(null).apply {
-					reuseAddress = true
-					setOption(StandardSocketOptions.SO_REUSEPORT, true)
-					bind(InetSocketAddress(port))
-				}
+				takeOverUdpPort(port)
 			} catch (e: Exception) {
 				Log.w(TAG, "Intercom audio: no port ${e::class.simpleName}")
 				return
@@ -51,6 +46,8 @@ class IntercomAudio(
 		useSpeaker()
 		val track = speaker(format)
 		val link = PcmRtpLink(shared, format, negotiatedPayloadType) { track.write(it, 0, it.size) }
+		this.link = link
+		Log.i(TAG, "Intercom audio on port $port, apart from type $negotiatedPayloadType")
 		threads =
 			listOf(
 				Thread({ runSafely("speaker") { link.receive() } }, "marc2d-intercom-in"),
@@ -64,6 +61,8 @@ class IntercomAudio(
 	}
 
 	fun stop() {
+		link?.let { Log.i(TAG, "Intercom audio: ${it.summary}") }
+		link = null
 		running = false
 		socket?.close()
 		socket = null

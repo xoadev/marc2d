@@ -2,8 +2,10 @@ package dev.xoa.marc2d
 
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.net.SocketException
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 /**
@@ -94,6 +96,17 @@ class RtpPacket(
 	}
 }
 
+/**
+ * A socket on [port] that gets what arrives there instead of the one already bound to it, which has to allow address
+ * reuse too, as Linphone's does: on Linux the last socket bound takes it. Android does not support SO_REUSEPORT on a
+ * [DatagramSocket], and it is not needed.
+ */
+fun takeOverUdpPort(port: Int): DatagramSocket =
+	DatagramSocket(null).apply {
+		reuseAddress = true
+		bind(InetSocketAddress(port))
+	}
+
 /** Whether [sequence] comes after [last], with the 16-bit counter going round. */
 fun isNewer(
 	sequence: Int,
@@ -124,8 +137,18 @@ class PcmRtpLink(
 	private val writer by lazy { RtpWriter(payloadType ?: 0, format.sampleRate, Random.nextInt()) }
 	private var sent = 0L
 
+	@Volatile private var arrived = 0
+
+	@Volatile private var played = 0
+
+	private val typesArrived = ConcurrentHashMap.newKeySet<Int>()
+
 	val isHeard: Boolean
 		get() = payloadType != null
+
+	/** What happened in the call, to tell from the log which way the audio got lost. */
+	val summary: String
+		get() = "$arrived RTP packets arrived, of types ${typesArrived.sorted()}; $played played as type $payloadType; ${sent / format.frameSamples} sent"
 
 	/** Until the socket closes. */
 	fun receive() {
@@ -138,6 +161,8 @@ class PcmRtpLink(
 				return
 			}
 			val rtp = RtpPacket.parse(buffer, packet.length) ?: continue
+			arrived++
+			typesArrived.add(rtp.payloadType)
 			if (!isTheirAudio(rtp)) continue
 			if (payloadType == null) {
 				remote = packet.socketAddress
@@ -148,6 +173,7 @@ class PcmRtpLink(
 			// A packet that arrives late would only play out of place.
 			if (previous != null && !isNewer(rtp.sequence, previous)) continue
 			last = rtp.sequence
+			played++
 			play(decodePcm(buffer, rtp.payloadOffset, rtp.payloadLength, format.littleEndian))
 		}
 	}

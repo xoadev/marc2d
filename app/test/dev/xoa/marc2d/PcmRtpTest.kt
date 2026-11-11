@@ -112,6 +112,28 @@ class PcmRtpTest {
 		}
 	}
 
+	@Test
+	fun `takes over a port already bound with address reuse`() {
+		val linphone =
+			DatagramSocket(null).apply {
+				reuseAddress = true
+				bind(InetSocketAddress(0))
+			}
+		val panel = takeOverUdpPort(linphone.localPort).apply { soTimeout = 2000 }
+		val intercom = DatagramSocket()
+		try {
+			val bytes = rtp(97, 1, 0, ByteArray(640))
+			intercom.send(DatagramPacket(bytes, bytes.size, InetSocketAddress(InetAddress.getLoopbackAddress(), linphone.localPort)))
+			val packet = DatagramPacket(ByteArray(2048), 2048)
+			panel.receive(packet)
+			assertEquals(bytes.size, packet.length)
+		} finally {
+			linphone.close()
+			panel.close()
+			intercom.close()
+		}
+	}
+
 	private fun rtp(
 		type: Int,
 		sequence: Int,
