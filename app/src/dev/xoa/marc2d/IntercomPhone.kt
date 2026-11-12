@@ -5,6 +5,7 @@ import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.Call
@@ -14,6 +15,7 @@ import org.linphone.core.Factory
 import org.linphone.core.MediaDirection
 import org.linphone.core.Reason
 import org.linphone.core.RegistrationState
+import org.linphone.core.StreamType
 import org.linphone.core.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,10 +75,8 @@ class IntercomPhone(
 			// out of the core, and this keeps its Android helper from ringing again on top.
 			isNativeRingingEnabled = true
 			config.setInt("sound", "disable_ringing", 1)
-			// A fixed port, so that the panel's own audio can share it for intercoms whose audio Linphone cannot play. With
-			// its microphone muted Linphone then sends nothing, which would otherwise reach the intercom as noise.
+			// A fixed port, so that the panel's own audio can share it for intercoms whose audio Linphone cannot play.
 			audioPort = AUDIO_PORT
-			config.setInt("rtp", "rtp_no_xmit_on_audio_mute", 1)
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -170,6 +170,7 @@ class IntercomPhone(
 		if (address != null && params != null) {
 			params.isVideoEnabled = true
 			params.videoDirection = MediaDirection.RecvOnly
+			if (hasOwnAudio(intercom)) params.audioDirection = MediaDirection.RecvOnly
 			activeCall = core.inviteAddressWithParams(address, params)
 		}
 		if (activeCall == null) retryOrEnd()
@@ -201,6 +202,7 @@ class IntercomPhone(
 		params.isVideoEnabled = true
 		// The door station is visible, but the panel sends no image.
 		params.videoDirection = MediaDirection.RecvOnly
+		if (intercomFor(call)?.let(::hasOwnAudio) == true) params.audioDirection = MediaDirection.RecvOnly
 		call.acceptWithParams(params)
 	}
 
@@ -293,6 +295,7 @@ class IntercomPhone(
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
 		const val AUDIO_PORT = 7078
+		const val MEASURE_MILLIS = 1_000L
 	}
 
 	/** There is no earpiece on the wall: always use the speaker. */
@@ -314,15 +317,35 @@ class IntercomPhone(
 
 	private fun callName(call: Call): String = intercomFor(call)?.name ?: call.remoteAddress.displayName ?: "Intercom"
 
+	/**
+	 * Linphone only receives the audio of such an intercom, which the panel takes before it. Muting its microphone is not
+	 * enough: it kept sending its codec, which the intercom played as noise.
+	 */
+	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null
+
 	/** Only for an intercom configured with its own format: the standard audio stays with Linphone. */
 	private fun startOwnAudio(call: Call) {
 		val format = intercomFor(call)?.audio?.let(PcmFormat::parse) ?: return
-		core.isMicEnabled = false
 		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
+		linphoneUpload.clear()
+		main.removeCallbacks(measureLinphone)
+		main.post(measureLinphone)
 	}
 
+	/** Linphone must send no audio of its own beside the panel's, which the intercom would play as noise. */
+	private val linphoneUpload = mutableListOf<Int>()
+	private val measureLinphone: Runnable =
+		object : Runnable {
+			override fun run() {
+				val stats = activeCall?.getStats(StreamType.Audio) ?: return
+				linphoneUpload += stats.uploadBandwidth.toInt()
+				main.postDelayed(this, MEASURE_MILLIS)
+			}
+		}
+
 	private fun stopOwnAudio() {
+		if (main.hasCallbacks(measureLinphone)) Log.i("marc2d", "Linphone sent audio at $linphoneUpload kbit/s")
+		main.removeCallbacks(measureLinphone)
 		ownAudio.stop()
-		core.isMicEnabled = true
 	}
 }

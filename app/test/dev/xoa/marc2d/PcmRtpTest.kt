@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -68,7 +69,7 @@ class PcmRtpTest {
 	}
 
 	@Test
-	fun `plays the intercom's audio and answers in the same format, where it came from`() {
+	fun `plays the intercom's audio and answers in packets like its own, where it came from`() {
 		val panel = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
 		val intercom = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).apply { soTimeout = 2000 }
 		val played = LinkedBlockingQueue<ShortArray>()
@@ -82,29 +83,40 @@ class PcmRtpTest {
 			// What Linphone negotiated, a DTMF event and a short packet are not the intercom's audio.
 			send(rtp(8, 1, 0, ByteArray(160)))
 			send(rtp(101, 2, 0, ByteArray(4)))
-			send(rtp(97, 3, 0, encodePcm(ShortArray(320) { -13 }, true)))
+			// 40 ms at 16 kHz, with the timestamp moving as if at 8 kHz, as a Dahua VTO sends it.
+			send(rtp(97, 3, 1000, encodePcm(ShortArray(640) { -13 }, true)))
 			val heard = assertNotNull(played.poll(2, TimeUnit.SECONDS))
-			assertEquals(320, heard.size)
+			assertEquals(640, heard.size)
 			assertEquals(-13, heard[0].toInt())
 			assertTrue(link.isHeard)
+			assertFalse(link.send(ShortArray(320)), "the size of its packets is not known from one")
+			// Its steps vary: the usual one counts, not the first.
+			var timestamp = 1000
+			for ((i, step) in listOf(960, 320, 320, 480, 320, 320, 640, 320, 320).withIndex()) {
+				timestamp += step
+				send(rtp(97, 4 + i, timestamp, ByteArray(1280)))
+				assertNotNull(played.poll(2, TimeUnit.SECONDS))
+			}
 			assertNull(played.poll(200, TimeUnit.MILLISECONDS))
 
 			// A packet older than the last one played is dropped.
-			send(rtp(97, 2, 0, ByteArray(640)))
+			send(rtp(97, 12, 0, ByteArray(1280)))
 			assertNull(played.poll(200, TimeUnit.MILLISECONDS))
 
-			assertTrue(link.send(ShortArray(320) { 16 }))
-			assertTrue(link.send(ShortArray(320) { 16 }))
+			// The microphone's 20 ms frames go out two to a packet.
+			repeat(4) { assertTrue(link.send(ShortArray(320) { 16 })) }
 			val buffer = ByteArray(2048)
 			val first = DatagramPacket(buffer.copyOf(), 2048).also { intercom.receive(it) }
 			val second = DatagramPacket(buffer.copyOf(), 2048).also { intercom.receive(it) }
 			val a = RtpPacket.parse(first.data, first.length)!!
 			val b = RtpPacket.parse(second.data, second.length)!!
 			assertEquals(97, a.payloadType)
-			assertEquals(640, a.payloadLength)
+			assertEquals(1280, a.payloadLength)
 			assertEquals((a.sequence + 1) and 0xFFFF, b.sequence)
 			assertEquals((a.timestamp + 320) and 0xFFFFFFFFL, b.timestamp)
 			assertEquals(16, decodePcm(first.data, a.payloadOffset, a.payloadLength, true)[0].toInt())
+			intercom.soTimeout = 200
+			assertFailsWith<java.net.SocketTimeoutException> { intercom.receive(DatagramPacket(buffer, 2048)) }
 		} finally {
 			panel.close()
 			intercom.close()

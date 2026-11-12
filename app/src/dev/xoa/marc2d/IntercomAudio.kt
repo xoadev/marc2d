@@ -24,6 +24,7 @@ class IntercomAudio(
 	private var socket: DatagramSocket? = null
 	private var threads: List<Thread> = emptyList()
 	private var link: PcmRtpLink? = null
+	private var track: AudioTrack? = null
 
 	@Volatile private var running = false
 
@@ -47,6 +48,7 @@ class IntercomAudio(
 		val track = speaker(format)
 		val link = PcmRtpLink(shared, format, negotiatedPayloadType) { track.write(it, 0, it.size) }
 		this.link = link
+		this.track = track
 		Log.i(TAG, "Intercom audio on port $port, apart from type $negotiatedPayloadType")
 		threads =
 			listOf(
@@ -61,8 +63,9 @@ class IntercomAudio(
 	}
 
 	fun stop() {
-		link?.let { Log.i(TAG, "Intercom audio: ${it.summary}") }
+		link?.let { Log.i(TAG, "Intercom audio: ${it.summary}; speaker buffer ${track?.bufferSizeInFrames} frames, ${track?.underrunCount} underruns") }
 		link = null
+		track = null
 		running = false
 		socket?.close()
 		socket = null
