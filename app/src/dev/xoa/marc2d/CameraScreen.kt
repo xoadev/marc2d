@@ -125,7 +125,7 @@ fun CameraScreen(
 }
 
 @Composable
-private fun CameraView(
+internal fun CameraView(
 	camera: CameraConfig,
 	connection: HaConnection,
 	active: Boolean,

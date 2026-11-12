@@ -262,3 +262,18 @@ class MjpegParserTest {
 		assertEquals(bytes(0xFF, 0xD8, 0xFF, 0xD9).toList(), frames[1])
 	}
 }
+
+class RingingCameraTest {
+	private val cameras =
+		listOf(
+			CameraConfig("camera.garden", "Garden"),
+			CameraConfig("camera.door", "Door", intercom = "Door"),
+		)
+
+	@Test
+	fun `shows the intercom's camera while it rings, and the call's video once answered`() {
+		assertEquals(cameras[1], ringingCamera(IntercomCall("Door", answered = false), cameras))
+		assertEquals(null, ringingCamera(IntercomCall("Door", answered = true), cameras))
+		assertEquals(null, ringingCamera(IntercomCall("Gate", answered = false), cameras))
+	}
+}

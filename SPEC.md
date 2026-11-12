@@ -60,6 +60,7 @@ whatever alarm was active.
 - The panel registers as a SIP extension on the intercom, which acts as the SIP server.
 - Each intercom has its doorbell button entity in the form. When it fires, the integration tells every panel with that
   intercom to ring, even if the app is in the background, and they stop ringing after 45 seconds.
+- While it rings, the panel shows the camera linked to that intercom, from HA: the call's video only starts on answering.
 - On answering, the panel tells the integration, the others stop ringing, and it calls the intercom's
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
   video. If HA goes down, the panels do not ring, but DMSS keeps working.
@@ -67,8 +68,9 @@ whatever alarm was active.
 - **Audio:** standard by default: Linphone negotiates it and plays it. Some intercoms send uncompressed audio whatever
   the call agreed, and Linphone drops it, so each intercom has an Audio setting for that: PCM or L16, at 8 or 16 kHz,
   little or big-endian. Then the panel plays and sends that audio itself, on Linphone's audio port, and Linphone only
-  keeps the call and the video, with its microphone muted so that it sends nothing. The payload type, and where to send,
-  are learnt from the intercom's first packets. The Android API of Linphone cannot read the intercom's offer, so this is
+  keeps the call and the video, with the audio only received: with a muted microphone it still sent its codec, which the
+  VTO played as crackling. The payload type, where to send, and the size and timestamp step of the packets are learnt
+  from the intercom's first packets: the VTO sends 40 ms, with timestamp steps that vary, so the usual one is used. The Android API of Linphone cannot read the intercom's offer, so this is
   a setting and not automatic.
 - From its camera, **Talk** calls the intercom without the doorbell having been pressed.
 - Home network only. From outside, over Tailscale, the subnet router does SNAT and the

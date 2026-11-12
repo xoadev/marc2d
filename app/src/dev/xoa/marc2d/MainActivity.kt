@@ -96,6 +96,8 @@ class MainActivity : ComponentActivity() {
 						activeCall != null -> {
 							CallScreen(
 								call = activeCall,
+								camera = ringingCamera(activeCall, cameras),
+								connection = connection,
 								onVideoView = runtime.phone::setVideoView,
 								onAnswer = runtime.phone::answer,
 								onHangUp = runtime.phone::hangUp,

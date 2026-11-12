@@ -14,9 +14,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 
+/** The camera to show while it rings: the call's video only starts on answering. */
+fun ringingCamera(
+	call: IntercomCall,
+	cameras: List<CameraConfig>,
+): CameraConfig? = if (call.answered) null else cameras.firstOrNull { it.intercom == call.name }
+
 @Composable
 fun CallScreen(
 	call: IntercomCall,
+	camera: CameraConfig?,
+	connection: HaConnection?,
 	onVideoView: (TextureView?) -> Unit,
 	onAnswer: () -> Unit,
 	onHangUp: () -> Unit,
@@ -33,6 +41,7 @@ fun CallScreen(
 			onRelease = { onVideoView(null) },
 			modifier = Modifier.fillMaxSize(),
 		)
+		if (camera != null && connection != null) CameraView(camera, connection, active = true)
 		Text(
 			text = if (call.answered) call.name else "Call from ${call.name}",
 			color = Color.White,
