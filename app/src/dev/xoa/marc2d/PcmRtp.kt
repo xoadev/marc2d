@@ -126,7 +126,7 @@ fun isNewer(
  */
 class PcmRtpLink(
 	private val socket: DatagramSocket,
-	private val format: PcmFormat,
+	val format: PcmFormat,
 	private val negotiatedPayloadType: Int,
 	private val play: (ShortArray) -> Unit,
 ) {
@@ -288,7 +288,7 @@ class PcmRtpLink(
 	}
 }
 
-private fun rtpHeader(
+internal fun rtpHeader(
 	payloadType: Int,
 	sequence: Int,
 	timestamp: Long,

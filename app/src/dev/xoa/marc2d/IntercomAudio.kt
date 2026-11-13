@@ -15,8 +15,9 @@ import android.util.Log
 import java.net.DatagramSocket
 
 /**
- * The microphone and the speaker for an intercom whose audio Linphone cannot play, through [PcmRtpLink]. Started and stopped
- * from the main thread; the audio runs on two threads of its own.
+ * The microphone and the speaker for an intercom whose audio Linphone cannot play, through [PcmRtpLink], and the panel's
+ * voice when it goes over RTSP, through [RtspBackchannel]. Started and stopped from the main thread; the audio runs on
+ * threads of its own.
  */
 class IntercomAudio(
 	private val context: Context,
@@ -28,41 +29,70 @@ class IntercomAudio(
 
 	@Volatile private var running = false
 
-	@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
+	/**
+	 * [format] is the intercom's own audio, which the panel plays and, without [talk], also sends: nothing when Linphone plays
+	 * it. [talk] is the RTSP URL the panel's voice goes to instead.
+	 */
 	fun start(
 		port: Int,
-		format: PcmFormat,
+		format: PcmFormat?,
 		negotiatedPayloadType: Int,
+		talk: String?,
 	) {
-		if (socket != null) return
-		val shared =
-			try {
-				takeOverUdpPort(port)
-			} catch (e: Exception) {
-				Log.w(TAG, "Intercom audio: no port ${e::class.simpleName}")
-				return
-			}
-		socket = shared
+		if (running) return
 		running = true
 		useSpeaker()
-		val track = speaker(format)
-		val link = PcmRtpLink(shared, format, negotiatedPayloadType) { track.write(it, 0, it.size) }
+		val link =
+			format?.let {
+				try {
+					takeOverUdpPort(port)
+				} catch (e: Exception) {
+					Log.w(TAG, "Intercom audio: no port ${e::class.simpleName}")
+					null
+				}?.let { shared ->
+					socket = shared
+					val track = speaker(format)
+					this.track = track
+					PcmRtpLink(shared, format, negotiatedPayloadType) { track.write(it, 0, it.size) }
+				}
+			}
 		this.link = link
-		this.track = track
-		Log.i(TAG, "Intercom audio on port $port, apart from type $negotiatedPayloadType")
-		threads =
-			listOf(
-				Thread({ runSafely("speaker") { link.receive() } }, "marc2d-intercom-in"),
-				Thread({ runSafely("microphone") { record(link, format) } }, "marc2d-intercom-out"),
-			)
+		Log.i(TAG, "Intercom audio on port $port, apart from type $negotiatedPayloadType, talking over ${if (talk != null) "RTSP" else "RTP"}")
+		val speaking =
+			when {
+				talk != null -> Thread({ runSafely("microphone") { talkOverRtsp(talk) } }, "marc2d-intercom-out")
+				link != null -> Thread({ runSafely("microphone") { record(link.format.sampleRate) { link.send(it) } } }, "marc2d-intercom-out")
+				else -> null
+			}
+		threads = listOfNotNull(link?.let { Thread({ runSafely("speaker") { it.receive() } }, "marc2d-intercom-in") }, speaking)
 		threads.forEach(Thread::start)
+		val playing = track
 		Thread({
 			threads.forEach(Thread::join)
-			track.release()
+			playing?.release()
 		}, "marc2d-intercom-end").start()
 	}
 
+	/** On the microphone's thread: the connection is network work, and it ends when the recording does. */
+	private fun talkOverRtsp(url: String) {
+		val backchannel =
+			try {
+				RtspBackchannel.open(url)
+			} catch (e: java.io.IOException) {
+				// Never the URL: it carries the password.
+				Log.w(TAG, "Intercom backchannel not opened: ${e.message}")
+				return
+			}
+		try {
+			Log.i(TAG, "Intercom backchannel: ${backchannel.track.codec}/${backchannel.track.sampleRate}")
+			record(backchannel.track.sampleRate) { backchannel.send(it) }
+		} finally {
+			backchannel.close()
+		}
+	}
+
 	fun stop() {
+		if (!running) return
 		link?.let { Log.i(TAG, "Intercom audio: ${it.summary}; speaker buffer ${track?.bufferSizeInFrames} frames, ${track?.underrunCount} underruns") }
 		link = null
 		track = null
@@ -97,20 +127,22 @@ class IntercomAudio(
 			.apply { play() }
 	}
 
-	@SuppressLint("MissingPermission")
+	@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
 	private fun record(
-		link: PcmRtpLink,
-		format: PcmFormat,
+		sampleRate: Int,
+		send: (ShortArray) -> Unit,
 	) {
-		val minimum = AudioRecord.getMinBufferSize(format.sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+		// 20 ms at a time.
+		val frameSamples = sampleRate / FRAMES_PER_SECOND
+		val minimum = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 		// The communication source gets Android's processing for calls, with the echo of the speaker taken out where it can.
 		val microphone =
 			AudioRecord(
 				MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-				format.sampleRate,
+				sampleRate,
 				AudioFormat.CHANNEL_IN_MONO,
 				AudioFormat.ENCODING_PCM_16BIT,
-				maxOf(minimum, format.frameSamples * 2 * BUFFERED_FRAMES),
+				maxOf(minimum, frameSamples * 2 * BUFFERED_FRAMES),
 			)
 		val effects =
 			listOfNotNull(
@@ -120,7 +152,7 @@ class IntercomAudio(
 		effects.forEach { it.enabled = true }
 		try {
 			microphone.startRecording()
-			val frame = ShortArray(format.frameSamples)
+			val frame = ShortArray(frameSamples)
 			while (running) {
 				var read = 0
 				while (read < frame.size && running) {
@@ -128,8 +160,7 @@ class IntercomAudio(
 					if (got < 0) return
 					read += got
 				}
-				// Until the intercom has spoken, it is not known where to send it.
-				if (running) link.send(frame)
+				if (running) send(frame)
 			}
 		} finally {
 			effects.forEach { it.release() }
@@ -159,5 +190,6 @@ class IntercomAudio(
 	private companion object {
 		const val TAG = "marc2d"
 		const val BUFFERED_FRAMES = 6
+		const val FRAMES_PER_SECOND = 50
 	}
 }

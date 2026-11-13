@@ -29,6 +29,16 @@ class PanelConfigTest {
 	}
 
 	@Test
+	fun `the voice goes over SIP unless an RTSP URL says otherwise, which stays out of logs`() {
+		assertNull(intercom.talk)
+		val url = "rtsp://admin:s3cr3t@192.0.2.8/cam/realmonitor?channel=1&subtype=1"
+		val stored =
+			PanelConfig.fromStored("""{"intercoms":[{"name":"P","server":"s","extension":"e","password":"p","talk":"$url"}]}""")!!
+		assertEquals(url, stored.intercoms.single().talk)
+		assertFalse("s3cr3t" in stored.toString())
+	}
+
+	@Test
 	fun `the wake phrase comes from Home Assistant, or is the default`() {
 		assertEquals("oye mark", PanelConfig.fromStored("""{"voice":{"phrase":"oye mark"}}""")?.voice?.phrase)
 		assertEquals(VoiceConfig.DEFAULT_PHRASE, PanelConfig.fromStored("""{"voice":{}}""")?.voice?.phrase)

@@ -321,12 +321,13 @@ class IntercomPhone(
 	 * Linphone only receives the audio of such an intercom, which the panel takes before it. Muting its microphone is not
 	 * enough: it kept sending its codec, which the intercom played as noise.
 	 */
-	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null
+	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null || intercom.talk != null
 
-	/** Only for an intercom configured with its own format: the standard audio stays with Linphone. */
+	/** Only for an intercom with its own format or talked to over RTSP: otherwise the audio stays with Linphone. */
 	private fun startOwnAudio(call: Call) {
-		val format = intercomFor(call)?.audio?.let(PcmFormat::parse) ?: return
-		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
+		val intercom = intercomFor(call) ?: return
+		if (!hasOwnAudio(intercom)) return
+		ownAudio.start(core.audioPort, PcmFormat.parse(intercom.audio), call.currentParams.usedAudioPayloadType?.number ?: -1, intercom.talk)
 		linphoneUpload.clear()
 		main.removeCallbacks(measureLinphone)
 		main.post(measureLinphone)

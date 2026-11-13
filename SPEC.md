@@ -70,8 +70,15 @@ whatever alarm was active.
   little or big-endian. Then the panel plays and sends that audio itself, on Linphone's audio port, and Linphone only
   keeps the call and the video, with the audio only received: with a muted microphone it still sent its codec, which the
   VTO played as crackling. The payload type, where to send, and the size and timestamp step of the packets are learnt
-  from the intercom's first packets: the VTO sends 40 ms, with timestamp steps that vary, so the usual one is used. The Android API of Linphone cannot read the intercom's offer, so this is
-  a setting and not automatic.
+  from the intercom's first packets: the VTO sends 40 ms, with timestamp steps that vary, so the usual one is used. The
+  Android API of Linphone cannot read the intercom's offer, so this is a setting and not automatic.
+- **Talk over RTSP:** each intercom can also take an RTSP URL, with its user and password. Then the panel's voice goes
+  through the intercom's ONVIF backchannel instead of the SIP call, which keeps the call, the video and the sound from the
+  street. A Dahua VTO plays the voice of a SIP call with a regular click, whatever its format, pace or content, even
+  digital silence; through the backchannel, as DMSS does, it is clean. The panel's own RTSP client asks for the
+  `sendonly` track with `Require: www.onvif.org/ver20/backchannel`, authenticates with Digest or Basic, and sends L16,
+  PCMA or PCMU interleaved in 20 ms packets. For the VTO2202F: `rtsp://admin:…@ADDRESS/cam/realmonitor?channel=1&subtype=1`,
+  without `proto=Onvif`, which it refuses with 401.
 - From its camera, **Talk** calls the intercom without the doorbell having been pressed.
 - Home network only. From outside, over Tailscale, the subnet router does SNAT and the
   intercom cannot reach the panel's `Contact`.

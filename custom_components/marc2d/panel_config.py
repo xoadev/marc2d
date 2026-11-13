@@ -20,6 +20,7 @@ CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
+CONF_TALK = "talk"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
 CONF_WAKE_PHRASE = "wake_phrase"
@@ -60,7 +61,12 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     if is_enabled(options, FEATURE_SIP):
         config["intercoms"] = [
             {
-                **{key: value for key, value in intercom.items() if key != CONF_DOORBELL},
+                **{
+                    key: value
+                    for key, value in intercom.items()
+                    # An empty RTSP URL is talking over SIP: the panel just does not get it.
+                    if key != CONF_DOORBELL and (key != CONF_TALK or value)
+                },
                 "number": intercom.get("number") or DEFAULT_INTERCOM_NUMBER,
             }
             for intercom in options.get(CONF_INTERCOMS, [])

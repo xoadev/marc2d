@@ -84,6 +84,13 @@ INTERCOM_FIELDS = {
         },
         required=False,
     ),
+    # Empty: the panel's voice goes in the SIP call. Some intercoms play it cleanly only through
+    # their RTSP backchannel. A password field: the URL carries the credentials.
+    "talk": _field(
+        "Talk over RTSP (URL with user and password; empty: over SIP)",
+        {"text": {"type": "password"}},
+        required=False,
+    ),
     "doorbell": _field(
         "Doorbell button",
         {"entity": {"domain": ["binary_sensor", "event"]}},

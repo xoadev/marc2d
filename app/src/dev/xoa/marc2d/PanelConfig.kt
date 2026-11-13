@@ -68,6 +68,8 @@ data class IntercomConfig(
 	val number: String = "8001",
 	/** The standard audio, or the uncompressed format it sends however the call is negotiated: see [PcmFormat]. */
 	val audio: String = PcmFormat.STANDARD,
+	/** An RTSP URL with its credentials, to talk through its backchannel instead of the SIP call: see [RtspBackchannel]. */
+	val talk: String? = null,
 ) {
 	/** Dahua uses extensions like `9901#1`: the `#` is escaped in the URI and literal in the Digest. */
 	val sipIdentity: String
