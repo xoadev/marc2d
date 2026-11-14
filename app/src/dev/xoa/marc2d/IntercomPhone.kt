@@ -5,7 +5,6 @@ import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.view.Surface
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
@@ -16,7 +15,6 @@ import org.linphone.core.Factory
 import org.linphone.core.MediaDirection
 import org.linphone.core.Reason
 import org.linphone.core.RegistrationState
-import org.linphone.core.StreamType
 import org.linphone.core.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -367,7 +365,6 @@ class IntercomPhone(
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
 		const val AUDIO_PORT = 7078
-		const val MEASURE_MILLIS = 1_000L
 	}
 
 	/** There is no earpiece on the wall: always use the speaker. */
@@ -401,25 +398,9 @@ class IntercomPhone(
 		if (intercom.rtsp != null) return
 		val format = PcmFormat.parse(intercom.audio) ?: return
 		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
-		linphoneUpload.clear()
-		main.removeCallbacks(measureLinphone)
-		main.post(measureLinphone)
 	}
 
-	/** Linphone must send no audio of its own beside the panel's, which the intercom would play as noise. */
-	private val linphoneUpload = mutableListOf<Int>()
-	private val measureLinphone: Runnable =
-		object : Runnable {
-			override fun run() {
-				val stats = activeCall?.getStats(StreamType.Audio) ?: return
-				linphoneUpload += stats.uploadBandwidth.toInt()
-				main.postDelayed(this, MEASURE_MILLIS)
-			}
-		}
-
 	private fun stopOwnAudio() {
-		if (main.hasCallbacks(measureLinphone)) Log.i("marc2d", "Linphone sent audio at $linphoneUpload kbit/s")
-		main.removeCallbacks(measureLinphone)
 		ownAudio.stop()
 	}
 }
