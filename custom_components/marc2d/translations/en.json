@@ -30,7 +30,7 @@
           "intercoms": "Intercoms"
         },
         "data_description": {
-          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed. Leave Audio as standard unless the intercom is heard as noise: some, such as Dahua's, send uncompressed audio whatever the call agreed. Leave Talk over RTSP empty unless the panel's voice reaches the street with clicks: then give the intercom's RTSP URL, with its user and password, and the voice goes through its backchannel. For a Dahua VTO: rtsp://admin:PASSWORD@ADDRESS/cam/realmonitor?channel=1&subtype=1"
+          "intercoms": "Choose the doorbell button of each intercom to make the panel ring when it is pressed. Leave Audio as standard unless the intercom is heard as noise: some, such as Dahua's, send uncompressed audio whatever the call agreed. With the intercom's RTSP URL, with its user and password, its video shows as soon as it rings, and the sound and the panel's voice go over RTSP: SIP only tells it someone answered. For a Dahua VTO: rtsp://admin:PASSWORD@ADDRESS/cam/realmonitor?channel=1&subtype=1"
         }
       },
       "cameras": {

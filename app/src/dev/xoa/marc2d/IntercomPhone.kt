@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Surface
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.Call
@@ -27,6 +28,8 @@ enum class IntercomStatus { Registering, Registered, Failed }
 data class IntercomCall(
 	val name: String,
 	val answered: Boolean,
+	/** Its video comes over RTSP, from the moment it rings, rather than in the SIP call. */
+	val live: Boolean = false,
 )
 
 /**
@@ -45,6 +48,13 @@ class IntercomPhone(
 	private var applied: PanelConfig? = null
 	private val ownAudio = IntercomAudio(context)
 	private var activeCall: Call? = null
+
+	/** The intercom's video, sound and the panel's voice, for one with an RTSP URL. */
+	private var media: RtspCall? = null
+	private var liveSurface: Surface? = null
+
+	/** Whether the SIP call got through: once it ends, so does the conversation. */
+	private var connected = false
 
 	/** The intercom whose doorbell is ringing, notified by Home Assistant: there is no SIP call yet. */
 	private var ringing: IntercomConfig? = null
@@ -138,7 +148,8 @@ class IntercomPhone(
 		if (activeCall != null || ringing != null) return
 		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
-		_call.value = IntercomCall(intercom.name, answered = false)
+		startMedia(intercom)
+		_call.value = IntercomCall(intercom.name, answered = false, live = media != null)
 		ringer.start()
 		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
 	}
@@ -151,14 +162,34 @@ class IntercomPhone(
 
 	private fun stopDoorbell() {
 		silence()
-		if (activeCall == null) _call.value = null
+		if (activeCall == null && dialing == null) {
+			stopMedia()
+			_call.value = null
+		}
+	}
+
+	private fun startMedia(intercom: IntercomConfig) {
+		val url = intercom.rtsp ?: return
+		if (media != null) return
+		media =
+			RtspCall(context, url).apply {
+				setSurface(liveSurface)
+				start()
+			}
+	}
+
+	private fun stopMedia() {
+		media?.stop()
+		media = null
 	}
 
 	/** The VTO picks up by itself and provides audio and video: the panel starts the call on answering. */
 	private fun dial(intercom: IntercomConfig) {
 		silence()
 		onDoorbellAnswered(intercom.name)
-		_call.value = IntercomCall(intercom.name, answered = true)
+		startMedia(intercom)
+		media?.answer()
+		_call.value = IntercomCall(intercom.name, answered = true, live = media != null)
 		dialing = intercom
 		dialDeadline = SystemClock.elapsedRealtime() + DIAL_TIMEOUT_MILLIS
 		placeCall(intercom)
@@ -168,9 +199,7 @@ class IntercomPhone(
 		val address = Factory.instance().createAddress("sip:${intercom.number}@${intercom.server}")
 		val params = core.createCallParams(null)
 		if (address != null && params != null) {
-			params.isVideoEnabled = true
-			params.videoDirection = MediaDirection.RecvOnly
-			if (hasOwnAudio(intercom)) params.audioDirection = MediaDirection.RecvOnly
+			signalOnly(intercom, params)
 			activeCall = core.inviteAddressWithParams(address, params)
 		}
 		if (activeCall == null) retryOrEnd()
@@ -182,14 +211,41 @@ class IntercomPhone(
 			main.postDelayed(redial, REDIAL_DELAY_MILLIS)
 		} else {
 			dialing = null
-			_call.value = null
+			// Over RTSP the conversation goes on without SIP: only the intercom does not know someone answered.
+			if (media == null) _call.value = null
 		}
+	}
+
+	/**
+	 * The call's media. Over RTSP, SIP only tells the intercom someone answered: neither sound nor video. Otherwise the door
+	 * station is visible but sees nothing, and its own audio, if Linphone cannot play it, is only received.
+	 */
+	private fun signalOnly(
+		intercom: IntercomConfig?,
+		params: org.linphone.core.CallParams,
+	) {
+		if (intercom?.rtsp != null) {
+			params.isVideoEnabled = false
+			params.audioDirection = MediaDirection.Inactive
+			return
+		}
+		params.isVideoEnabled = true
+		params.videoDirection = MediaDirection.RecvOnly
+		if (intercom != null && hasOwnAudio(intercom)) params.audioDirection = MediaDirection.RecvOnly
 	}
 
 	/** To talk through the intercom without anyone having rung. */
 	fun callIntercom(name: String) {
-		if (activeCall != null || dialing != null) return
-		applied?.intercoms?.firstOrNull { it.name == name }?.let(::dial)
+		if (activeCall != null || dialing != null || media != null) return
+		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
+		if (intercom.rtsp == null) {
+			dial(intercom)
+			return
+		}
+		// Nobody rang: over RTSP there is no call to answer, it is enough to speak.
+		startMedia(intercom)
+		media?.answer()
+		_call.value = IntercomCall(intercom.name, answered = true, live = true)
 	}
 
 	fun answer() {
@@ -199,10 +255,8 @@ class IntercomPhone(
 		}
 		val call = activeCall ?: return
 		val params = core.createCallParams(call) ?: return
-		params.isVideoEnabled = true
-		// The door station is visible, but the panel sends no image.
-		params.videoDirection = MediaDirection.RecvOnly
-		if (intercomFor(call)?.let(::hasOwnAudio) == true) params.audioDirection = MediaDirection.RecvOnly
+		signalOnly(intercomFor(call), params)
+		media?.answer()
 		call.acceptWithParams(params)
 	}
 
@@ -213,6 +267,7 @@ class IntercomPhone(
 		}
 		dialing = null
 		main.removeCallbacks(redial)
+		stopMedia()
 		val call = activeCall
 		if (call == null) {
 			_call.value = null
@@ -227,6 +282,12 @@ class IntercomPhone(
 
 	fun setVideoView(view: Any?) {
 		core.nativeVideoWindowId = view
+	}
+
+	/** Where the RTSP video goes. */
+	fun setLiveSurface(surface: Surface?) {
+		liveSurface = surface
+		media?.setSurface(surface)
 	}
 
 	private fun listener() =
@@ -257,7 +318,8 @@ class IntercomPhone(
 					Call.State.IncomingReceived, Call.State.IncomingEarlyMedia -> {
 						silence()
 						activeCall = call
-						_call.value = IntercomCall(callName(call), answered = false)
+						intercomFor(call)?.let(::startMedia)
+						_call.value = IntercomCall(callName(call), answered = false, live = media != null)
 						// A call can arrive without HA having said anything: it has to ring by itself too.
 						ringer.start()
 					}
@@ -267,8 +329,9 @@ class IntercomPhone(
 						if (state == Call.State.StreamsRunning) startOwnAudio(call)
 						activeCall = call
 						dialing = null
+						connected = true
 						routeToSpeaker(call)
-						_call.value = IntercomCall(callName(call), answered = true)
+						_call.value = IntercomCall(callName(call), answered = true, live = media != null)
 					}
 
 					Call.State.End, Call.State.Error, Call.State.Released -> {
@@ -276,7 +339,16 @@ class IntercomPhone(
 							silence()
 							stopOwnAudio()
 							activeCall = null
-							retryOrEnd()
+							if (connected) {
+								// The intercom hung up, or the panel did.
+								connected = false
+								dialing = null
+								main.removeCallbacks(redial)
+								stopMedia()
+								_call.value = null
+							} else {
+								retryOrEnd()
+							}
 						}
 					}
 
@@ -321,13 +393,14 @@ class IntercomPhone(
 	 * Linphone only receives the audio of such an intercom, which the panel takes before it. Muting its microphone is not
 	 * enough: it kept sending its codec, which the intercom played as noise.
 	 */
-	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null || intercom.talk != null
+	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null
 
-	/** Only for an intercom with its own format or talked to over RTSP: otherwise the audio stays with Linphone. */
+	/** Only for an intercom with its own format, and not over RTSP: otherwise the audio stays with Linphone. */
 	private fun startOwnAudio(call: Call) {
 		val intercom = intercomFor(call) ?: return
-		if (!hasOwnAudio(intercom)) return
-		ownAudio.start(core.audioPort, PcmFormat.parse(intercom.audio), call.currentParams.usedAudioPayloadType?.number ?: -1, intercom.talk)
+		if (intercom.rtsp != null) return
+		val format = PcmFormat.parse(intercom.audio) ?: return
+		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
 		linphoneUpload.clear()
 		main.removeCallbacks(measureLinphone)
 		main.post(measureLinphone)

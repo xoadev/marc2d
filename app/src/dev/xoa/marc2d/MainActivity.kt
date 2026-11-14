@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
 								camera = ringingCamera(activeCall, cameras),
 								connection = connection,
 								onVideoView = runtime.phone::setVideoView,
+								onLiveSurface = runtime.phone::setLiveSurface,
 								onAnswer = runtime.phone::answer,
 								onHangUp = runtime.phone::hangUp,
 							)

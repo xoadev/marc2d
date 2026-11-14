@@ -68,6 +68,8 @@ class RtpPacket(
 	val timestamp: Long,
 	val payloadOffset: Int,
 	val payloadLength: Int,
+	/** The last packet of a video frame. */
+	val marker: Boolean = false,
 ) {
 	companion object {
 		private const val HEADER = 12
@@ -91,7 +93,7 @@ class RtpPacket(
 			val sequence = ((bytes[2].toInt() and 0xFF) shl 8) or (bytes[3].toInt() and 0xFF)
 			val timestamp =
 				(0 until 4).fold(0L) { all, i -> (all shl 8) or (bytes[4 + i].toLong() and 0xFF) }
-			return RtpPacket(bytes[1].toInt() and 0x7F, sequence, timestamp, offset, end - offset)
+			return RtpPacket(bytes[1].toInt() and 0x7F, sequence, timestamp, offset, end - offset, bytes[1].toInt() and 0x80 != 0)
 		}
 	}
 }
@@ -126,7 +128,7 @@ fun isNewer(
  */
 class PcmRtpLink(
 	private val socket: DatagramSocket,
-	val format: PcmFormat,
+	private val format: PcmFormat,
 	private val negotiatedPayloadType: Int,
 	private val play: (ShortArray) -> Unit,
 ) {

@@ -84,10 +84,11 @@ INTERCOM_FIELDS = {
         },
         required=False,
     ),
-    # Empty: the panel's voice goes in the SIP call. Some intercoms play it cleanly only through
-    # their RTSP backchannel. A password field: the URL carries the credentials.
-    "talk": _field(
-        "Talk over RTSP (URL with user and password; empty: over SIP)",
+    # Empty: everything goes in the SIP call. With it, the video shows while it rings, and the
+    # sound and the panel's voice go over RTSP, which some intercoms play without clicks. A password
+    # field: the URL carries the credentials.
+    "rtsp": _field(
+        "RTSP URL, with user and password (empty: all over SIP)",
         {"text": {"type": "password"}},
         required=False,
     ),

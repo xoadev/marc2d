@@ -72,13 +72,16 @@ whatever alarm was active.
   VTO played as crackling. The payload type, where to send, and the size and timestamp step of the packets are learnt
   from the intercom's first packets: the VTO sends 40 ms, with timestamp steps that vary, so the usual one is used. The
   Android API of Linphone cannot read the intercom's offer, so this is a setting and not automatic.
-- **Talk over RTSP:** each intercom can also take an RTSP URL, with its user and password. Then the panel's voice goes
-  through the intercom's ONVIF backchannel instead of the SIP call, which keeps the call, the video and the sound from the
-  street. A Dahua VTO plays the voice of a SIP call with a regular click, whatever its format, pace or content, even
-  digital silence; through the backchannel, as DMSS does, it is clean. The panel's own RTSP client asks for the
-  `sendonly` track with `Require: www.onvif.org/ver20/backchannel`, authenticates with Digest or Basic, and sends L16,
-  PCMA or PCMU interleaved in 20 ms packets. For the VTO2202F: `rtsp://admin:…@ADDRESS/cam/realmonitor?channel=1&subtype=1`,
-  without `proto=Onvif`, which it refuses with 401.
+- **Over RTSP:** each intercom can take an RTSP URL, with its user and password. Then the panel opens it as soon as it
+  rings, to show who is at the door without waiting, and on answering the street's sound and the panel's voice, through
+  the ONVIF backchannel, go over the same connection. SIP only tells the intercom someone answered or hung up, with a
+  call without media; Talk does without SIP. A Dahua VTO plays the voice of a SIP call with a regular click, whatever its
+  format, pace or content, even digital silence; through the backchannel, as DMSS does, it is clean. The panel's own RTSP
+  client asks for the tracks with `Require: www.onvif.org/ver20/backchannel`, authenticates with Digest or Basic, takes
+  the interleaved channels the server chooses (the VTO answers 10-11 whatever is asked), decodes H.264 with the
+  hardware decoder and sound in L16, PCMA or PCMU, and sends the voice in 20 ms packets. The session knows nothing of the
+  screen, microphone or speaker, so that something else, such as a bot attending the door, can use it. For the VTO2202F:
+  `rtsp://admin:…@ADDRESS/cam/realmonitor?channel=1&subtype=1`, without `proto=Onvif`, which it refuses with 401.
 - From its camera, **Talk** calls the intercom without the doorbell having been pressed.
 - Home network only. From outside, over Tailscale, the subnet router does SNAT and the
   intercom cannot reach the panel's `Contact`.

@@ -315,17 +315,17 @@ async def test_the_intercom_form_offers_the_audio_formats(hass, entry) -> None:
     assert "pcm_le_16000" in values
 
 
-def test_the_voice_goes_over_rtsp_only_with_a_url() -> None:
+def test_the_intercom_goes_over_rtsp_only_with_a_url() -> None:
     url = "rtsp://admin:secret@192.0.2.8/cam/realmonitor?channel=1&subtype=1"
-    over_rtsp = {**INTERCOM, "talk": url}
-    assert build_panel_config({**OPTIONS, "intercoms": [over_rtsp]})["intercoms"][0]["talk"] == url
-    over_sip = {**INTERCOM, "talk": ""}
-    assert "talk" not in build_panel_config({**OPTIONS, "intercoms": [over_sip]})["intercoms"][0]
-    assert "talk" not in build_panel_config(OPTIONS)["intercoms"][0]
+    over_rtsp = {**INTERCOM, "rtsp": url}
+    assert build_panel_config({**OPTIONS, "intercoms": [over_rtsp]})["intercoms"][0]["rtsp"] == url
+    over_sip = {**INTERCOM, "rtsp": ""}
+    assert "rtsp" not in build_panel_config({**OPTIONS, "intercoms": [over_sip]})["intercoms"][0]
+    assert "rtsp" not in build_panel_config(OPTIONS)["intercoms"][0]
 
 
 async def test_the_intercom_form_hides_the_rtsp_url(hass, entry) -> None:
     form = await open_page(hass, entry, "intercoms")
     fields = form["data_schema"].schema["intercoms"].config["fields"]
-    assert fields["talk"]["required"] is False
-    assert fields["talk"]["selector"]["text"]["type"] == "password"
+    assert fields["rtsp"]["required"] is False
+    assert fields["rtsp"]["selector"]["text"]["type"] == "password"

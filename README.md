@@ -61,7 +61,7 @@ flowchart LR
     svc --> sys
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
-    svc -- "RTSP backchannel<br/>the panel's voice, optional" --> vto
+    svc <-- "RTSP, optional<br/>video and sound; the panel's voice" --> vto
     hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
     ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
@@ -74,7 +74,7 @@ flowchart LR
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
 | WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
 | RTSP        | HA or Frigate | reading the video; the camera is only on during it       |
-| RTSP        | the panel     | its voice into the intercom, if set instead of SIP       |
+| RTSP        | the panel     | the intercom's video and sound, and its voice, if set    |
 | HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK   |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the

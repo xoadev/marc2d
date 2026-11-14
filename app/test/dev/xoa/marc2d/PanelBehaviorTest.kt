@@ -275,5 +275,6 @@ class RingingCameraTest {
 		assertEquals(cameras[1], ringingCamera(IntercomCall("Door", answered = false), cameras))
 		assertEquals(null, ringingCamera(IntercomCall("Door", answered = true), cameras))
 		assertEquals(null, ringingCamera(IntercomCall("Gate", answered = false), cameras))
+		assertEquals(null, ringingCamera(IntercomCall("Door", answered = false, live = true), cameras), "its own video comes over RTSP")
 	}
 }
