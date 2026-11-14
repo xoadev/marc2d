@@ -85,6 +85,7 @@ class RtspBackchannel private constructor(
 	private val requests: RtspRequests,
 	private val playUri: String,
 	val track: BackchannelTrack,
+	private val channel: Int,
 ) {
 	private val ssrc = Random.nextInt()
 	private var sequence = Random.nextInt(0x10000)
@@ -104,7 +105,7 @@ class RtspBackchannel private constructor(
 			val payload = track.encode(pending.copyOfRange(0, size))
 			pending = pending.copyOfRange(size, pending.size)
 			val rtp = rtpHeader(track.payloadType, sequence, timestamp, ssrc) + payload
-			val frame = byteArrayOf('$'.code.toByte(), 0, (rtp.size shr 8).toByte(), rtp.size.toByte()) + rtp
+			val frame = byteArrayOf('$'.code.toByte(), channel.toByte(), (rtp.size shr 8).toByte(), rtp.size.toByte()) + rtp
 			synchronized(output) {
 				output.write(frame)
 				output.flush()
@@ -176,15 +177,28 @@ class RtspBackchannel private constructor(
 						listOf("Transport" to "RTP/AVP/TCP;unicast;interleaved=0-1", "Require" to BACKCHANNEL),
 					)
 				requests.session = setup.headers["session"]?.substringBefore(";")?.trim() ?: throw IOException("No session")
+				// The server may choose its own channel: a Dahua VTO answers 10-11 whatever is asked, and drops the rest.
+				val channel = interleavedChannel(setup.headers["transport"]) ?: 0
 				requests.call("PLAY", base, listOf("Range" to "npt=0.000-", "Require" to BACKCHANNEL))
 				// From here on the replies are drained, not read.
 				socket.soTimeout = 0
-				return RtspBackchannel(socket, output, requests, base, track)
+				return RtspBackchannel(socket, output, requests, base, track, channel)
 			} catch (e: Exception) {
 				socket.close()
 				throw e as? IOException ?: IOException(e::class.simpleName)
 			}
 		}
+
+		/** The first channel of the reply's `interleaved=`, if it says one. */
+		fun interleavedChannel(transport: String?): Int? =
+			transport
+				?.let {
+					Regex("interleaved=(\\d+)")
+						.find(it)
+						?.groupValues
+						?.get(1)
+						?.toIntOrNull()
+				}?.takeIf { it in 0..255 }
 
 		/** As RFC 2326 and the cameras do it: an absolute control stays, a relative one goes after the base. */
 		fun controlUri(

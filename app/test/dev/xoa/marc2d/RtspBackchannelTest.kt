@@ -58,6 +58,13 @@ class RtspBackchannelTest {
 	}
 
 	@Test
+	fun `the channel is the one the server chose`() {
+		assertEquals(10, RtspBackchannel.interleavedChannel("RTP/AVP/TCP;unicast;interleaved=10-11;ssrc=00000000"))
+		assertEquals(null, RtspBackchannel.interleavedChannel("RTP/AVP;unicast;client_port=5000-5001"))
+		assertEquals(null, RtspBackchannel.interleavedChannel(null))
+	}
+
+	@Test
 	fun `G711 as its reference values`() {
 		assertEquals(0xD5.toByte(), alaw(0))
 		assertEquals(0x55.toByte(), alaw(-1))
@@ -72,6 +79,7 @@ class RtspBackchannelTest {
 		val server = ServerSocket(0)
 		val requests = LinkedBlockingQueue<String>()
 		val packets = LinkedBlockingQueue<ByteArray>()
+		val channels = LinkedBlockingQueue<Int>()
 		val vto =
 			Thread {
 				server.accept().use { client ->
@@ -89,7 +97,7 @@ class RtspBackchannelTest {
 						val first = input.read()
 						if (first < 0) return@Thread
 						if (first == '$'.code) {
-							input.read()
+							channels += input.read()
 							val length = input.readUnsignedShort()
 							packets += ByteArray(length).also(input::readFully)
 							continue
@@ -103,7 +111,7 @@ class RtspBackchannelTest {
 						when {
 							"Authorization: Digest" !in request -> reply(cseq, "401 Unauthorized\r\nWWW-Authenticate: Digest realm=\"Login to VTO\", nonce=\"abc\"")
 							method == "DESCRIBE" -> reply(cseq, "200 OK\r\nContent-Type: application/sdp", dahua)
-							method == "SETUP" -> reply(cseq, "200 OK\r\nSession: 1234;timeout=60\r\nTransport: RTP/AVP/TCP;unicast;interleaved=0-1")
+							method == "SETUP" -> reply(cseq, "200 OK\r\nSession: 1234;timeout=60\r\nTransport: RTP/AVP/TCP;unicast;interleaved=10-11;ssrc=00000000")
 							else -> reply(cseq, "200 OK\r\nSession: 1234")
 						}
 					}
@@ -130,6 +138,7 @@ class RtspBackchannelTest {
 			channel.send(ShortArray(200) { 1 })
 			channel.send(ShortArray(200) { 1 })
 			val packet = assertNotNull(packets.poll(2, TimeUnit.SECONDS))
+			assertEquals(10, channels.poll(), "on the channel the intercom chose, as a Dahua VTO does")
 			val rtp = assertNotNull(RtpPacket.parse(packet, packet.size))
 			assertEquals(97, rtp.payloadType)
 			assertEquals(640, rtp.payloadLength)
