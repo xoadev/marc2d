@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -47,6 +48,7 @@ fun ClockScreen(
 	warning: String?,
 	weather: WeatherReport?,
 	droid: DroidMood,
+	readings: List<Reading>,
 	onOpenMenu: () -> Unit,
 	onFixPermissions: (() -> Unit)?,
 	modifier: Modifier = Modifier,
@@ -105,6 +107,7 @@ fun ClockScreen(
 				fontSize = 28.sp,
 				textAlign = TextAlign.Center,
 			)
+			if (readings.isNotEmpty()) Readings(readings)
 		}
 		if (visibleWeather != null) {
 			WeatherPanel(
@@ -149,3 +152,20 @@ fun ClockScreen(
 		}
 	}
 }
+
+/** Other entities' values on one line, in gray; only one that crosses its limits is in the warning colour. */
+@Composable
+private fun Readings(readings: List<Reading>) {
+	Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+		readings.forEach { reading ->
+			Text(
+				text = listOfNotNull(reading.name, reading.value + (reading.unit?.let { if (it == "%") it else " $it" } ?: "")).joinToString(" "),
+				color = if (reading.warning) ReadingWarningColor else DateColor,
+				fontSize = 24.sp,
+				maxLines = 1,
+			)
+		}
+	}
+}
+
+private val ReadingWarningColor = Color(0xFFF0C020)

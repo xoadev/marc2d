@@ -41,6 +41,13 @@ class PanelRuntime(
 	private val _weather = MutableStateFlow<WeatherReport?>(null)
 	val weather: StateFlow<WeatherReport?> = _weather.asStateFlow()
 
+	/** Other entities' values, under the time. */
+	private val _shownReadings = MutableStateFlow<List<Reading>>(emptyList())
+	val shownReadings: StateFlow<List<Reading>> = _shownReadings.asStateFlow()
+
+	private val _charts = MutableStateFlow<List<ChartData>>(emptyList())
+	val charts: StateFlow<List<ChartData>> = _charts.asStateFlow()
+
 	private val _haMood = MutableStateFlow(HaMood.Normal)
 	val haMood: StateFlow<HaMood> = _haMood.asStateFlow()
 
@@ -357,6 +364,10 @@ class PanelRuntime(
 					},
 					onConfig = store::saveConfig,
 					onWeather = { _weather.value = it },
+					onDisplay = { readings, charts ->
+						_shownReadings.value = readings
+						_charts.value = charts
+					},
 				)
 			} catch (e: CancellationException) {
 				throw e

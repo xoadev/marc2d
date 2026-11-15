@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity() {
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
+					var chartOpen by rememberSaveable { mutableStateOf<String?>(null) }
+					val shownReadings by runtime.shownReadings.collectAsState()
+					val charts by runtime.charts.collectAsState()
+					// The menu offers the charts that are configured, even before their values arrive.
+					val chartNames by remember { runtime.store.config.map { config -> config.charts.map { it.name } } }.collectAsState(initial = emptyList())
 					var scanOpen by rememberSaveable { mutableStateOf(false) }
 					val enrollmentMessage by runtime.enrollmentMessage.collectAsState()
 					// Remembered: a new flow on each recomposition would restart the collection every time.
@@ -152,6 +157,15 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
+						chartOpen != null -> {
+							BackHandler { chartOpen = null }
+							ChartScreen(
+								chart = charts.firstOrNull { it.name == chartOpen },
+								name = chartOpen.orEmpty(),
+								onClose = { chartOpen = null },
+							)
+						}
+
 						menuOpen -> {
 							BackHandler { menuOpen = false }
 							PanelMenu(
@@ -164,6 +178,11 @@ class MainActivity : ComponentActivity() {
 											camerasOpen = true
 										}
 									},
+								charts = chartNames,
+								onChart = { name ->
+									menuOpen = false
+									chartOpen = name
+								},
 								onSettings = {
 									menuOpen = false
 									settingsOpen = true
@@ -187,6 +206,7 @@ class MainActivity : ComponentActivity() {
 										thinking = thinking,
 									),
 								weather = weather,
+								readings = shownReadings,
 								onOpenMenu = { menuOpen = true },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
@@ -194,7 +214,7 @@ class MainActivity : ComponentActivity() {
 					}
 					// The droid says it on the main screen: nothing fixed there, as the OLED would keep it.
 					val showingCameras = camerasOpen && connection != null && cameras.isNotEmpty()
-					val onMainScreen = activeCall == null && !showingCameras && !scanOpen && !settingsOpen && !needsSetup && !menuOpen
+					val onMainScreen = activeCall == null && !showingCameras && !scanOpen && !settingsOpen && !needsSetup && !menuOpen && chartOpen == null
 					if (cameraOn && !onMainScreen) RecordingMark()
 				}
 			}

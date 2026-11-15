@@ -84,6 +84,50 @@ class HaClientTest {
 		}
 
 	@Test
+	fun `reads the configured entities in one request and delivers readings and charts`() =
+		runBlocking {
+			val asked = CompletableDeferred<String>()
+			val connection =
+				fakeHa {
+					val id = subscribeId()
+					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
+					send(
+						Frame.Text(
+							"""{"id":$id,"type":"event","event":{"kind":"config","config":{
+							"readings":[{"entity":"sensor.car_battery","name":"Car"}],
+							"charts":[{"entity":"sensor.price","name":"Electricity"}]}}}""",
+						),
+					)
+					val request = (incoming.receive() as Frame.Text).readText()
+					asked.complete(request)
+					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
+					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
+					send(
+						Frame.Text(
+							"""{"id":$stateId,"type":"event","event":{"a":{
+							"sensor.car_battery":{"s":"73.0","a":{"unit_of_measurement":"%"}},
+							"sensor.price":{"s":"0.19","a":{"raw_today":[{"start":"2026-11-15T23:00:00+01:00","value":0.19}]}}}}}""",
+						),
+					)
+					awaitCancellation()
+				}
+			val shown = CompletableDeferred<Pair<List<Reading>, List<ChartData>>>()
+			val job =
+				launch {
+					HaClient().run(connection, PanelLink(), {}, {}, {}, {}, onDisplay = { readings, charts ->
+						if (readings.isNotEmpty()) shown.complete(readings to charts)
+					})
+				}
+			val request = HaProtocol.parse(withTimeout(5.seconds) { asked.await() })
+			assertEquals("subscribe_entities", request["type"]!!.jsonPrimitive.content)
+			assertEquals("[\"sensor.car_battery\",\"sensor.price\"]", request["entity_ids"].toString())
+			val (readings, charts) = withTimeout(5.seconds) { shown.await() }
+			assertEquals(listOf(Reading("Car", "73", "%", warning = false)), readings)
+			assertEquals("Electricity", charts.single().name)
+			job.cancel()
+		}
+
+	@Test
 	fun `a refusal ends the connection, so that retrying opens a new one`() =
 		runBlocking {
 			val connection =

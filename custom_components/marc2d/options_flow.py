@@ -23,14 +23,17 @@ from homeassistant.helpers.selector import (
 from .camera import panel_address, stream_url
 from .panel_config import (
     CONF_CAMERAS,
+    CONF_CHARTS,
     CONF_INTERCOMS,
     CONF_PIPELINE,
+    CONF_READINGS,
     CONF_RTSP_AUDIO,
     CONF_RTSP_PASSWORD,
     CONF_WAKE_PHRASE,
     CONF_WEATHER_ENTITY,
     DEFAULT_WAKE_PHRASE,
     FEATURE_CAMERAS,
+    FEATURE_DISPLAY,
     FEATURE_RTSP,
     FEATURE_SENSORS,
     FEATURE_SIP,
@@ -54,6 +57,7 @@ MENU = {
     "entities": "Sensors, siren and speaker",
     "voice": "Voice commands",
     "rtsp": "Publish the camera",
+    "display": "Readings and charts",
 }
 
 
@@ -97,6 +101,23 @@ INTERCOM_FIELDS = {
         {"entity": {"domain": ["binary_sensor", "event"]}},
         required=False,
     ),
+}
+
+
+READING_FIELDS = {
+    "entity": _field("Entity", {"entity": {}}),
+    "name": _field("Name", {"text": {}}),
+    # The only colour on the screen is a warning: it shows when the value crosses these.
+    "warn_below": _field(
+        "Warning below", {"number": {"mode": "box", "step": "any"}}, required=False
+    ),
+    "warn_above": _field(
+        "Warning above", {"number": {"mode": "box", "step": "any"}}, required=False
+    ),
+}
+CHART_FIELDS = {
+    "entity": _field("Entity with values by the hour", {"entity": {}}),
+    "name": _field("Name", {"text": {}}),
 }
 
 
@@ -154,6 +175,29 @@ class Marc2dOptionsFlow(OptionsFlow):
                 probatio.Optional(CONF_CAMERAS): ObjectSelector(
                     ObjectSelectorConfig(fields=fields, multiple=True, label_field="name")
                 )
+            },
+            self._options,
+        )
+
+    async def async_step_display(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Values under the time, and charts by the hour in the menu. Empty lists are valid."""
+        if user_input is not None:
+            self._set_enabled(FEATURE_DISPLAY, user_input)
+            self._options[CONF_READINGS] = user_input.get(CONF_READINGS, [])
+            self._options[CONF_CHARTS] = user_input.get(CONF_CHARTS, [])
+            return self.async_create_entry(data=self._options)
+        return self._page(
+            "display",
+            FEATURE_DISPLAY,
+            {
+                probatio.Optional(CONF_READINGS): ObjectSelector(
+                    ObjectSelectorConfig(fields=READING_FIELDS, multiple=True, label_field="name")
+                ),
+                probatio.Optional(CONF_CHARTS): ObjectSelector(
+                    ObjectSelectorConfig(fields=CHART_FIELDS, multiple=True, label_field="name")
+                ),
             },
             self._options,
         )

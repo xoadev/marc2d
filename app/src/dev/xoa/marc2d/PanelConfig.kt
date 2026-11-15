@@ -14,6 +14,8 @@ data class PanelConfig(
 	val speaker: Boolean = true,
 	val voice: VoiceConfig? = null,
 	val rtsp: RtspConfig? = null,
+	val readings: List<ReadingConfig> = emptyList(),
+	val charts: List<ChartConfig> = emptyList(),
 ) {
 	companion object {
 		// A version of the app may have stored fields that this one no longer has.

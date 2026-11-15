@@ -58,12 +58,16 @@ or add a word. They are white, and red is reserved for **Hang up**.
 
 ## Screens
 
-- **Main:** time, date, weather and droid, with no buttons. Tapping anywhere opens the menu.
+- **Main:** time, date, weather, readings and droid, with no buttons. The readings are one gray line under the date;
+  only a warning turns one yellow. Tapping anywhere opens the menu.
 - **Menu:** large buttons on black. It closes with the X, by tapping outside, and on its own after 10 seconds.
 - **Settings:** black background, straight-edged fields and text buttons with the same shape as the rest. It
   closes with the X.
 - **Cameras:** full screen, swiping from one to the next. If one can be called, it shows
   **Talk**. Exit with the X, by tapping the image, or automatically after 2 minutes.
+- **Chart:** full screen, the bars in whole pixels with a gap between them, as the droid. The lowest values in white
+  and the rest in gray: no colour, which is kept for warnings. In the menu its button has the name under it, as its icon
+  alone does not say which chart it is. Exit with the X, by tapping, or automatically after 2 minutes.
 - **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
   opposite **Answer**, so that a double tap does not end the call.
 - **Orientation:** always landscape.

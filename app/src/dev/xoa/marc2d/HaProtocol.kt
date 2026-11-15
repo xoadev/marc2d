@@ -205,11 +205,17 @@ object HaProtocol {
 	fun entityState(
 		id: Int,
 		entity: String,
+	): String = entityStates(id, listOf(entity))
+
+	/** The first event brings the state of them all. */
+	fun entityStates(
+		id: Int,
+		entities: List<String>,
 	): String =
 		buildJsonObject {
 			put("id", id)
 			put("type", "subscribe_entities")
-			putJsonArray("entity_ids") { add(entity) }
+			putJsonArray("entity_ids") { entities.forEach { add(it) } }
 		}.toString()
 
 	fun unsubscribe(

@@ -44,6 +44,19 @@
           "cameras": "If you have intercoms, choose one to offer Talk on that camera."
         }
       },
+      "display": {
+        "title": "Readings and charts",
+        "description": "Readings are shown under the time, with the value and unit of their entity. Each chart gets a button in the panel's menu, with the next 24 hours. You can leave the lists empty.",
+        "data": {
+          "enabled": "On",
+          "readings": "Readings",
+          "charts": "Charts"
+        },
+        "data_description": {
+          "readings": "Any entity, such as the car's battery. Its value turns yellow when it crosses a warning.",
+          "charts": "An entity with the values by the hour in its raw_today and raw_tomorrow attributes, as lists of start and value: the format of Nord Pool, ENTSO-e or EV Smart Charging, for example for the electricity price. The cheapest hours stand out."
+        }
+      },
       "weather": {
         "title": "Weather",
         "description": "The weather and the forecast next to the clock.",

@@ -15,9 +15,12 @@ FEATURE_SIREN = "siren"
 FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
 FEATURE_RTSP = "rtsp"
+FEATURE_DISPLAY = "display"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
+CONF_READINGS = "readings"
+CONF_CHARTS = "charts"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
 CONF_INTERCOM_RTSP = "rtsp"
@@ -82,6 +85,14 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             }
             for camera in options.get(CONF_CAMERAS, [])
         ]
+    if is_enabled(options, FEATURE_DISPLAY):
+        # Empty fields are left out: the panel uses its defaults.
+        for key in (CONF_READINGS, CONF_CHARTS):
+            if items := [
+                {name: value for name, value in item.items() if value not in (None, "")}
+                for item in options.get(key, [])
+            ]:
+                config[key] = items
     if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
         config["weather"] = weather
     return config

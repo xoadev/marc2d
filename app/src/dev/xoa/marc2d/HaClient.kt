@@ -66,6 +66,7 @@ class HaClient {
 		onConfig: suspend (PanelConfig) -> Unit,
 		onWeather: (WeatherReport?) -> Unit,
 		onCommand: (HaProtocol.PanelEvent) -> Unit,
+		onDisplay: (List<Reading>, List<ChartData>) -> Unit = { _, _ -> },
 	) {
 		this.onCommand = onCommand
 		client.webSocket(HaProtocol.webSocketUrl(connection.url)) {
@@ -82,7 +83,7 @@ class HaClient {
 					launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
 					launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
 					launch { link.assist.collect { startAssist(it, nextId()) } }
-					followConfig(onStatus, onConfig, onWeather, nextId)
+					followConfig(onStatus, onConfig, onWeather, onDisplay, nextId)
 				}
 			}
 			onStatus(HaProtocol.subscribeError(answer).toStatus())
@@ -133,9 +134,12 @@ class HaClient {
 		onStatus: (HaStatus) -> Unit,
 		onConfig: suspend (PanelConfig) -> Unit,
 		onWeather: (WeatherReport?) -> Unit,
+		onDisplay: (List<Reading>, List<ChartData>) -> Unit,
 		nextId: () -> Int,
 	): Nothing {
 		var weather: String? = null
+		var readings = emptyList<ReadingConfig>()
+		var charts = emptyList<ChartConfig>()
 		while (true) {
 			idleUntilNextRefresh()
 			pendingConfig?.let { result ->
@@ -143,6 +147,8 @@ class HaClient {
 				if (result is HaProtocol.ConfigResult.Ok) {
 					onConfig(result.config)
 					weather = result.config.weather
+					readings = result.config.readings
+					charts = result.config.charts
 				}
 				onStatus(result.toStatus())
 			}
@@ -150,7 +156,28 @@ class HaClient {
 			val report = entity?.let { fetchWeather(it, nextId) }
 			// A failed refresh keeps the last report, which hides by itself once it is an hour old.
 			if (entity == null || report != null) onWeather(report)
+			if (readings.isEmpty() && charts.isEmpty()) {
+				onDisplay(emptyList(), emptyList())
+			} else {
+				// A failed refresh keeps what was shown.
+				fetchStates((readings.map { it.entity } + charts.map { it.entity }).distinct(), nextId)?.let { event ->
+					onDisplay(EntityReadings.readings(readings, event), charts.mapNotNull { EntityReadings.chart(it, event) })
+				}
+			}
 		}
+	}
+
+	/** The current state of the entities, in one event. */
+	private suspend fun DefaultClientWebSocketSession.fetchStates(
+		entities: List<String>,
+		nextId: () -> Int,
+	): JsonObject? {
+		val id = nextId()
+		send(Frame.Text(HaProtocol.entityStates(id, entities)))
+		if (!HaProtocol.isSuccess(awaitResult(id))) return null
+		val event = awaitEvent(id)
+		send(Frame.Text(HaProtocol.unsubscribe(nextId(), id)))
+		return event
 	}
 
 	private fun HaProtocol.ConfigResult.toStatus(): HaStatus =

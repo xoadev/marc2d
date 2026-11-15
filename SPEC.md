@@ -22,10 +22,23 @@ The project is in testing and has no users: break whatever needs breaking.
   and gray, in a list next to the time. They come from the `weather.*` entity
   named in the configuration, not from a service of our own. They update every 10 minutes and
   are hidden if the data is more than an hour old.
+- Under the date, the readings: the value and unit of any entity named in the configuration, such as the car's battery,
+  on one line, in gray. A reading turns yellow only when it crosses one of its warning limits. They update with the
+  weather, in one request for every entity.
 - At the bottom, a warning only if something fails: HA, registration with an intercom or the microphone permission.
 - If a permission is missing, a warning icon in the top left corner asks for it again, or opens the app's Android
   settings if Android no longer shows the dialog.
-- Tapping anywhere opens the menu, with **Cameras** and **Settings**.
+- Tapping anywhere opens the menu, with **Cameras**, a button per chart, and **Settings**.
+
+### Charts
+
+- Each chart in the configuration gets a button in the menu, with its name under it, and opens full screen: the next 24
+  hours as bars, from the value running now, with the lowest 6 hours in white, the rest in gray, and the current one
+  framed. Below, the hours every 3; above, the lowest and highest values with the unit.
+- The entity needs its values in the attributes `raw_today` and `raw_tomorrow`, lists of `start` and `value`: the
+  format of Nord Pool, ENTSO-e and EV Smart Charging, which covers the electricity price. Values every 15 minutes count
+  as such. Another format is added in the app, not in each house.
+- It closes with the X, by tapping, and on its own after 2 minutes.
 
 ### Cameras
 
@@ -238,7 +251,13 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "siren": true,
   "speaker": true,
   "voice": { "pipeline": "01h...", "phrase": "jarvis" },
-  "rtsp": { "password": "…", "audio": true }
+  "rtsp": { "password": "…", "audio": true },
+  "readings": [
+    { "entity": "sensor.car_battery", "name": "Car", "warn_below": 20 }
+  ],
+  "charts": [
+    { "entity": "sensor.electricity_price", "name": "Electricity" }
+  ]
 }
 ```
 
@@ -256,6 +275,7 @@ only while it is on, and what a turned-off feature had is kept.
 | Speaker  | HA deletes the entity and the panel ignores the audio        |
 | Voice    | no voice is sent: the panel does not open the microphone     |
 | Publish  | no password is sent: the panel stops, HA deletes the entity  |
+| Readings | no readings or charts are sent: the panel hides them         |
 
 - What is off is left out of the response, so the panel needs no logic for most toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.

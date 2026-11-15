@@ -329,3 +329,37 @@ async def test_the_intercom_form_hides_the_rtsp_url(hass, entry) -> None:
     fields = form["data_schema"].schema["intercoms"].config["fields"]
     assert fields["rtsp"]["required"] is False
     assert fields["rtsp"]["selector"]["text"]["type"] == "password"
+
+
+def test_readings_and_charts_reach_the_panel_without_empty_fields() -> None:
+    options = {
+        **OPTIONS,
+        "readings": [
+            {"entity": "sensor.car_battery", "name": "Car", "warn_below": 20, "warn_above": None},
+        ],
+        "charts": [{"entity": "sensor.electricity_price", "name": "Electricity"}],
+    }
+    config = build_panel_config(options)
+    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car", "warn_below": 20}]
+    assert config["charts"] == [{"entity": "sensor.electricity_price", "name": "Electricity"}]
+    assert "readings" not in build_panel_config(OPTIONS)
+    off = {**options, "features": {"display": False}}
+    assert "readings" not in build_panel_config(off)
+    assert "charts" not in build_panel_config(off)
+
+
+async def test_the_display_page_saves_readings_and_charts(hass, entry) -> None:
+    form = await open_page(hass, entry, "display")
+    fields = form["data_schema"].schema["readings"].config["fields"]
+    assert fields["warn_below"]["required"] is False
+    done = await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {
+            "enabled": True,
+            "readings": [{"entity": "sensor.car_battery", "name": "Car"}],
+            "charts": [{"entity": "sensor.electricity_price", "name": "Electricity"}],
+        },
+    )
+    config = build_panel_config(done["data"])
+    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car"}]
+    assert config["charts"][0]["name"] == "Electricity"
