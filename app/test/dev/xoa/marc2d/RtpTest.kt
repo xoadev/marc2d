@@ -7,14 +7,12 @@ import kotlin.test.assertNull
 
 class RtpTest {
 	@Test
-	fun `both byte orders`() {
-		val dahua = byteArrayOf(0xF3.toByte(), 0xFF.toByte(), 0x10, 0x00)
-		assertContentEquals(shortArrayOf(-13, 16), decodePcm(dahua, 0, 4, littleEndian = true))
-		assertContentEquals(shortArrayOf(-3073, 4096), decodePcm(dahua, 0, 4, littleEndian = false))
+	fun `L16 is big-endian, both ways`() {
+		val bytes = byteArrayOf(0x7F, 0xF3.toByte(), 0xFF.toByte(), 0x10, 0x00)
+		assertContentEquals(shortArrayOf(-3073, 4096), decodePcm(bytes, 1, 4))
 		val samples = shortArrayOf(-13, 16, Short.MAX_VALUE, Short.MIN_VALUE)
-		assertContentEquals(samples, decodePcm(encodePcm(samples, true), 0, 8, true))
-		assertContentEquals(samples, decodePcm(encodePcm(samples, false), 0, 8, false))
-		assertContentEquals(dahua, encodePcm(shortArrayOf(-13, 16), littleEndian = true))
+		assertContentEquals(samples, decodePcm(encodePcm(samples), 0, 8))
+		assertContentEquals(bytes.copyOfRange(1, 5), encodePcm(shortArrayOf(-3073, 4096)))
 	}
 
 	@Test
@@ -42,21 +40,7 @@ class RtpTest {
 	private fun rtp(
 		type: Int,
 		sequence: Int,
-		timestamp: Int,
+		timestamp: Long,
 		payload: ByteArray,
-	): ByteArray =
-		byteArrayOf(
-			0x80.toByte(),
-			type.toByte(),
-			(sequence shr 8).toByte(),
-			sequence.toByte(),
-			(timestamp shr 24).toByte(),
-			(timestamp shr 16).toByte(),
-			(timestamp shr 8).toByte(),
-			timestamp.toByte(),
-			0,
-			0,
-			0,
-			1,
-		) + payload
+	): ByteArray = rtpHeader(type, sequence, timestamp, ssrc = 1) + payload
 }

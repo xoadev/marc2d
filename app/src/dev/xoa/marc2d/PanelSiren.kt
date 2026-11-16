@@ -38,29 +38,17 @@ class PanelSiren(
 		audio.setStreamVolume(AudioManager.STREAM_ALARM, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
 		val samples = tone()
 		track =
-			AudioTrack
-				.Builder()
-				.setAudioAttributes(
-					AudioAttributes
-						.Builder()
-						.setUsage(AudioAttributes.USAGE_ALARM)
-						.setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-						.build(),
-				).setAudioFormat(
-					AudioFormat
-						.Builder()
-						.setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-						.setSampleRate(SAMPLE_RATE)
-						.setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-						.build(),
-				).setTransferMode(AudioTrack.MODE_STATIC)
-				.setBufferSizeInBytes(samples.size * Short.SIZE_BYTES)
-				.build()
-				.apply {
-					write(samples, 0, samples.size)
-					setLoopPoints(0, samples.size, -1)
-					play()
-				}
+			monoPcmTrack(
+				AudioAttributes.USAGE_ALARM,
+				AudioAttributes.CONTENT_TYPE_SONIFICATION,
+				SAMPLE_RATE,
+				AudioTrack.MODE_STATIC,
+				samples.size * Short.SIZE_BYTES,
+			).apply {
+				write(samples, 0, samples.size)
+				setLoopPoints(0, samples.size, -1)
+				play()
+			}
 		main.postDelayed(safetyStop, MAX_DURATION.inWholeMilliseconds)
 	}
 
@@ -88,3 +76,30 @@ class PanelSiren(
 		val MAX_DURATION = 10.minutes
 	}
 }
+
+/** A mono 16-bit PCM track, not yet playing. */
+internal fun monoPcmTrack(
+	usage: Int,
+	contentType: Int,
+	sampleRate: Int,
+	mode: Int,
+	bufferBytes: Int,
+): AudioTrack =
+	AudioTrack
+		.Builder()
+		.setAudioAttributes(
+			AudioAttributes
+				.Builder()
+				.setUsage(usage)
+				.setContentType(contentType)
+				.build(),
+		).setAudioFormat(
+			AudioFormat
+				.Builder()
+				.setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+				.setSampleRate(sampleRate)
+				.setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+				.build(),
+		).setTransferMode(mode)
+		.setBufferSizeInBytes(bufferBytes)
+		.build()

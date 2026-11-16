@@ -13,8 +13,8 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.HandlerThread
 import java.io.IOException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -34,19 +34,7 @@ class PanelMicrophone(
 		}
 		val started = Session(onFrame, onFailure)
 		session = started
-		try {
-			return withTimeout(START_TIMEOUT) { started.open() }
-		} catch (e: TimeoutCancellationException) {
-			stop()
-			// Not a cancellation of whoever called: the microphone just did not answer.
-			throw IOException("The microphone did not start", e)
-		} catch (e: CancellationException) {
-			stop()
-			throw e
-		} catch (e: Exception) {
-			stop()
-			throw e
-		}
+		return startWithin(START_TIMEOUT, "microphone", ::stop) { started.open() }
 	}
 
 	override fun stop() {
@@ -65,19 +53,10 @@ class PanelMicrophone(
 		private var encoder: MediaCodec? = null
 		private var closed = false
 
-		@SuppressLint("MissingPermission") // Checked in start.
 		suspend fun open(): AacConfig {
 			handler.post {
 				try {
-					val minimum = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-					val microphone =
-						AudioRecord(
-							MediaRecorder.AudioSource.CAMCORDER,
-							SAMPLE_RATE,
-							AudioFormat.CHANNEL_IN_MONO,
-							AudioFormat.ENCODING_PCM_16BIT,
-							maxOf(minimum, FRAME_BYTES * 8),
-						)
+					val microphone = monoMicrophone(MediaRecorder.AudioSource.CAMCORDER, SAMPLE_RATE, FRAME_BYTES * 8)
 					record = microphone
 					check(microphone.state == AudioRecord.STATE_INITIALIZED) { "The microphone is not available" }
 					microphone.startRecording()
@@ -125,18 +104,13 @@ class PanelMicrophone(
 			info: MediaCodec.BufferInfo,
 		) {
 			if (closed) return
-			val buffer = codec.getOutputBuffer(index)
-			if (buffer != null && info.size > 0) {
-				val data = ByteArray(info.size)
-				buffer.position(info.offset)
-				buffer.get(data)
+			codec.takeOutput(index, info) { data ->
 				if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
 					config.complete(AacConfig(SAMPLE_RATE, 1, data))
 				} else {
 					onFrame(AacFrame(data, info.presentationTimeUs))
 				}
 			}
-			codec.releaseOutputBuffer(index, false)
 		}
 
 		override fun onError(
@@ -150,8 +124,7 @@ class PanelMicrophone(
 		) = Unit
 
 		private fun fail(cause: Exception) {
-			if (closed) return
-			if (!config.completeExceptionally(cause)) onFailure()
+			if (!closed) config.failStartOr(cause, onFailure)
 		}
 
 		fun close() {
@@ -175,6 +148,63 @@ class PanelMicrophone(
 		// AAC encodes 1024 samples per frame.
 		const val FRAME_BYTES = 1024 * BYTES_PER_SAMPLE
 		const val NANOS_PER_MICRO = 1000L
-		const val MICROS_PER_SECOND = 1_000_000L
 	}
+}
+
+/** Mono 16-bit PCM from [source], with at least [minBytes] of buffer. */
+@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
+internal fun monoMicrophone(
+	source: Int,
+	sampleRate: Int,
+	minBytes: Int,
+): AudioRecord =
+	AudioRecord(
+		source,
+		sampleRate,
+		AudioFormat.CHANNEL_IN_MONO,
+		AudioFormat.ENCODING_PCM_16BIT,
+		maxOf(AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), minBytes),
+	)
+
+/** Starts the camera or the microphone, and stops it again if that fails or takes longer than [timeout]. */
+internal suspend fun <T> startWithin(
+	timeout: Duration,
+	what: String,
+	stop: () -> Unit,
+	start: suspend () -> T,
+): T =
+	try {
+		withTimeout(timeout) { start() }
+	} catch (e: TimeoutCancellationException) {
+		stop()
+		// Not a cancellation of whoever called: the device just did not answer.
+		throw IOException("The $what did not start", e)
+	} catch (e: Exception) {
+		// A cancellation as well: what was half started has to go either way.
+		stop()
+		throw e
+	}
+
+/** What an encoder produced, copied out of its buffer, which goes back to it right after. */
+internal inline fun MediaCodec.takeOutput(
+	index: Int,
+	info: MediaCodec.BufferInfo,
+	onData: (ByteArray) -> Unit,
+) {
+	val buffer = getOutputBuffer(index)
+	if (buffer != null && info.size > 0) {
+		val data = ByteArray(info.size)
+		buffer.position(info.offset)
+		buffer.get(data)
+		onData(data)
+	}
+	releaseOutputBuffer(index, false)
+}
+
+/** Before the encoder's first output, a failure is the start's; after it, it is the stream's, which [onFailure] reports. */
+internal fun CompletableDeferred<*>.failStartOr(
+	cause: Exception,
+	onFailure: () -> Unit,
+) {
+	if (!completeExceptionally(cause)) onFailure()
 }

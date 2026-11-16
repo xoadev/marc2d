@@ -1,7 +1,5 @@
 package dev.xoa.marc2d
 
-import android.annotation.SuppressLint
-import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
@@ -10,7 +8,6 @@ import org.vosk.Recognizer
 import java.io.IOException
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -30,55 +27,46 @@ class VoiceListener(
 	private val onListening: (Boolean) -> Unit,
 ) {
 	/** Runs until cancelled: cancelling it releases the microphone, as a call needs. */
-	@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
 	suspend fun run(
 		pipeline: String?,
 		phrase: String,
-	) =
-		withContext(Dispatchers.IO) {
-			model.ensure()
-			val buffer = ByteArray(BUFFER_BYTES)
-			val wakeWord = WakeWord(phrase)
-			val history = AudioHistory(HISTORY_BYTES)
-			Model(model.path.path).use { vosk ->
-				Recognizer(vosk, SAMPLE_RATE.toFloat(), wakeWord.grammar).use { recognizer ->
-					// Without the words, Vosk does not say how sure it is.
-					recognizer.setWords(true)
-					// Opened last, so that a model that fails to load does not leave it behind on each retry.
-					val record =
-						AudioRecord(
-							MediaRecorder.AudioSource.VOICE_RECOGNITION,
-							SAMPLE_RATE,
-							AudioFormat.CHANNEL_IN_MONO,
-							AudioFormat.ENCODING_PCM_16BIT,
-							maxOf(AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), BUFFER_BYTES * 4),
-						)
-					try {
-						record.startRecording()
-						while (true) {
-							currentCoroutineContext().ensureActive()
-							val read = microphoneBytes(record.read(buffer, 0, buffer.size))
-							history.add(buffer, read)
-							if (recognizer.acceptWaveForm(buffer, read)) {
-								val result = recognizer.result
-								val confidence = wakeWord.confidence(result)
-								// Only the phrase's number, never what was heard: it is what real voices tell us about the threshold.
-								if (confidence != null) Log.i(TAG, "Wake phrase at $confidence")
-								if (WakeWord.isEnough(confidence)) {
-									val end = wakeWord.end(result)
-									val already = end?.let { history.since((it * SAMPLE_RATE).toLong() * BYTES_PER_SAMPLE) } ?: ByteArray(0)
-									streamRequest(record, buffer, pipeline, already)
-									recognizer.reset()
-								}
+	) = withContext(Dispatchers.IO) {
+		model.ensure()
+		val buffer = ByteArray(BUFFER_BYTES)
+		val wakeWord = WakeWord(phrase)
+		val history = AudioHistory(HISTORY_BYTES)
+		Model(model.path.path).use { vosk ->
+			Recognizer(vosk, SAMPLE_RATE.toFloat(), wakeWord.grammar).use { recognizer ->
+				// Without the words, Vosk does not say how sure it is.
+				recognizer.setWords(true)
+				// Opened last, so that a model that fails to load does not leave it behind on each retry.
+				val record = monoMicrophone(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, BUFFER_BYTES * 4)
+				try {
+					record.startRecording()
+					while (true) {
+						currentCoroutineContext().ensureActive()
+						val read = microphoneBytes(record.read(buffer, 0, buffer.size))
+						history.add(buffer, read)
+						if (recognizer.acceptWaveForm(buffer, read)) {
+							val result = recognizer.result
+							val confidence = wakeWord.confidence(result)
+							// Only the phrase's number, never what was heard: it is what real voices tell us about the threshold.
+							if (confidence != null) Log.i(TAG, "Wake phrase at $confidence")
+							if (WakeWord.isEnough(confidence)) {
+								val end = wakeWord.end(result)
+								val already = end?.let { history.since((it * SAMPLE_RATE).toLong() * BYTES_PER_SAMPLE) } ?: ByteArray(0)
+								streamRequest(record, buffer, pipeline, already)
+								recognizer.reset()
 							}
 						}
-					} finally {
-						// It also stops the recording, and unlike stop() it does not throw if that never started.
-						record.release()
 					}
+				} finally {
+					// It also stops the recording, and unlike stop() it does not throw if that never started.
+					record.release()
 				}
 			}
 		}
+	}
 
 	private suspend fun streamRequest(
 		record: AudioRecord,
@@ -98,8 +86,6 @@ class VoiceListener(
 				currentCoroutineContext().ensureActive()
 				audio.trySend(amplify(buffer.copyOf(microphoneBytes(record.read(buffer, 0, buffer.size))), REQUEST_GAIN))
 			}
-		} catch (e: CancellationException) {
-			throw e
 		} finally {
 			audio.close()
 			onListening(false)

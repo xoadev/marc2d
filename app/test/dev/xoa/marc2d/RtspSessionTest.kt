@@ -154,16 +154,14 @@ class RtspSessionTest {
 						channel: Int,
 						bytes: ByteArray,
 					) {
-						output.write(byteArrayOf('$'.code.toByte(), channel.toByte(), (bytes.size shr 8).toByte(), bytes.size.toByte()) + bytes)
+						output.write(interleaved(channel, bytes))
 					}
 					var setups = 0
 					while (true) {
 						val first = input.read()
 						if (first < 0) return@Thread
 						if (first == '$'.code) {
-							val channel = input.read()
-							val length = input.readUnsignedShort()
-							voice += channel to ByteArray(length).also(input::readFully)
+							voice += readInterleaved(input) ?: return@Thread
 							continue
 						}
 						val lines = mutableListOf(first.toChar() + input.readLine())
@@ -208,7 +206,7 @@ class RtspSessionTest {
 			assertFalse("admin" in describe, "the credentials are not in the URL")
 			val authorized = assertNotNull(requests.poll(2, TimeUnit.SECONDS))
 			assertTrue("Require: www.onvif.org/ver20/backchannel" in authorized)
-			val expected = md5("${md5("admin:Login to VTO:p@ss")}:abc:${md5("DESCRIBE:$uri")}")
+			val expected = digestResponse("admin", "Login to VTO", "p@ss", "abc", "DESCRIBE", uri)
 			assertTrue("response=\"$expected\"" in authorized, "Digest with the decoded password")
 			val setups = List(3) { assertNotNull(requests.poll(2, TimeUnit.SECONDS)) }
 			assertEquals(listOf("trackID=0", "trackID=1", "trackID=5"), setups.map { it.substringBefore(" RTSP").substringAfterLast("/") })
@@ -276,19 +274,5 @@ class RtspSessionTest {
 		marker: Boolean,
 		payload: ByteArray,
 		type: Int = 96,
-	): ByteArray =
-		byteArrayOf(
-			0x80.toByte(),
-			(type or if (marker) 0x80 else 0).toByte(),
-			(sequence shr 8).toByte(),
-			sequence.toByte(),
-			0,
-			0,
-			0,
-			0,
-			0,
-			0,
-			0,
-			1,
-		) + payload
+	): ByteArray = rtpHeader(type, sequence, 0, ssrc = 1, marker = marker) + payload
 }

@@ -223,23 +223,22 @@ class RtspServer(
 		synchronized(viewers) { viewers.toList() }.forEach { it.close() }
 	}
 
-	private fun deliver(frame: H264Frame) {
-		val outgoing =
-			synchronized(viewers) {
-				if (viewers.isEmpty()) return
-				Outgoing(false, packetizer.packets(frame), packetizer.senderReportIfDue(frame.timestampUs), frame.keyFrame)
-			}
-		synchronized(viewers) { viewers.toList() }.forEach { it.offer(outgoing) }
-	}
+	private fun deliver(frame: H264Frame) =
+		broadcast { Outgoing(false, packetizer.packets(frame), packetizer.senderReportIfDue(frame.timestampUs), frame.keyFrame) }
 
 	private fun deliverSound(frame: AacFrame) {
 		val writer = audioPacketizer ?: return
-		val outgoing =
+		broadcast { Outgoing(true, listOf(writer.packet(frame)), writer.senderReportIfDue(frame.timestampUs), false) }
+	}
+
+	/** With nobody watching, nothing is built: packetizing would be work for no one. */
+	private inline fun broadcast(build: () -> Outgoing) {
+		val (outgoing, targets) =
 			synchronized(viewers) {
 				if (viewers.isEmpty()) return
-				Outgoing(true, listOf(writer.packet(frame)), writer.senderReportIfDue(frame.timestampUs), false)
+				build() to viewers.toList()
 			}
-		synchronized(viewers) { viewers.toList() }.forEach { it.offer(outgoing) }
+		targets.forEach { it.offer(outgoing) }
 	}
 
 	private class Outgoing(
@@ -346,11 +345,7 @@ class RtspServer(
 				val first = input.read()
 				if (first < 0) return null
 				if (first == INTERLEAVED) {
-					input.read()
-					val high = input.read()
-					val low = input.read()
-					if (low < 0) return null
-					input.skipNBytes((high shl 8 or low).toLong())
+					readInterleaved(input) ?: return null
 					continue
 				}
 				input.reset()
@@ -497,7 +492,7 @@ class RtspServer(
 			if (digest["username"] != RTSP_USER || digest["realm"] != REALM || digest["nonce"] != nonce) return false
 			val uri = digest["uri"] ?: return false
 			val response = digest["response"] ?: return false
-			val expected = md5("${md5("$RTSP_USER:$REALM:$password")}:$nonce:${md5("${request.method}:$uri")}")
+			val expected = digestResponse(RTSP_USER, REALM, password, nonce, request.method, uri)
 			return MessageDigest.isEqual(expected.toByteArray(), response.lowercase().toByteArray())
 		}
 
@@ -631,6 +626,17 @@ internal fun interleaved(
 	packet: ByteArray,
 ): ByteArray = byteArrayOf(INTERLEAVED.toByte(), channel.toByte(), (packet.size shr 8).toByte(), packet.size.toByte()) + packet
 
+/** The channel and the packet of an interleaved frame, once its `$` has been read. Nothing if the stream ends, even halfway. */
+internal fun readInterleaved(input: InputStream): Pair<Int, ByteArray>? {
+	val channel = input.read()
+	val high = input.read()
+	val low = input.read()
+	if (channel < 0 || high < 0 || low < 0) return null
+	val length = (high shl 8) or low
+	val packet = input.readNBytes(length)
+	return if (packet.size < length) null else channel to packet
+}
+
 /** The first channel of a Transport header's `interleaved=`, if it says one. */
 internal fun interleavedChannel(transport: String?): Int? =
 	transport
@@ -645,6 +651,16 @@ internal fun digestFields(header: String): Map<String, String>? {
 		.findAll(header.substring("Digest ".length))
 		.associate { it.groupValues[1].lowercase() to it.groupValues[2].ifEmpty { it.groupValues[3] } }
 }
+
+/** The `response` of Digest authentication without `qop` (RFC 2617), as RTSP servers ask for it. */
+internal fun digestResponse(
+	user: String,
+	realm: String,
+	password: String,
+	nonce: String,
+	method: String,
+	uri: String,
+): String = md5("${md5("$user:$realm:$password")}:$nonce:${md5("$method:$uri")}")
 
 internal fun md5(text: String): String =
 	MessageDigest

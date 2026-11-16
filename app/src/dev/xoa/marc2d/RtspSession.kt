@@ -24,7 +24,7 @@ data class RtspAudioTrack(
 
 	fun encode(samples: ShortArray): ByteArray =
 		when (codec) {
-			"L16" -> encodePcm(samples, littleEndian = false)
+			"L16" -> encodePcm(samples)
 			"PCMA" -> ByteArray(samples.size) { alaw(samples[it]) }
 			else -> ByteArray(samples.size) { ulaw(samples[it]) }
 		}
@@ -35,7 +35,7 @@ data class RtspAudioTrack(
 		length: Int,
 	): ShortArray =
 		when (codec) {
-			"L16" -> decodePcm(bytes, offset, length, littleEndian = false)
+			"L16" -> decodePcm(bytes, offset, length)
 			"PCMA" -> ShortArray(length) { alawToLinear(bytes[offset + it]) }
 			else -> ShortArray(length) { ulawToLinear(bytes[offset + it]) }
 		}
@@ -132,9 +132,8 @@ class RtspSession private constructor(
 	private val channels: Map<Int, RtspMedia>,
 	private val voiceChannel: Int?,
 ) {
-	private val ssrc = Random.nextInt()
-	private var sequence = Random.nextInt(0x10000)
-	private var timestamp = Random.nextLong(0x1_0000_0000L)
+	private val voiceWriter = offer.voice?.let { RtpWriter(it.payloadType, it.sampleRate, Random.nextInt(), Random.nextLong(0x1_0000_0000L)) }
+	private var samplesSent = 0L
 	private var pending = ShortArray(0)
 	private var lastKeepAlive = System.nanoTime()
 
@@ -161,14 +160,15 @@ class RtspSession private constructor(
 	fun sendVoice(samples: ShortArray) {
 		val track = offer.voice ?: return
 		val channel = voiceChannel ?: return
+		val writer = voiceWriter ?: return
 		pending += samples
 		val size = track.frameSamples
 		while (pending.size >= size) {
 			val payload = track.encode(pending.copyOfRange(0, size))
 			pending = pending.copyOfRange(size, pending.size)
-			requests.write(interleaved(channel, rtpHeader(track.payloadType, sequence, timestamp, ssrc) + payload))
-			sequence = (sequence + 1) and 0xFFFF
-			timestamp = (timestamp + size) and 0xFFFFFFFFL
+			// At 8 or 16 kHz, 20 ms are a whole number of microseconds: the RTP timestamp advances by exactly the samples sent.
+			requests.write(interleaved(channel, writer.packet(payload, samplesSent * MICROS_PER_SECOND / track.sampleRate, false)))
+			samplesSent += size
 		}
 	}
 
@@ -332,12 +332,7 @@ internal class RtspRequests(
 			reply(first)
 			return null
 		}
-		val channel = input.read()
-		val length = (input.read() shl 8) or input.read()
-		if (channel < 0 || length < 0) throw IOException("Connection closed")
-		val data = input.readNBytes(length)
-		if (data.size < length) throw IOException("Connection closed")
-		return channel to data
+		return readInterleaved(input) ?: throw IOException("Connection closed")
 	}
 
 	private fun authorization(
@@ -349,7 +344,7 @@ internal class RtspRequests(
 		val fields = challenge ?: return null
 		val realm = fields["realm"].orEmpty()
 		val nonce = fields["nonce"].orEmpty()
-		val response = md5("${md5("$user:$realm:$password")}:$nonce:${md5("$method:$uri")}")
+		val response = digestResponse(user, realm, password, nonce, method, uri)
 		return "Digest username=\"$user\", realm=\"$realm\", nonce=\"$nonce\", uri=\"$uri\", response=\"$response\""
 	}
 
@@ -359,9 +354,7 @@ internal class RtspRequests(
 			val first = input.read()
 			if (first < 0) throw IOException("Connection closed")
 			if (first == INTERLEAVED) {
-				input.read()
-				val length = (input.read() shl 8) or input.read()
-				input.skipNBytes(length.toLong())
+				readInterleaved(input) ?: throw IOException("Connection closed")
 				continue
 			}
 			return reply(first)
@@ -437,7 +430,7 @@ class H264Depacketizer {
 		length: Int,
 	) {
 		val header = data[offset].toInt() and 0xFF
-		when (header and 0x1F) {
+		when (data[offset].nalType) {
 			in 1..23 -> {
 				units += data.copyOfRange(offset, offset + length)
 			}
@@ -456,12 +449,12 @@ class H264Depacketizer {
 			FU_A -> {
 				if (length < 2) return
 				val fu = data[offset + 1].toInt() and 0xFF
-				if (fu and 0x80 != 0) {
-					fragment = ByteArrayOutputStream().apply { write((header and 0xE0) or (fu and 0x1F)) }
+				if (fu and FU_START != 0) {
+					fragment = ByteArrayOutputStream().apply { write((header and 0xE0) or data[offset + 1].nalType) }
 				}
 				val building = fragment ?: return
 				building.write(data, offset + 2, length - 2)
-				if (fu and 0x40 != 0) {
+				if (fu and FU_END != 0) {
 					units += building.toByteArray()
 					fragment = null
 				}
@@ -470,17 +463,12 @@ class H264Depacketizer {
 	}
 
 	companion object {
-		private const val STAP_A = 24
-
 		// Far above a 1080p key frame, which is some hundreds of kB.
 		private const val MAX_FRAME_BYTES = 4 * 1024 * 1024
-		private const val FU_A = 28
 		val START_CODE = byteArrayOf(0, 0, 0, 1)
 
 		/** Whether the access unit starts a picture on its own, so that decoding can begin there. */
-		fun isKeyFrame(annexB: ByteArray): Boolean = nalUnits(annexB).any { it.isNotEmpty() && (it[0].toInt() and 0x1F) == NAL_IDR }
-
-		private const val NAL_IDR = 5
+		fun isKeyFrame(annexB: ByteArray): Boolean = nalStarts(annexB).any { it < annexB.size && annexB[it].nalType == NAL_IDR }
 	}
 }
 

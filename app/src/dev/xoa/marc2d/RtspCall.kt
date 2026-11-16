@@ -1,12 +1,10 @@
 package dev.xoa.marc2d
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaFormat
@@ -29,11 +27,9 @@ class RtspCall(
 ) {
 	@Volatile private var running = true
 
-	@Volatile private var answered = false
-
 	/** Whether someone answered, so that the conversation goes on without SIP. */
-	val isAnswered: Boolean
-		get() = answered
+	@Volatile var isAnswered = false
+		private set
 
 	@Volatile private var session: RtspSession? = null
 
@@ -52,8 +48,8 @@ class RtspCall(
 
 	/** The street is heard, and the panel speaks. */
 	fun answer() {
-		if (answered || !running) return
-		answered = true
+		if (isAnswered || !running) return
+		isAnswered = true
 		val manager = context.getSystemService(AudioManager::class.java)
 		manager.mode = AudioManager.MODE_IN_COMMUNICATION
 		useSpeaker(context)
@@ -66,7 +62,7 @@ class RtspCall(
 		val open = session
 		// The teardown is network work: not on the main thread.
 		Thread({ open?.close() }, "marc2d-rtsp-close").start()
-		if (answered) {
+		if (isAnswered) {
 			val manager = context.getSystemService(AudioManager::class.java)
 			manager.clearCommunicationDevice()
 			manager.mode = AudioManager.MODE_NORMAL
@@ -95,7 +91,7 @@ class RtspCall(
 				if (!running) throw IOException("Stopped")
 				when (media) {
 					RtspMedia.Video -> depacketizer.push(rtp, data)?.let { video.decode(it, rtp.timestamp, offer.video?.parameters, surface) }
-					RtspMedia.Sound -> if (answered) offer.sound?.let { play(it, it.decode(data, rtp.payloadOffset, rtp.payloadLength)) }
+					RtspMedia.Sound -> if (isAnswered) offer.sound?.let { play(it, it.decode(data, rtp.payloadOffset, rtp.payloadLength)) }
 				}
 			}
 		} catch (e: Exception) {
@@ -118,27 +114,14 @@ class RtspCall(
 
 	private fun createSpeaker(sampleRate: Int): AudioTrack {
 		val minimum = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
-		return AudioTrack
-			.Builder()
-			.setAudioAttributes(
-				AudioAttributes
-					.Builder()
-					.setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-					.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-					.build(),
-			).setAudioFormat(
-				AudioFormat
-					.Builder()
-					.setSampleRate(sampleRate)
-					.setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-					.setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-					.build(),
-			)
+		return monoPcmTrack(
+			AudioAttributes.USAGE_VOICE_COMMUNICATION,
+			AudioAttributes.CONTENT_TYPE_SPEECH,
+			sampleRate,
+			AudioTrack.MODE_STREAM,
 			// Enough for the network's ups and downs, little enough not to delay the conversation.
-			.setBufferSizeInBytes(maxOf(minimum, sampleRate * 2 * SPEAKER_BUFFER_MILLIS / 1000))
-			.setTransferMode(AudioTrack.MODE_STREAM)
-			.build()
-			.apply { play() }
+			maxOf(minimum, sampleRate * 2 * SPEAKER_BUFFER_MILLIS / 1000),
+		).apply { play() }
 	}
 
 	/** On its own thread, once answered: the microphone into the backchannel. */
@@ -152,7 +135,7 @@ class RtspCall(
 				Log.w(TAG, "Intercom RTSP has no backchannel")
 				return
 			}
-			recordMicrophone(voice.sampleRate, { running }) { open.sendVoice(it) }
+			recordMicrophone(voice, { running }) { open.sendVoice(it) }
 		} catch (e: Exception) {
 			if (running) Log.w(TAG, "Intercom RTSP voice stopped: ${e::class.simpleName}")
 		}
@@ -226,7 +209,7 @@ private class VideoDecoder {
 					clear()
 					put(unit)
 				}
-				decoder.queueInputBuffer(index, 0, unit.size, timestamp * MICROS / VIDEO_CLOCK, 0)
+				decoder.queueInputBuffer(index, 0, unit.size, timestamp * MICROS_PER_SECOND / VIDEO_CLOCK, 0)
 			}
 			while (true) {
 				val out = decoder.dequeueOutputBuffer(info, 0)
@@ -260,29 +243,19 @@ private class VideoDecoder {
 		const val MAX_HEIGHT = 1080
 		const val MAX_KEPT = 120
 		const val INPUT_TIMEOUT_US = 10_000L
-		const val MICROS = 1_000_000L
-		const val VIDEO_CLOCK = 90_000L
 	}
 }
 
-/** The microphone, 20 ms at a time, while [running]. On the calling thread. */
-@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
+/** The microphone, 20 ms at a time at the [track]'s rate, while [running]. On the calling thread. */
 internal fun recordMicrophone(
-	sampleRate: Int,
+	track: RtspAudioTrack,
 	running: () -> Boolean,
 	send: (ShortArray) -> Unit,
 ) {
-	val frameSamples = sampleRate / VOICE_FRAMES_PER_SECOND
-	val minimum = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+	val frameSamples = track.frameSamples
 	// The communication source gets Android's processing for calls, with the echo of the speaker taken out where it can.
 	val microphone =
-		AudioRecord(
-			MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-			sampleRate,
-			AudioFormat.CHANNEL_IN_MONO,
-			AudioFormat.ENCODING_PCM_16BIT,
-			maxOf(minimum, frameSamples * 2 * MICROPHONE_BUFFERED_FRAMES),
-		)
+		monoMicrophone(MediaRecorder.AudioSource.VOICE_COMMUNICATION, track.sampleRate, frameSamples * 2 * MICROPHONE_BUFFERED_FRAMES)
 	val effects =
 		listOfNotNull(
 			if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(microphone.audioSessionId) else null,

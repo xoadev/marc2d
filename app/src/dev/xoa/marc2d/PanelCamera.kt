@@ -29,11 +29,8 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeout
 
 /** The front camera encoded in H.264, only while [start] and [stop] say so. */
 class PanelCamera(
@@ -84,20 +81,10 @@ class PanelCamera(
 		val rotation = if (power.isInteractive) currentRotation() else awakeRotation ?: currentRotation()
 		// A dark screen would hide that the camera is on.
 		screenOn.acquire()
-		try {
+		return startWithin(START_TIMEOUT, "camera", ::stop) {
 			val started = Session(context, rotation, onFrame, onFailure)
 			session = started
-			return withTimeout(START_TIMEOUT) { started.open() }
-		} catch (e: TimeoutCancellationException) {
-			stop()
-			// Not a cancellation of whoever called: the camera just did not answer.
-			throw IOException("The camera did not start", e)
-		} catch (e: CancellationException) {
-			stop()
-			throw e
-		} catch (e: Exception) {
-			stop()
-			throw e
+			started.open()
 		}
 	}
 
@@ -193,18 +180,13 @@ class PanelCamera(
 				info: MediaCodec.BufferInfo,
 			) {
 				if (closed) return
-				val buffer = codec.getOutputBuffer(index)
-				if (buffer != null && info.size > 0) {
-					val data = ByteArray(info.size)
-					buffer.position(info.offset)
-					buffer.get(data)
+				codec.takeOutput(index, info) { data ->
 					if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
 						h264Parameters(data)?.let(parameters::complete)
 					} else {
 						onFrame(H264Frame(data, info.presentationTimeUs, info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0))
 					}
 				}
-				codec.releaseOutputBuffer(index, false)
 			}
 
 			override fun onError(
@@ -219,8 +201,7 @@ class PanelCamera(
 		}
 
 		private fun fail(cause: Exception) {
-			if (closed) return
-			if (!parameters.completeExceptionally(cause)) onFailure()
+			if (!closed) parameters.failStartOr(cause, onFailure)
 		}
 
 		/** The lowest rate that reaches ours: more than that would only be thrown away, and it gives the sensor more light. */

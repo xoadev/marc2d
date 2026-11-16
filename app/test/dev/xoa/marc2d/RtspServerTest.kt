@@ -114,8 +114,7 @@ class RtspServerTest {
 		): Response {
 			val auth =
 				if (nonce != null && password != null) {
-					val ha1 = md5("marc2d:marc2d:$password")
-					val response = md5("$ha1:$nonce:${md5("$method:$uri")}")
+					val response = digestResponse("marc2d", "marc2d", password, nonce, method, uri)
 					listOf("""Authorization: Digest username="marc2d", realm="marc2d", nonce="$nonce", uri="$uri", response="$response"""")
 				} else {
 					emptyList()
@@ -152,20 +151,10 @@ class RtspServerTest {
 			return Regex("nonce=\"([^\"]+)\"").find(response.headers.getValue("www-authenticate"))!!.groupValues[1]
 		}
 
-		/** The next RTP packet that arrives over the connection. */
-		fun readPacket(): ByteArray {
-			check(input.read() == '$'.code)
-			input.read()
-			val size = (input.read() shl 8) or input.read()
-			return input.readNBytes(size)
-		}
-
 		/** The next packet on the connection, with its channel. */
 		fun readInterleaved(): Pair<Int, ByteArray> {
 			check(input.read() == '$'.code)
-			val channel = input.read()
-			val size = (input.read() shl 8) or input.read()
-			return channel to input.readNBytes(size)
+			return checkNotNull(readInterleaved(input)) { "connection closed" }
 		}
 
 		override fun close() {
@@ -318,7 +307,7 @@ class RtspServerTest {
 				// The server asks for it right after answering PLAY, so the reply can arrive first.
 				waitFor { source.keyFrameRequests > 0 }
 
-				val packet = client.readPacket()
+				val packet = client.readInterleaved().second
 				assertEquals(0x80, packet[0].toInt() and 0xFF)
 				assertEquals(96, packet[1].toInt() and 0x7F)
 			}
@@ -481,7 +470,7 @@ class RtspServerTest {
 				client.request("DESCRIBE", nonce = nonce)
 				client.request("SETUP", "$URI/track0", listOf(TCP), nonce = nonce)
 				client.request("PLAY", nonce = nonce)
-				assertEquals(KEY_NAL_TYPE, client.readPacket()[12].toInt() and 0x1F)
+				assertEquals(KEY_NAL_TYPE, client.readInterleaved().second[12].toInt() and 0x1F)
 			}
 		}
 	}
@@ -505,12 +494,12 @@ class RtspServerTest {
 				client.request("DESCRIBE", nonce = nonce)
 				client.request("SETUP", "$URI/track0", listOf(TCP), nonce = nonce)
 				client.request("PLAY", nonce = nonce)
-				client.readPacket()
+				client.readInterleaved()
 				source.fail()
 				withContext(Dispatchers.IO) {
 					while (true) {
 						try {
-							client.readPacket()
+							client.readInterleaved()
 						} catch (_: Exception) {
 							break
 						}

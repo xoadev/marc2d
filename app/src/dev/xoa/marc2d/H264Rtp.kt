@@ -16,18 +16,23 @@ class H264Frame(
 	val keyFrame: Boolean,
 )
 
-/** Splits Annex B data into NAL units, without their start codes. */
-fun nalUnits(annexB: ByteArray): List<ByteArray> {
-	val starts = mutableListOf<Int>()
-	var i = 0
-	while (i + 2 < annexB.size) {
-		if (annexB[i] == ZERO && annexB[i + 1] == ZERO && annexB[i + 2] == ONE) {
-			starts += i + 3
-			i += 3
-		} else {
-			i++
+/** Where each NAL unit of Annex B data starts, right after its start code. */
+internal fun nalStarts(annexB: ByteArray): Sequence<Int> =
+	sequence {
+		var i = 0
+		while (i + 2 < annexB.size) {
+			if (annexB[i] == ZERO && annexB[i + 1] == ZERO && annexB[i + 2] == ONE) {
+				yield(i + 3)
+				i += 3
+			} else {
+				i++
+			}
 		}
 	}
+
+/** Splits Annex B data into NAL units, without their start codes. */
+fun nalUnits(annexB: ByteArray): List<ByteArray> {
+	val starts = nalStarts(annexB).toList()
 	return starts.mapIndexed { index, start ->
 		var end = if (index + 1 < starts.size) starts[index + 1] - 3 else annexB.size
 		// A four-byte start code leaves its first zero at the end of the previous unit.
@@ -39,19 +44,22 @@ fun nalUnits(annexB: ByteArray): List<ByteArray> {
 /** Finds the SPS and the PPS in what the encoder sends as its configuration. */
 fun h264Parameters(annexB: ByteArray): H264Parameters? {
 	val units = nalUnits(annexB).filter { it.isNotEmpty() }
-	val sps = units.firstOrNull { it.nalType == NAL_SPS } ?: return null
-	val pps = units.firstOrNull { it.nalType == NAL_PPS } ?: return null
+	val sps = units.firstOrNull { it[0].nalType == NAL_SPS } ?: return null
+	val pps = units.firstOrNull { it[0].nalType == NAL_PPS } ?: return null
 	return H264Parameters(sps, pps)
 }
 
-private val ByteArray.nalType: Int
-	get() = this[0].toInt() and 0x1F
+/** The type of a NAL unit, from its first byte. A FU-A header keeps the type of the unit it carries in the same bits. */
+internal val Byte.nalType: Int
+	get() = toInt() and 0x1F
 
 /** What both tracks share: the RTP header, and the reports that let clients line up their clocks. */
 internal class RtpWriter(
 	private val payloadType: Int,
 	private val clockRate: Int,
 	private val ssrc: Int,
+	/** Where the RTP clock starts. RFC 3550 asks for a random one; the tracks the panel serves have always started at zero. */
+	private val initialTimestamp: Long = 0,
 ) {
 	private var sequence = Random.nextInt(0x10000)
 	private var packets = 0
@@ -78,8 +86,8 @@ internal class RtpWriter(
 		val last = lastReportUs
 		if (last != null && timestampUs - last < REPORT_INTERVAL_US) return null
 		lastReportUs = timestampUs
-		val seconds = timestampUs / MICROS
-		val fraction = (timestampUs % MICROS) * (1L shl 32) / MICROS
+		val seconds = timestampUs / MICROS_PER_SECOND
+		val fraction = (timestampUs % MICROS_PER_SECOND) * (1L shl 32) / MICROS_PER_SECOND
 		return ByteBuffer
 			.allocate(SENDER_REPORT_BYTES)
 			.put(RTP_VERSION_2)
@@ -94,7 +102,7 @@ internal class RtpWriter(
 			.array()
 	}
 
-	private fun rtpTime(timestampUs: Long): Long = timestampUs * clockRate / MICROS
+	private fun rtpTime(timestampUs: Long): Long = initialTimestamp + timestampUs * clockRate / MICROS_PER_SECOND
 }
 
 /** RFC 6184, with single NAL units and FU-A: every client of the panel understands both. */
@@ -102,7 +110,7 @@ class H264Packetizer(
 	private val maxPacket: Int = MAX_RTP_PACKET,
 	ssrc: Int = Random.nextInt(),
 ) {
-	private val writer = RtpWriter(RTP_PAYLOAD_TYPE, RTP_CLOCK, ssrc)
+	private val writer = RtpWriter(RTP_PAYLOAD_TYPE, VIDEO_CLOCK, ssrc)
 
 	fun packets(frame: H264Frame): List<ByteArray> {
 		val units = nalUnits(frame.data).filter { it.isNotEmpty() }
@@ -124,7 +132,7 @@ class H264Packetizer(
 		isLastUnit: Boolean,
 	): List<ByteArray> {
 		val indicator = ((unit[0].toInt() and 0xE0) or FU_A).toByte()
-		val type = unit[0].toInt() and 0x1F
+		val type = unit[0].nalType
 		val room = maxPacket - RTP_HEADER - 2
 		val chunks = (1 until unit.size step room).toList()
 		return chunks.mapIndexed { index, start ->
@@ -169,18 +177,21 @@ const val RTP_PAYLOAD_TYPE = 96
 const val RTP_AUDIO_PAYLOAD_TYPE = 97
 private const val MAX_RTP_PACKET = 1400
 private const val RTP_HEADER = 12
-private const val RTP_CLOCK = 90_000
+
+/** The clock of H.264 over RTP, as RFC 6184 sets it. */
+internal const val VIDEO_CLOCK = 90_000
 private const val RTP_VERSION_2: Byte = 0x80.toByte()
 private const val RTCP_SENDER_REPORT: Byte = 200.toByte()
 private const val SENDER_REPORT_BYTES = 28
 private const val REPORT_INTERVAL_US = 5_000_000L
-private const val MICROS = 1_000_000L
 private const val AU_HEADER_BITS: Byte = 16
 private const val AU_INDEX_BITS = 3
-private const val FU_A = 28
-private const val FU_START = 0x80
-private const val FU_END = 0x40
-private const val NAL_SPS = 7
-private const val NAL_PPS = 8
+internal const val NAL_IDR = 5
+internal const val NAL_SPS = 7
+internal const val NAL_PPS = 8
+internal const val STAP_A = 24
+internal const val FU_A = 28
+internal const val FU_START = 0x80
+internal const val FU_END = 0x40
 private const val ZERO: Byte = 0
 private const val ONE: Byte = 1

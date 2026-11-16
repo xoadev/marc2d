@@ -2,32 +2,14 @@ package dev.xoa.marc2d
 
 import java.nio.ByteBuffer
 
-/** 16-bit PCM samples, in either byte order: L16 is big-endian, as RFC 3551 says. */
+/** 16-bit PCM samples in big-endian, as RFC 3551 says L16 goes. */
 fun decodePcm(
 	bytes: ByteArray,
 	offset: Int,
 	length: Int,
-	littleEndian: Boolean,
-): ShortArray =
-	ShortArray(length / 2) { i ->
-		val first = bytes[offset + 2 * i].toInt() and 0xFF
-		val second = bytes[offset + 2 * i + 1].toInt() and 0xFF
-		(if (littleEndian) (second shl 8) or first else (first shl 8) or second).toShort()
-	}
+): ShortArray = ShortArray(length / 2).also { ByteBuffer.wrap(bytes, offset, length).asShortBuffer().get(it) }
 
-fun encodePcm(
-	samples: ShortArray,
-	littleEndian: Boolean,
-): ByteArray {
-	val bytes = ByteArray(samples.size * 2)
-	samples.forEachIndexed { i, sample ->
-		val high = (sample.toInt() shr 8).toByte()
-		val low = sample.toByte()
-		bytes[2 * i] = if (littleEndian) low else high
-		bytes[2 * i + 1] = if (littleEndian) high else low
-	}
-	return bytes
-}
+fun encodePcm(samples: ShortArray): ByteArray = ByteBuffer.allocate(samples.size * 2).apply { asShortBuffer().put(samples) }.array()
 
 class RtpPacket(
 	val payloadType: Int,
@@ -81,3 +63,5 @@ internal fun rtpHeader(
 		.putInt(timestamp.toInt())
 		.putInt(ssrc)
 		.array()
+
+internal const val MICROS_PER_SECOND = 1_000_000L
