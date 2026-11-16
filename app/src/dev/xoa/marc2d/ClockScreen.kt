@@ -35,8 +35,6 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 // Black background and dimmed white: the screens are OLED and stay on for many hours.
-private val ClockColor = Color(0xFFD8D8D8)
-private val DateColor = Color(0xFFA0A0A0)
 private val WarningColor = Color(0xFFE0A030)
 private const val MAX_CLOCK_HEIGHT = 0.5f
 private val WEATHER_LIST_WIDTH = 160.dp
@@ -99,7 +97,7 @@ fun ClockScreen(
 				modifier = Modifier.heightIn(max = clockMaxHeight),
 				style =
 					TextStyle(
-						color = ClockColor,
+						color = PixelWhite,
 						fontWeight = FontWeight.Light,
 						// Fixed-width digits: the time does not jump around when the minute changes.
 						fontFeatureSettings = "tnum",
@@ -108,7 +106,7 @@ fun ClockScreen(
 			)
 			Text(
 				text = ClockFormat.date(now, locale, DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")),
-				color = DateColor,
+				color = PixelGray,
 				fontSize = 28.sp,
 				textAlign = TextAlign.Center,
 			)

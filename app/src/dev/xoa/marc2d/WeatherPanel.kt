@@ -8,15 +8,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
-
-private val PrimaryColor = Color(0xFFD8D8D8)
-private val SecondaryColor = Color(0xFFA0A0A0)
 
 /**
  * The current weather and the hourly forecast: in columns if there is plenty of width above the
@@ -40,9 +36,9 @@ fun WeatherPanel(
 			horizontalArrangement = Arrangement.spacedBy(8.dp),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
-			Text(WeatherFormat.label(report.condition), color = SecondaryColor, fontSize = 16.sp)
+			Text(WeatherFormat.label(report.condition), color = PixelGray, fontSize = 16.sp)
 			report.temperature?.let {
-				Text(WeatherFormat.temperature(it), color = PrimaryColor, fontSize = 28.sp)
+				Text(WeatherFormat.temperature(it), color = PixelWhite, fontSize = 28.sp)
 			}
 		}
 		if (asList) {
@@ -78,9 +74,9 @@ private fun HourColumn(
 		modifier = modifier.width(42.dp),
 		horizontalAlignment = Alignment.CenterHorizontally,
 	) {
-		Text(hour, color = SecondaryColor, fontSize = 13.sp)
-		Text(symbol, color = SecondaryColor, fontSize = 18.sp)
-		Text(temperature, color = PrimaryColor, fontSize = 14.sp)
+		Text(hour, color = PixelGray, fontSize = 13.sp)
+		Text(symbol, color = PixelGray, fontSize = 18.sp)
+		Text(temperature, color = PixelWhite, fontSize = 14.sp)
 	}
 }
 
@@ -95,8 +91,8 @@ private fun HourRow(
 		modifier = modifier,
 		verticalAlignment = Alignment.CenterVertically,
 	) {
-		Text(hour, color = SecondaryColor, fontSize = 13.sp, modifier = Modifier.width(28.dp))
-		Text(symbol, color = SecondaryColor, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.width(36.dp))
-		Text(temperature, color = PrimaryColor, fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.width(36.dp))
+		Text(hour, color = PixelGray, fontSize = 13.sp, modifier = Modifier.width(28.dp))
+		Text(symbol, color = PixelGray, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.width(36.dp))
+		Text(temperature, color = PixelWhite, fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.width(36.dp))
 	}
 }

@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val SettingsGray = Color(0xFFA0A0A0)
-
 /** The panel only needs to enroll in Home Assistant: the rest of the configuration comes from there. */
 @Composable
 fun SettingsScreen(
@@ -51,14 +49,14 @@ fun SettingsScreen(
 			focusedBorderColor = PixelWhite,
 			unfocusedBorderColor = PixelDisabled,
 			focusedLabelColor = PixelWhite,
-			unfocusedLabelColor = SettingsGray,
+			unfocusedLabelColor = PixelGray,
 			cursorColor = PixelWhite,
 		)
 	val connect: @Composable (Modifier) -> Unit = { columnModifier ->
 		Column(columnModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
 			// First: after scanning, the panel returns here with the screen scrolled to the top.
 			if (enrollmentMessage != null) Text(enrollmentMessage, color = PixelWhite, fontSize = 18.sp)
-			Text("Add this panel in the marc2d integration of Home Assistant, and scan the code it shows.", color = SettingsGray, fontSize = 16.sp)
+			Text("Add this panel in the marc2d integration of Home Assistant, and scan the code it shows.", color = PixelGray, fontSize = 16.sp)
 			PixelTextButton("Scan QR code", onScan, Modifier.fillMaxWidth())
 			OutlinedTextField(
 				value = url,
@@ -88,9 +86,9 @@ fun SettingsScreen(
 	}
 	val device: @Composable (Modifier) -> Unit = { columnModifier ->
 		Column(columnModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-			Text(status, color = SettingsGray, fontSize = 16.sp)
+			Text(status, color = PixelGray, fontSize = 16.sp)
 			intercoms.forEach { (name, intercom) ->
-				Text("$name: ${intercom.label}", color = SettingsGray, fontSize = 16.sp)
+				Text("$name: ${intercom.label}", color = PixelGray, fontSize = 16.sp)
 			}
 			PixelTextButton("Android settings", onOpenAndroidSettings, Modifier.fillMaxWidth())
 			if (onLeaveKiosk != null) {

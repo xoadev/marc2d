@@ -14,7 +14,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.floor
@@ -22,8 +21,6 @@ import kotlin.math.roundToInt
 
 private val TILE_ICON = 40.dp
 private val LEVEL_WIDTH = 72.dp
-private val TileGray = Color(0xFFA0A0A0)
-private val TileWarning = Color(0xFFF0C020)
 
 /** The icons a reading can have, chosen in its configuration: the battery fills with its value. */
 enum class ReadingIcon(
@@ -59,14 +56,14 @@ fun ReadingTiles(
 
 @Composable
 private fun Tile(reading: Reading) {
-	val color = if (reading.warning) TileWarning else TileGray
+	val color = if (reading.warning) PixelYellow else PixelGray
 	val icon = ReadingIcon.parse(reading.icon)
 	Row(
 		verticalAlignment = Alignment.CenterVertically,
 		horizontalArrangement = Arrangement.spacedBy(12.dp),
 		modifier = Modifier.semantics { contentDescription = "${reading.name} ${reading.value}${reading.unit.orEmpty()}" },
 	) {
-		if (icon != null) PixelIconImage(icon, reading.level, color, TILE_ICON) else Text(reading.name, color = color, fontSize = 22.sp)
+		if (icon != null) PixelIconCanvas(icon.rows(reading.level), color, Modifier.size(TILE_ICON)) else Text(reading.name, color = color, fontSize = 22.sp)
 		Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
 			Text(reading.value + unitSuffix(reading.unit), color = color, fontSize = 28.sp, maxLines = 1)
 			// The battery icon already shows the level.
@@ -82,16 +79,6 @@ fun unitSuffix(unit: String?): String =
 		unit == "%" -> unit
 		else -> " $unit"
 	}
-
-@Composable
-private fun PixelIconImage(
-	icon: ReadingIcon,
-	level: Float?,
-	color: Color,
-	size: Dp,
-) {
-	Canvas(Modifier.size(size)) { drawPixels(icon.rows(level), color, wholePixel(GRID)) }
-}
 
 /** Ten cells, in whole pixels as the droid, filled with the level. */
 @Composable

@@ -1,9 +1,7 @@
 package dev.xoa.marc2d
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -37,10 +35,7 @@ private val STEP_TIME = 500.milliseconds
 private val SLEEP_TIME = 20.minutes
 private val THINKING_GLINT = listOf(6 to 5, 8 to 5, 8 to 7, 6 to 7)
 
-private val Head = Color(0xFFD8D8D8)
 private val Base = Color(0xFF707070)
-private val Yellow = Color(0xFFF0C020)
-private val Red = Color(0xFFE02020)
 private val DimRed = Color(0xFF700000)
 
 private val HEAD =
@@ -156,7 +151,7 @@ fun BoxWithConstraintsScope.DroidSprite(
 				.size(size),
 	) {
 		val pixel = wholePixel(SPRITE_PIXELS)
-		drawPixels(HEAD, Head, pixel)
+		drawPixels(HEAD, PixelWhite, pixel)
 		drawPixels(if (moving) BASES[1 + frame % 2] else BASES[0], Base, pixel, Offset(0f, HEAD.size * pixel))
 		eye(pixel, mood, direction, moving, blink, phase)
 	}
@@ -198,34 +193,34 @@ private fun DrawScope.eye(
 		}
 
 		DroidMood.Alarm -> {
-			block(pixel, 6..9, 5..8, if (blink) Yellow else Color.Black)
-			block(pixel, 7..8, 6..7, if (blink) Color.Black else Yellow)
+			block(pixel, 6..9, 5..8, if (blink) PixelYellow else Color.Black)
+			block(pixel, 7..8, 6..7, if (blink) Color.Black else PixelYellow)
 		}
 
 		DroidMood.Intruder -> {
-			block(pixel, 4..11, 6..7, if (blink) Red else DimRed)
+			block(pixel, 4..11, 6..7, if (blink) PixelRed else DimRed)
 		}
 
 		DroidMood.Recording -> {
 			block(pixel, 5..10, 4..8, Color.Black)
-			block(pixel, 7..8, 5..7, if (blink) Red else DimRed)
+			block(pixel, 7..8, 5..7, if (blink) PixelRed else DimRed)
 		}
 
 		DroidMood.RecordingSound -> {
 			block(pixel, 4..11, 3..9, Color.Black)
-			block(pixel, 6..9, 5..7, if (blink) Red else DimRed)
+			block(pixel, 6..9, 5..7, if (blink) PixelRed else DimRed)
 		}
 
 		DroidMood.Thinking -> {
 			// A glint going round the eye, one corner per step: working on it.
 			block(pixel, 5..10, 4..9, Color.Black)
 			val (x, y) = THINKING_GLINT[phase % THINKING_GLINT.size]
-			block(pixel, x..(x + 1), y..(y + 1), Head)
+			block(pixel, x..(x + 1), y..(y + 1), PixelWhite)
 		}
 
 		DroidMood.Listening -> {
 			block(pixel, 5..10, 4..9, Color.Black)
-			block(pixel, 7..8, 6..7, if (blink) Head else Color.Black)
+			block(pixel, 7..8, 6..7, if (blink) PixelWhite else Color.Black)
 		}
 
 		DroidMood.Offline -> {
@@ -241,5 +236,5 @@ private fun DrawScope.openEye(
 ) {
 	val shift = direction.coerceIn(-1, 1)
 	block(pixel, (6 + shift)..(9 + shift), 5..8, Color.Black)
-	dot(pixel, 7 + shift * 2 - (if (shift < 0) -1 else 0), 6, Head)
+	dot(pixel, 7 + shift * 2 - (if (shift < 0) -1 else 0), 6, PixelWhite)
 }
