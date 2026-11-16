@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
 from .enrollment import DOMAIN
-from .panel_config import build_panel_config
+from .panel_config import CONF_INTERCOMS, build_panel_config
 from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
 
 CONF_USER_ID = "user_id"
@@ -89,8 +89,13 @@ def ws_doorbell_answered(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Make the other panels stop ringing."""
-    if _own_entry(hass, connection, msg) is None:
+    """Make the other panels stop ringing, only for an intercom this panel has."""
+    entry = _own_entry(hass, connection, msg)
+    if entry is None:
+        return
+    intercoms = {intercom.get("name") for intercom in entry.options.get(CONF_INTERCOMS, [])}
+    if msg["intercom"] not in intercoms:
+        connection.send_error(msg["id"], "not_found", "This panel has no intercom by that name")
         return
     doorbell_to_all(hass, msg["intercom"], DOORBELL_ANSWERED)
     connection.send_result(msg["id"])

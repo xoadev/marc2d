@@ -96,20 +96,33 @@ async def async_latest_release(hass: HomeAssistant) -> Release | None:
             if response.status != HTTPStatus.OK:
                 return None
             release = await response.json()
-        assets = {asset["name"]: asset["browser_download_url"] for asset in release["assets"]}
-        url = assets[APK_ASSET]
-        # A release is only offered whole, and only from this project.
-        if not url.startswith(RELEASE_DOWNLOADS):
-            return None
-        async with session.get(assets[HASH_ASSET], timeout=_TIMEOUT) as response:
+        version, url, hash_url, page = _parse_release(release)
+        async with session.get(hash_url, timeout=_TIMEOUT) as response:
             response.raise_for_status()
             sha256 = (await response.text()).split()[0].lower()
-    except (ClientError, TimeoutError, KeyError, IndexError, ValueError) as err:
+    except (ClientError, TimeoutError, KeyError, IndexError, ValueError, TypeError) as err:
         _LOGGER.debug("Could not read the latest release: %s", err)
         return None
     if not SHA256.fullmatch(sha256):
         return None
-    result = (release["tag_name"].removeprefix("v"), url, sha256, release.get("html_url"))
+    result = (version, url, sha256, page)
     # Only what worked: a failure is asked again by the next panel, not kept for hours.
     hass.data[DATA_RELEASE] = (dt_util.utcnow(), result)
     return result
+
+
+def _parse_release(release: Any) -> tuple[str, str, str, str | None]:
+    """The version, the APK, its hash and the release's page, only whole and only from this project.
+
+    It comes from GitHub, so every part is checked: anything else raises ValueError or TypeError.
+    """
+    tag = release["tag_name"]
+    if not isinstance(tag, str) or not tag:
+        raise TypeError("tag_name is not text")
+    assets = {asset["name"]: asset["browser_download_url"] for asset in release["assets"]}
+    url, hash_url = assets[APK_ASSET], assets[HASH_ASSET]
+    for link in (url, hash_url):
+        if not isinstance(link, str) or not link.startswith(RELEASE_DOWNLOADS):
+            raise ValueError("an asset is not in this project's releases")
+    page = release.get("html_url")
+    return tag.removeprefix("v"), url, hash_url, page if isinstance(page, str) else None

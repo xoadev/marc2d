@@ -14,10 +14,14 @@ It's a half-joking personal project, shared in case it's useful to someone.
 ## What it does
 
 - **Clock and weather** on a black screen, designed for OLED panels that stay on all day.
-- **Intercom:** it rings, you answer with audio and video, and you can call it yourself. Tested with a
-  Dahua VTO2202F.
+- **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
+  with an RTSP backchannel, over RTSP from the moment it rings. Tested with a Dahua VTO2202F.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
-- **Sensors and siren** in Home Assistant: light, battery and a siren on the alarm channel.
+- **Sensors and siren** in Home Assistant: light, battery, temperature, presence, Wi-Fi, whether the camera is on, and
+  a siren on the alarm channel.
+- **Readings and charts** of any entity: tiles on the main screen, such as the car's battery, and hourly charts in the
+  menu, such as the electricity price.
+- **Updates** from Home Assistant, installed by the panel itself.
 - **A speaker** for `tts.speak` and any other audio from Home Assistant.
 - **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what
   follows to Assist.
@@ -26,7 +30,7 @@ It's a half-joking personal project, shared in case it's useful to someone.
 
 ## Status
 
-In testing, with a single panel and no releases. Things still break freely.
+In testing, with a single panel. Releases are published by hand from `main`. Things still break freely.
 
 ## What you need
 
@@ -88,17 +92,18 @@ DataStore, Vosk, CameraX and ZXing, with our own small RTSP server for the camer
 
 ## Development
 
-The `./kotlin` script downloads what it needs, with nothing to install first.
+Everything runs through `make`, and the `./kotlin` script it uses downloads what it needs, with nothing to install
+first.
 
 ```sh
-./kotlin build -m app        # builds the APK
-./kotlin check               # ktlint, Compose rules and tests
-./kotlin do ktlintFormat     # fixes the formatting
+make check       # lint, tests and the APK, as CI does
+make format      # fixes the formatting
+make help        # lists the rest
 
 adb -s <serial> install -r build/tasks/_app_buildAndroidDebug/gradle-project-debug.apk
 ```
 
-CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS.md).
+CI also runs hassfest, the HACS validation and actionlint. The working rules are in [AGENTS.md](AGENTS.md).
 
 ## Setting up a panel
 

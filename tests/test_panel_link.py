@@ -7,6 +7,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
+from custom_components.marc2d.update import async_latest_release
 from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
@@ -105,6 +106,20 @@ def test_a_send_that_disconnects_does_not_skip_the_next_connection() -> None:
     assert received == ["first", "second"]
 
 
+async def test_values_out_of_their_range_are_ignored(hass, panel) -> None:
+    await panel.send_json(
+        {"id": 2, "type": "marc2d/state", "values": {"battery": 80, "volume": 0.5}}
+    )
+    assert (await panel.receive_json())["success"] is True
+    await panel.send_json(
+        {"id": 3, "type": "marc2d/state", "values": {"battery": 180, "volume": 7}}
+    )
+    assert (await panel.receive_json())["success"] is True
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.kitchen_battery").state == "80"
+    assert hass.states.get("media_player.kitchen_speaker").attributes["volume_level"] == 0.5
+
+
 async def test_presence_follows_the_panel(hass, panel) -> None:
     presence = "binary_sensor.kitchen_presence"
     assert hass.states.get(presence).state == "unknown"
@@ -160,6 +175,11 @@ async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
         first.get("event"),
         second.get("event"),
     )
+
+
+async def test_a_panel_cannot_silence_an_intercom_it_does_not_have(hass, panel) -> None:
+    await panel.send_json({"id": 2, "type": "marc2d/doorbell/answered", "intercom": "Garden"})
+    assert (await panel.receive_json())["error"]["code"] == "not_found"
 
 
 async def test_doorbell_coming_back_does_not_ring(hass, panel) -> None:
@@ -432,6 +452,20 @@ def _mock_release(aioclient_mock, apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> N
     aioclient_mock.get(f"{DOWNLOADS}/hash", text=f"{APK_HASH}  marc2d.apk\n")
 
 
+def _mock_release_with_hash(aioclient_mock, text: str) -> None:
+    aioclient_mock.get(
+        RELEASE_API,
+        json={
+            "tag_name": "v0.2.0",
+            "assets": [
+                {"name": "marc2d.apk", "browser_download_url": f"{DOWNLOADS}/marc2d.apk"},
+                {"name": "marc2d.apk.sha256", "browser_download_url": f"{DOWNLOADS}/hash"},
+            ],
+        },
+    )
+    aioclient_mock.get(f"{DOWNLOADS}/hash", text=text)
+
+
 async def _look_for_updates(hass) -> None:
     await async_setup_component(hass, "homeassistant", {})
     await hass.services.async_call(
@@ -489,9 +523,48 @@ async def test_no_internet_keeps_what_it_knew(hass, panel, aioclient_mock) -> No
     assert hass.states.get(APP).attributes["latest_version"] == "0.2.0"
 
 
-async def test_panels_share_one_look_for_the_release(hass, panel, aioclient_mock) -> None:
+async def test_panels_share_one_look_for_the_release(hass, aioclient_mock) -> None:
+    # Not through an entity: a cache per panel would also pass that way.
     _mock_release(aioclient_mock)
-    await _look_for_updates(hass)
+    first = await async_latest_release(hass)
     asked = aioclient_mock.call_count
-    await _look_for_updates(hass)
+    assert await async_latest_release(hass) == first
     assert aioclient_mock.call_count == asked
+
+
+@pytest.mark.parametrize(
+    ("release", "hash_text"),
+    [
+        ({"assets": []}, None),
+        ({"tag_name": 2, "assets": "none"}, None),
+        ("not an object", None),
+        (None, "not a hash"),
+    ],
+    ids=["no assets", "wrong types", "not an object", "bad hash"],
+)
+async def test_a_broken_release_is_not_offered(hass, aioclient_mock, release, hash_text) -> None:
+    _mock_release(aioclient_mock)
+    if release is not None:
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(RELEASE_API, json=release)
+    if hash_text is not None:
+        aioclient_mock.clear_requests()
+        _mock_release_with_hash(aioclient_mock, hash_text)
+    assert await async_latest_release(hass) is None
+
+
+async def test_a_hash_from_elsewhere_is_not_trusted(hass, aioclient_mock) -> None:
+    # Without this, the 404 that conftest serves for every test would answer first.
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(
+        RELEASE_API,
+        json={
+            "tag_name": "v0.2.0",
+            "assets": [
+                {"name": "marc2d.apk", "browser_download_url": f"{DOWNLOADS}/marc2d.apk"},
+                {"name": "marc2d.apk.sha256", "browser_download_url": "https://example.com/hash"},
+            ],
+        },
+    )
+    aioclient_mock.get("https://example.com/hash", text=APK_HASH)
+    assert await async_latest_release(hass) is None

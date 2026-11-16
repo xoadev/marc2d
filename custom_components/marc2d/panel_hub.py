@@ -127,6 +127,14 @@ def doorbell_to_all(hass: HomeAssistant, intercom: str, payload: str) -> None:
         hub.send(event)
 
 
+# The ones with limits: anything outside is a broken report, not a value to show.
+REPORTED_RANGES: dict[str, tuple[float, float]] = {
+    "battery": (0, 100),
+    KEY_VOLUME: (0, 1),
+    "light": (0, float("inf")),
+}
+
+
 def is_valid(key: str, value: Any) -> bool:
     """A key the panel reports, with a value of its type.
 
@@ -137,4 +145,7 @@ def is_valid(key: str, value: Any) -> bool:
         return False
     if isinstance(value, bool):
         return bool in types
-    return isinstance(value, types)
+    if not isinstance(value, types):
+        return False
+    low, high = REPORTED_RANGES.get(key, (float("-inf"), float("inf")))
+    return not isinstance(value, NUMBER) or low <= value <= high
