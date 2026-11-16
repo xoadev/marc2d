@@ -1,12 +1,18 @@
 package dev.xoa.marc2d
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import android.view.Surface
 import java.io.IOException
@@ -254,3 +260,56 @@ private class VideoDecoder {
 		const val VIDEO_CLOCK = 90_000L
 	}
 }
+
+/** The microphone, 20 ms at a time, while [running]. On the calling thread. */
+@SuppressLint("MissingPermission") // The service only starts with the microphone permission.
+internal fun recordMicrophone(
+	sampleRate: Int,
+	running: () -> Boolean,
+	send: (ShortArray) -> Unit,
+) {
+	val frameSamples = sampleRate / MICROPHONE_FRAMES_PER_SECOND
+	val minimum = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+	// The communication source gets Android's processing for calls, with the echo of the speaker taken out where it can.
+	val microphone =
+		AudioRecord(
+			MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+			sampleRate,
+			AudioFormat.CHANNEL_IN_MONO,
+			AudioFormat.ENCODING_PCM_16BIT,
+			maxOf(minimum, frameSamples * 2 * MICROPHONE_BUFFERED_FRAMES),
+		)
+	val effects =
+		listOfNotNull(
+			if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(microphone.audioSessionId) else null,
+			if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(microphone.audioSessionId) else null,
+		)
+	effects.forEach { it.enabled = true }
+	try {
+		microphone.startRecording()
+		val frame = ShortArray(frameSamples)
+		while (running()) {
+			var read = 0
+			while (read < frame.size && running()) {
+				val got = microphone.read(frame, read, frame.size - read)
+				if (got < 0) return
+				read += got
+			}
+			if (running()) send(frame)
+		}
+	} finally {
+		effects.forEach { it.release() }
+		microphone.release()
+	}
+}
+
+/** There is no earpiece on the wall: calls always go to the speaker. */
+internal fun useSpeaker(context: Context) {
+	val manager = context.getSystemService(AudioManager::class.java)
+	manager.availableCommunicationDevices
+		.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+		?.let(manager::setCommunicationDevice)
+}
+
+private const val MICROPHONE_FRAMES_PER_SECOND = 50
+private const val MICROPHONE_BUFFERED_FRAMES = 6

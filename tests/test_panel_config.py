@@ -298,23 +298,6 @@ async def test_a_short_password_is_refused(hass, entry) -> None:
     assert refused["errors"] == {"rtsp_password": "too_short"}
 
 
-def test_the_intercom_audio_reaches_the_panel_as_chosen() -> None:
-    dahua = {**INTERCOM, "audio": "pcm_le_16000"}
-    assert (
-        build_panel_config({**OPTIONS, "intercoms": [dahua]})["intercoms"][0]["audio"]
-        == "pcm_le_16000"
-    )
-    assert "audio" not in build_panel_config(OPTIONS)["intercoms"][0]
-
-
-async def test_the_intercom_form_offers_the_audio_formats(hass, entry) -> None:
-    form = await open_page(hass, entry, "intercoms")
-    fields = form["data_schema"].schema["intercoms"].config["fields"]
-    values = [option["value"] for option in fields["audio"]["selector"]["select"]["options"]]
-    assert values[0] == "standard"
-    assert "pcm_le_16000" in values
-
-
 def test_the_intercom_goes_over_rtsp_only_with_a_url() -> None:
     url = "rtsp://admin:secret@192.0.2.8/cam/realmonitor?channel=1&subtype=1"
     over_rtsp = {**INTERCOM, "rtsp": url}

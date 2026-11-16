@@ -44,7 +44,6 @@ class IntercomPhone(
 	val call: StateFlow<IntercomCall?> = _call.asStateFlow()
 
 	private var applied: PanelConfig? = null
-	private val ownAudio = IntercomAudio(context)
 	private var activeCall: Call? = null
 
 	/** The intercom's video, sound and the panel's voice, for one with an RTSP URL. */
@@ -83,8 +82,6 @@ class IntercomPhone(
 			// out of the core, and this keeps its Android helper from ringing again on top.
 			isNativeRingingEnabled = true
 			config.setInt("sound", "disable_ringing", 1)
-			// A fixed port, so that the panel's own audio can share it for intercoms whose audio Linphone cannot play.
-			audioPort = AUDIO_PORT
 			isVideoCaptureEnabled = false
 			isVideoDisplayEnabled = true
 			videoActivationPolicy =
@@ -197,7 +194,7 @@ class IntercomPhone(
 		val address = Factory.instance().createAddress("sip:${intercom.number}@${intercom.server}")
 		val params = core.createCallParams(null)
 		if (address != null && params != null) {
-			signalOnly(intercom, params)
+			callMedia(intercom, params)
 			activeCall = core.inviteAddressWithParams(address, params)
 		}
 		if (activeCall == null) retryOrEnd()
@@ -216,9 +213,9 @@ class IntercomPhone(
 
 	/**
 	 * The call's media. Over RTSP, SIP only tells the intercom someone answered: neither sound nor video. Otherwise the door
-	 * station is visible but sees nothing, and its own audio, if Linphone cannot play it, is only received.
+	 * station is visible but sees nothing.
 	 */
-	private fun signalOnly(
+	private fun callMedia(
 		intercom: IntercomConfig?,
 		params: org.linphone.core.CallParams,
 	) {
@@ -229,7 +226,6 @@ class IntercomPhone(
 		}
 		params.isVideoEnabled = true
 		params.videoDirection = MediaDirection.RecvOnly
-		if (intercom != null && hasOwnAudio(intercom)) params.audioDirection = MediaDirection.RecvOnly
 	}
 
 	/** To talk through the intercom without anyone having rung. */
@@ -253,7 +249,7 @@ class IntercomPhone(
 		}
 		val call = activeCall ?: return
 		val params = core.createCallParams(call) ?: return
-		signalOnly(intercomFor(call), params)
+		callMedia(intercomFor(call), params)
 		media?.answer()
 		call.acceptWithParams(params)
 	}
@@ -324,7 +320,6 @@ class IntercomPhone(
 
 					Call.State.Connected, Call.State.StreamsRunning -> {
 						silence()
-						if (state == Call.State.StreamsRunning) startOwnAudio(call)
 						activeCall = call
 						dialing = null
 						connected = true
@@ -335,7 +330,6 @@ class IntercomPhone(
 					Call.State.End, Call.State.Error, Call.State.Released -> {
 						if (activeCall == call) {
 							silence()
-							stopOwnAudio()
 							activeCall = null
 							if (connected) {
 								// The intercom hung up, or the panel did.
@@ -364,7 +358,6 @@ class IntercomPhone(
 		const val RING_TIMEOUT_MILLIS = 45_000L
 		const val DIAL_TIMEOUT_MILLIS = 45_000L
 		const val REDIAL_DELAY_MILLIS = 2_000L
-		const val AUDIO_PORT = 7078
 	}
 
 	/** There is no earpiece on the wall: always use the speaker. */
@@ -385,22 +378,4 @@ class IntercomPhone(
 	}
 
 	private fun callName(call: Call): String = intercomFor(call)?.name ?: call.remoteAddress.displayName ?: "Intercom"
-
-	/**
-	 * Linphone only receives the audio of such an intercom, which the panel takes before it. Muting its microphone is not
-	 * enough: it kept sending its codec, which the intercom played as noise.
-	 */
-	private fun hasOwnAudio(intercom: IntercomConfig): Boolean = PcmFormat.parse(intercom.audio) != null
-
-	/** Only for an intercom with its own format, and not over RTSP: otherwise the audio stays with Linphone. */
-	private fun startOwnAudio(call: Call) {
-		val intercom = intercomFor(call) ?: return
-		if (intercom.rtsp != null) return
-		val format = PcmFormat.parse(intercom.audio) ?: return
-		ownAudio.start(core.audioPort, format, call.currentParams.usedAudioPayloadType?.number ?: -1)
-	}
-
-	private fun stopOwnAudio() {
-		ownAudio.stop()
-	}
 }

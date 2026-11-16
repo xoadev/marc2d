@@ -79,13 +79,8 @@ whatever alarm was active.
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
   video. If HA goes down, the panels do not ring, but DMSS keeps working.
 - An incoming SIP call to the extension is also handled.
-- **Audio:** standard by default: Linphone negotiates it and plays it. Some intercoms send uncompressed audio whatever
-  the call agreed, and Linphone drops it, so each intercom has an Audio setting for that: PCM or L16, at 8 or 16 kHz,
-  little or big-endian. Then the panel plays and sends that audio itself, on Linphone's audio port, and Linphone only
-  keeps the call and the video, with the audio only received: with a muted microphone it still sent its codec, which the
-  VTO played as crackling. The payload type, where to send, and the size and timestamp step of the packets are learnt
-  from the intercom's first packets: the VTO sends 40 ms, with timestamp steps that vary, so the usual one is used. The
-  Android API of Linphone cannot read the intercom's offer, so this is a setting and not automatic.
+- **Audio over SIP:** what Linphone negotiates and plays. An intercom that does not follow the negotiation, as the VTO,
+  goes over RTSP instead.
 - **Over RTSP:** each intercom can take an RTSP URL, with its user and password. Then the panel opens it as soon as it
   rings, to show who is at the door without waiting, and on answering the street's sound and the panel's voice, through
   the ONVIF backchannel, go over the same connection. SIP only tells the intercom someone answered or hung up, with a
@@ -111,9 +106,9 @@ Verified against a VTO2202F-P-S3 (UDP 5060), which is Asterisk inside:
 - The button calls group `9901`, and no extension receives that `INVITE`: the server stays at
   `100 Trying`. Direct calls to an extension do arrive. The button number is not changed
   so as not to risk DMSS, which receives the doorbell by another route.
-- Its audio is `PCM/16000`, payload type 97, little-endian, whatever the call agrees: measured on a call, as the other
-  byte order gives nonsense. It plays what it receives as that too, so PCMA reached the street as noise. It needs the
-  Audio setting `pcm_le_16000`.
+- Its SIP audio is `PCM/16000`, payload type 97, little-endian, whatever the call agrees, and it plays what it receives
+  as that too: Linphone drops it, and its PCMA reached the street as noise. Played and sent by the panel itself, the
+  voice still clicked, so the VTO goes over RTSP, where it is clean.
 - The VTO accepts calls to `8001`, with that audio and H.264 video to the panel. Right
   after a button press it does not answer, while its own group call lasts: the panel retries every 2
   seconds, for up to 45.

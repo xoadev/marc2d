@@ -68,8 +68,6 @@ data class IntercomConfig(
 	val password: String,
 	/** The intercom's own number: it is called on answering. */
 	val number: String = "8001",
-	/** The standard audio, or the uncompressed format it sends however the call is negotiated: see [PcmFormat]. */
-	val audio: String = PcmFormat.STANDARD,
 	/**
 	 * An RTSP URL with its credentials: then the video, the sound and the panel's voice go over RTSP, from the moment it rings,
 	 * and SIP only tells the intercom someone answered. See [RtspCall].
