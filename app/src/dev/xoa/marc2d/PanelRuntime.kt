@@ -87,7 +87,7 @@ class PanelRuntime(
 	private var updating: Job? = null
 	private val ha =
 		HaClient().apply {
-			onAssistTiming = { Log.i("marc2d", it) }
+			onAssistTiming = { Log.i(TAG, it) }
 			onAssistActive = ::assistChanged
 		}
 	private val enrollment = EnrollmentClient()
@@ -180,7 +180,7 @@ class PanelRuntime(
 					} catch (e: CancellationException) {
 						throw e
 					} catch (e: Exception) {
-						Log.w("marc2d", "Voice stopped: ${e::class.simpleName}")
+						Log.w(TAG, "Voice stopped: ${e::class.simpleName}")
 					}
 					delay(VOICE_RETRY)
 				}
@@ -200,35 +200,42 @@ class PanelRuntime(
 				}
 				link.report(PanelLink.CAMERA_ON, JsonPrimitive(false))
 				coroutineScope {
-					launch {
-						panelAddress(context).collect { address ->
-							if (address == null) link.forget(PanelLink.ADDRESS) else link.report(PanelLink.ADDRESS, JsonPrimitive(address))
-						}
-					}
-					while (true) {
-						try {
-							val server =
-								RtspServer(
-									rtsp.password,
-									camera,
-									onCamera = { on ->
-										_cameraOn.value = on
-										link.report(PanelLink.CAMERA_ON, JsonPrimitive(on))
-									},
-									audio = if (rtsp.audio) PanelMicrophone(context) else null,
-									onSound = { _cameraSound.value = it },
-								)
-							server.onProblem = { Log.w("marc2d", "RTSP client: $it") }
-							withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
-						} catch (e: CancellationException) {
-							throw e
-						} catch (e: IOException) {
-							Log.w("marc2d", "RTSP server stopped: ${e::class.simpleName}")
-						}
-						delay(RTSP_RETRY)
-					}
+					launch { reportAddress() }
+					serveCamera(rtsp)
 				}
 			}
+	}
+
+	/** Where to find the camera, which changes with the network. */
+	private suspend fun reportAddress() {
+		panelAddress(context).collect { address ->
+			if (address == null) link.forget(PanelLink.ADDRESS) else link.report(PanelLink.ADDRESS, JsonPrimitive(address))
+		}
+	}
+
+	private suspend fun serveCamera(rtsp: RtspConfig): Nothing {
+		while (true) {
+			try {
+				val server =
+					RtspServer(
+						rtsp.password,
+						camera,
+						onCamera = { on ->
+							_cameraOn.value = on
+							link.report(PanelLink.CAMERA_ON, JsonPrimitive(on))
+						},
+						audio = if (rtsp.audio) PanelMicrophone(context) else null,
+						onSound = { _cameraSound.value = it },
+					)
+				server.onProblem = { Log.w(TAG, "RTSP client: $it") }
+				withContext(Dispatchers.IO) { server.run(RTSP_PORT) }
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: IOException) {
+				Log.w(TAG, "RTSP server stopped: ${e::class.simpleName}")
+			}
+			delay(RTSP_RETRY)
+		}
 	}
 
 	/** A new version replaces the process, so success needs no answer: the new one reports again. */
@@ -245,7 +252,7 @@ class PanelRuntime(
 				} catch (e: CancellationException) {
 					throw e
 				} catch (e: Exception) {
-					Log.w("marc2d", "Update failed: ${e::class.simpleName}")
+					Log.w(TAG, "Update failed: ${e::class.simpleName}")
 					updateFailed()
 				}
 			}
@@ -318,7 +325,7 @@ class PanelRuntime(
 	}
 
 	private suspend fun publishBattery() {
-		val signals = SignalReports()
+		val signals = PanelReadings.signalReports()
 		while (true) {
 			readings.wifiSignal()?.let { signal ->
 				if (signals.shouldReport(signal, config.sensors)) reportReading(PanelLink.WIFI_SIGNAL, JsonPrimitive(signal))
@@ -334,7 +341,7 @@ class PanelRuntime(
 	}
 
 	private suspend fun publishLight() {
-		val reports = LightReports()
+		val reports = PanelReadings.lightReports()
 		// Latest: a new reading replaces the wait, which the new reading works out again.
 		readings.light().collectLatest { lux ->
 			_dark.value = lux < DARK_LUX
@@ -387,6 +394,7 @@ class PanelRuntime(
 	}
 
 	private companion object {
+		const val TAG = "marc2d"
 		const val DARK_LUX = 5f
 		val VOICE_RETRY = 60.seconds
 		val RTSP_RETRY = 30.seconds

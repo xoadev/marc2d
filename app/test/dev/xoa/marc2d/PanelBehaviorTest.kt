@@ -21,8 +21,17 @@ class PanelReadingsTest {
 	}
 
 	@Test
-	fun `reports the light again when the sensors come back`() {
-		val reports = LightReports()
+	fun `only a real change of Wi-Fi signal is reported`() {
+		val reports = PanelReadings.signalReports()
+		assertTrue(reports.shouldReport(-60, enabled = true))
+		assertFalse(reports.shouldReport(-62, enabled = true))
+		assertFalse(reports.shouldReport(-64, enabled = true))
+		assertTrue(reports.shouldReport(-65, enabled = true))
+	}
+
+	@Test
+	fun `reports again when the sensors come back`() {
+		val reports = PanelReadings.lightReports()
 		assertTrue(reports.shouldReport(100f, enabled = true))
 		assertFalse(reports.shouldReport(101f, enabled = true))
 		assertFalse(reports.shouldReport(101f, enabled = false))
@@ -114,25 +123,6 @@ class NetworkAddressesTest {
 		assertEquals("192.0.2.20", addresses.update(2, "192.0.2.20"))
 		assertEquals("192.0.2.10", addresses.update(2, null))
 		assertNull(addresses.update(1, null))
-	}
-}
-
-class SignalReportsTest {
-	@Test
-	fun `only a real change of Wi-Fi signal is reported`() {
-		val reports = SignalReports()
-		assertTrue(reports.shouldReport(-60, enabled = true))
-		assertFalse(reports.shouldReport(-62, enabled = true))
-		assertFalse(reports.shouldReport(-64, enabled = true))
-		assertTrue(reports.shouldReport(-65, enabled = true))
-	}
-
-	@Test
-	fun `it reports the signal again when the sensors come back`() {
-		val reports = SignalReports()
-		assertTrue(reports.shouldReport(-60, enabled = true))
-		assertFalse(reports.shouldReport(-60, enabled = false))
-		assertTrue(reports.shouldReport(-60, enabled = true))
 	}
 }
 

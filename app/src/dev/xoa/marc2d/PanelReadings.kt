@@ -24,30 +24,17 @@ data class BatteryReading(
 	val charging: Boolean,
 )
 
-/** Which light readings go to Home Assistant. It forgets the last one while the sensors are off: they restart with a value. */
-class LightReports {
-	private var last: Float? = null
+/**
+ * Which readings go to Home Assistant: only a [significant] change, as the sensors move all the time and would fill its history.
+ * It forgets the last one while the sensors are off: they restart with a value.
+ */
+class ChangeFilter<T : Any>(
+	private val significant: (last: T, value: T) -> Boolean,
+) {
+	private var last: T? = null
 
 	fun shouldReport(
-		lux: Float,
-		enabled: Boolean,
-	): Boolean {
-		if (!enabled) {
-			last = null
-			return false
-		}
-		if (!PanelReadings.isSignificant(last, lux)) return false
-		last = lux
-		return true
-	}
-}
-
-/** Which Wi-Fi readings go to Home Assistant: it moves a few dB all the time, which would fill its history. */
-class SignalReports {
-	private var last: Int? = null
-
-	fun shouldReport(
-		dbm: Int,
+		value: T,
 		enabled: Boolean,
 	): Boolean {
 		if (!enabled) {
@@ -55,13 +42,9 @@ class SignalReports {
 			return false
 		}
 		val previous = last
-		if (previous != null && abs(dbm - previous) < MIN_CHANGE_DB) return false
-		last = dbm
+		if (previous != null && !significant(previous, value)) return false
+		last = value
 		return true
-	}
-
-	private companion object {
-		const val MIN_CHANGE_DB = 5
 	}
 }
 
@@ -168,6 +151,12 @@ class PanelReadings(
 		private const val TENTHS = 10f
 		private const val MIN_LUX_CHANGE = 2f
 		private const val MIN_RELATIVE_CHANGE = 0.2f
+		private const val MIN_SIGNAL_CHANGE_DB = 5
+
+		fun lightReports(): ChangeFilter<Float> = ChangeFilter(::isSignificant)
+
+		/** Wi-Fi moves a few dB all the time. */
+		fun signalReports(): ChangeFilter<Int> = ChangeFilter { last, dbm -> abs(dbm - last) >= MIN_SIGNAL_CHANGE_DB }
 
 		/** A small change is not published: the sensor fluctuates a lot and would fill HA's history. */
 		fun isSignificant(
