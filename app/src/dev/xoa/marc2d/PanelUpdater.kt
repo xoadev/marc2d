@@ -33,7 +33,11 @@ internal fun copyVerifying(
 	return MessageDigest.isEqual(actual.toByteArray(), sha256.lowercase().toByteArray())
 }
 
-/** Android checks the signature, but only the hash says it is the file that HA was told about. */
+/**
+ * HTTPS only. The hash comes from the same release as the APK, so it only catches a file corrupted or changed on the way:
+ * whoever controls the release controls the hash too. What protects the panel is Android's signature check, which refuses an
+ * APK signed with another key than the installed app.
+ */
 internal fun isUpdateUrl(url: String): Boolean = url.startsWith("https://")
 
 /** Installs without asking anyone, as the Device Owner. Otherwise Android refuses it, and HA shows it failed. */

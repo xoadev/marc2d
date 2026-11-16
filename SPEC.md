@@ -303,7 +303,8 @@ its hash and the changelog, and nothing else: no stores. Without a `feat` or a `
 HA looks for the latest release every 6 hours and shows `update.*_app`. Pressing **Install** sends the panel the APK's URL
 and hash. The panel downloads it, checks the hash and installs it without asking, as the Device Owner, and the app starts
 by itself afterwards. A panel that is not would need someone to confirm it on its screen, behind the lock screen, so it
-does not install it and HA shows the update failed. Android only accepts a newer version signed with the same key.
+does not install it and HA shows the update failed. Android only accepts a newer version signed with the same key, and
+that is the protection: the hash comes from the same release, so it only catches a file corrupted on the way.
 
 The signing key cannot be replaced: changing it means uninstalling the app, which removes the Device Owner, the enrollment
 and the kiosk. Keep a copy outside GitHub. Panels that run a debug build need that once, to move to the signed one.
