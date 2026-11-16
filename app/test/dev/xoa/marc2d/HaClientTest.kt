@@ -64,6 +64,14 @@ class HaClientTest {
 		return HaProtocol.parse(text)["id"]!!.jsonPrimitive.int
 	}
 
+	// The panel reports its state as soon as it connects, so other requests can come first.
+	private suspend fun DefaultWebSocketServerSession.receiveRequest(type: String): String {
+		while (true) {
+			val text = (incoming.receive() as Frame.Text).readText()
+			if (HaProtocol.parse(text)["type"]?.jsonPrimitive?.content == type) return text
+		}
+	}
+
 	@Test
 	fun `applies the configuration as soon as it arrives`() =
 		runBlocking {
@@ -98,7 +106,7 @@ class HaClientTest {
 							"charts":[{"entity":"sensor.price","name":"Electricity"}]}}}""",
 						),
 					)
-					val request = (incoming.receive() as Frame.Text).readText()
+					val request = receiveRequest("subscribe_entities")
 					asked.complete(request)
 					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
 					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
@@ -141,7 +149,7 @@ class HaClientTest {
 							"weather":"weather.home","readings":[{"entity":"sensor.outside","name":"Out"}]}}}""",
 						),
 					)
-					val request = (incoming.receive() as Frame.Text).readText()
+					val request = receiveRequest("subscribe_entities")
 					asked.complete(request)
 					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
 					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
@@ -151,11 +159,7 @@ class HaClientTest {
 							"weather.home":{"s":"sunny","a":{"temperature":21}},"sensor.outside":{"s":"18","a":{}}}}}""",
 						),
 					)
-					var forecast = -1
-					while (forecast < 0) {
-						val text = (incoming.receive() as Frame.Text).readText()
-						if ("get_forecasts" in text) forecast = HaProtocol.parse(text)["id"]!!.jsonPrimitive.int
-					}
+					val forecast = HaProtocol.parse(receiveRequest("call_service"))["id"]!!.jsonPrimitive.int
 					send(Frame.Text("""{"id":$forecast,"type":"result","success":true,"result":{"response":{}}}"""))
 					awaitCancellation()
 				}
