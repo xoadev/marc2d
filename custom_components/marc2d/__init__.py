@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, Platform
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
@@ -106,7 +106,7 @@ def _watch_doorbells(hass: HomeAssistant, entry: ConfigEntry) -> None:
     entry.async_on_unload(async_track_state_change_event(hass, list(buttons), changed))
 
 
-def _is_press(old_state, new_state) -> bool:
+def _is_press(old_state: State | None, new_state: State | None) -> bool:
     """A binary sensor turning on, or an event firing, but not an entity coming back."""
     if old_state is None or new_state is None:
         return False

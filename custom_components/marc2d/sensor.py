@@ -16,12 +16,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import PanelEntity
 from .panel_config import FEATURE_SENSORS, is_enabled
-from .panel_hub import KEY_WIFI_SIGNAL, get_hub
+from .panel_hub import KEY_BATTERY, KEY_LIGHT, KEY_TEMPERATURE, KEY_WIFI_SIGNAL, PanelHub, get_hub
 
 SENSORS = {
-    "light": ("Light", SensorDeviceClass.ILLUMINANCE, LIGHT_LUX),
-    "battery": ("Battery", SensorDeviceClass.BATTERY, PERCENTAGE),
-    "temperature": (
+    KEY_LIGHT: ("Light", SensorDeviceClass.ILLUMINANCE, LIGHT_LUX),
+    KEY_BATTERY: ("Battery", SensorDeviceClass.BATTERY, PERCENTAGE),
+    KEY_TEMPERATURE: (
         "Battery temperature",
         SensorDeviceClass.TEMPERATURE,
         UnitOfTemperature.CELSIUS,
@@ -49,7 +49,7 @@ class PanelSensor(PanelEntity, SensorEntity):
 
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, entry, hub, key: str) -> None:
+    def __init__(self, entry: ConfigEntry, hub: PanelHub, key: str) -> None:
         super().__init__(entry, hub, key)
         self._attr_name, self._attr_device_class, self._attr_native_unit_of_measurement = SENSORS[
             key

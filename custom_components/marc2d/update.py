@@ -20,7 +20,7 @@ from homeassistant.util import dt as dt_util
 
 from .enrollment import DOMAIN
 from .entity import PanelEntity
-from .panel_hub import KEY_APP_VERSION, KEY_UPDATING, get_hub
+from .panel_hub import KEY_APP_VERSION, KEY_UPDATING, PanelHub, get_hub
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class PanelAppUpdate(PanelEntity, UpdateEntity):
     _attr_should_poll = True
     _attr_supported_features = UpdateEntityFeature.INSTALL | UpdateEntityFeature.PROGRESS
 
-    def __init__(self, entry: ConfigEntry, hub, key: str) -> None:
+    def __init__(self, entry: ConfigEntry, hub: PanelHub, key: str) -> None:
         super().__init__(entry, hub, key)
         self._apk_url: str | None = None
         self._apk_sha256: str | None = None

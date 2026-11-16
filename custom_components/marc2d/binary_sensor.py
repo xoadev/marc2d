@@ -8,9 +8,16 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .entity import PanelEntity
+from .entity import PanelEntity, PanelOnOffEntity
 from .panel_config import FEATURE_SENSORS, is_enabled, rtsp_password
-from .panel_hub import KEY_CAMERA_ON, KEY_OVERHEATING, KEY_PRESENCE, KEY_TEMPERATURE, get_hub
+from .panel_hub import (
+    KEY_CAMERA_ON,
+    KEY_CHARGING,
+    KEY_OVERHEATING,
+    KEY_PRESENCE,
+    KEY_TEMPERATURE,
+    get_hub,
+)
 
 # Past this a battery kept always charging starts to suffer, well before Android does anything.
 OVERHEATING_CELSIUS = 45
@@ -24,7 +31,7 @@ async def async_setup_entry(
     if is_enabled(entry.options, FEATURE_SENSORS):
         add_entities(
             [
-                PanelCharging(entry, hub, "charging"),
+                PanelCharging(entry, hub, KEY_CHARGING),
                 PanelPresence(entry, hub, KEY_PRESENCE),
                 PanelOverheating(entry, hub, KEY_OVERHEATING),
             ]
@@ -33,28 +40,18 @@ async def async_setup_entry(
         add_entities([PanelCameraOn(entry, hub, KEY_CAMERA_ON)])
 
 
-class PanelCharging(PanelEntity, BinarySensorEntity):
+class PanelCharging(PanelOnOffEntity, BinarySensorEntity):
     """At the charge limit the panel reports it is not charging, even with power."""
 
     _attr_name = "Charging"
     _attr_device_class = BinarySensorDeviceClass.BATTERY_CHARGING
 
-    @property
-    def is_on(self) -> bool | None:
-        """Return the last reading."""
-        return self._hub.values.get(self._key)
 
-
-class PanelPresence(PanelEntity, BinarySensorEntity):
+class PanelPresence(PanelOnOffEntity, BinarySensorEntity):
     """A guess from sudden changes of light: it cannot see in the dark, or someone still."""
 
     _attr_name = "Presence"
     _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return the last reading."""
-        return self._hub.values.get(self._key)
 
 
 class PanelOverheating(PanelEntity, BinarySensorEntity):
@@ -71,13 +68,8 @@ class PanelOverheating(PanelEntity, BinarySensorEntity):
         return None if temperature is None else temperature >= OVERHEATING_CELSIUS
 
 
-class PanelCameraOn(PanelEntity, BinarySensorEntity):
+class PanelCameraOn(PanelOnOffEntity, BinarySensorEntity):
     """Its history says when the camera has been used, which the panel's own warning does not."""
 
     _attr_name = "Camera on"
     _attr_device_class = BinarySensorDeviceClass.RUNNING
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return whether the camera is on."""
-        return self._hub.values.get(self._key)

@@ -34,3 +34,12 @@ class PanelEntity(Entity):
     async def async_added_to_hass(self) -> None:
         """Follow the panel."""
         self.async_on_remove(self._hub.add_listener(self.async_write_ha_state))
+
+
+class PanelOnOffEntity(PanelEntity):
+    """On or off as the panel last reported it, not as it was asked."""
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the last reading."""
+        return self._hub.values.get(self._key)

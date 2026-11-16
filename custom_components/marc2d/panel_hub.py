@@ -17,21 +17,31 @@ KEY_VOLUME = "volume"
 KEY_ADDRESS = "address"
 KEY_CAMERA = "camera"
 KEY_CAMERA_ON = "camera_on"
+KEY_LIGHT = "light"
+KEY_BATTERY = "battery"
+KEY_CHARGING = "charging"
 KEY_TEMPERATURE = "temperature"
 KEY_OVERHEATING = "overheating"
 KEY_PRESENCE = "presence"
 KEY_WIFI_SIGNAL = "wifi_signal"
 KEY_APP_VERSION = "app_version"
 KEY_UPDATING = "updating"
-SENSOR_KEYS = ("light", "battery", KEY_TEMPERATURE, "charging", KEY_PRESENCE, KEY_WIFI_SIGNAL)
+SENSOR_KEYS = (
+    KEY_LIGHT,
+    KEY_BATTERY,
+    KEY_TEMPERATURE,
+    KEY_CHARGING,
+    KEY_PRESENCE,
+    KEY_WIFI_SIGNAL,
+)
 
 # What each value must be: the panel has its own user, but these reach entities as they come.
 NUMBER = (int, float)
 REPORTED_TYPES: dict[str, tuple[type, ...]] = {
-    "light": NUMBER,
-    "battery": NUMBER,
+    KEY_LIGHT: NUMBER,
+    KEY_BATTERY: NUMBER,
     KEY_TEMPERATURE: NUMBER,
-    "charging": (bool,),
+    KEY_CHARGING: (bool,),
     KEY_PRESENCE: (bool,),
     KEY_WIFI_SIGNAL: NUMBER,
     KEY_SIREN: (bool,),
@@ -129,9 +139,9 @@ def doorbell_to_all(hass: HomeAssistant, intercom: str, payload: str) -> None:
 
 # The ones with limits: anything outside is a broken report, not a value to show.
 REPORTED_RANGES: dict[str, tuple[float, float]] = {
-    "battery": (0, 100),
+    KEY_BATTERY: (0, 100),
     KEY_VOLUME: (0, 1),
-    "light": (0, float("inf")),
+    KEY_LIGHT: (0, float("inf")),
 }
 
 

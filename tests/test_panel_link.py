@@ -7,7 +7,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
-from custom_components.marc2d.update import async_latest_release
+from custom_components.marc2d.update import LATEST_RELEASE, RELEASE_DOWNLOADS, async_latest_release
 from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
@@ -431,15 +431,14 @@ async def test_turning_the_sensors_off_removes_the_health_entities(hass, entry, 
 
 
 APP = "update.kitchen_app"
-RELEASE_API = "https://api.github.com/repos/xoadev/marc2d/releases/latest"
-DOWNLOADS = "https://github.com/xoadev/marc2d/releases/download/v0.2.0"
+DOWNLOADS = f"{RELEASE_DOWNLOADS}v0.2.0"
 APK_HASH = "a" * 64
 
 
 def _mock_release(aioclient_mock, apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> None:
     aioclient_mock.clear_requests()
     aioclient_mock.get(
-        RELEASE_API,
+        LATEST_RELEASE,
         json={
             "tag_name": "v0.2.0",
             "html_url": "https://github.com/xoadev/marc2d/releases/tag/v0.2.0",
@@ -454,7 +453,7 @@ def _mock_release(aioclient_mock, apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> N
 
 def _mock_release_with_hash(aioclient_mock, text: str) -> None:
     aioclient_mock.get(
-        RELEASE_API,
+        LATEST_RELEASE,
         json={
             "tag_name": "v0.2.0",
             "assets": [
@@ -518,7 +517,7 @@ async def test_no_internet_keeps_what_it_knew(hass, panel, aioclient_mock) -> No
     await _report(hass, panel, 2, app_version="0.1.0")
     await _look_for_updates(hass)
     aioclient_mock.clear_requests()
-    aioclient_mock.get(RELEASE_API, exc=TimeoutError())
+    aioclient_mock.get(LATEST_RELEASE, exc=TimeoutError())
     await _look_for_updates(hass)
     assert hass.states.get(APP).attributes["latest_version"] == "0.2.0"
 
@@ -546,7 +545,7 @@ async def test_a_broken_release_is_not_offered(hass, aioclient_mock, release, ha
     _mock_release(aioclient_mock)
     if release is not None:
         aioclient_mock.clear_requests()
-        aioclient_mock.get(RELEASE_API, json=release)
+        aioclient_mock.get(LATEST_RELEASE, json=release)
     if hash_text is not None:
         aioclient_mock.clear_requests()
         _mock_release_with_hash(aioclient_mock, hash_text)
@@ -557,7 +556,7 @@ async def test_a_hash_from_elsewhere_is_not_trusted(hass, aioclient_mock) -> Non
     # Without this, the 404 that conftest serves for every test would answer first.
     aioclient_mock.clear_requests()
     aioclient_mock.get(
-        RELEASE_API,
+        LATEST_RELEASE,
         json={
             "tag_name": "v0.2.0",
             "assets": [
