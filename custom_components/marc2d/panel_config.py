@@ -50,22 +50,7 @@ def is_enabled(options: Mapping[str, Any], feature: str) -> bool:
 def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
     """Leave out what is off: the panel only acts on what it receives."""
     config: dict[str, Any] = {
-        "intercoms": [],
-        "cameras": [],
-        "sensors": is_enabled(options, FEATURE_SENSORS),
-        "siren": is_enabled(options, FEATURE_SIREN),
-        "speaker": is_enabled(options, FEATURE_SPEAKER),
-    }
-    if is_enabled(options, FEATURE_VOICE):
-        config["voice"] = _pipeline(options)
-        if phrase := options.get(CONF_WAKE_PHRASE):
-            config["voice"]["phrase"] = phrase
-    if password := rtsp_password(options):
-        config["rtsp"] = {"password": password}
-        if options.get(CONF_RTSP_AUDIO, False):
-            config["rtsp"]["audio"] = True
-    if is_enabled(options, FEATURE_SIP):
-        config["intercoms"] = [
+        "intercoms": [
             {
                 **{
                     key: value
@@ -75,16 +60,26 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
                 },
                 "number": intercom.get("number") or DEFAULT_INTERCOM_NUMBER,
             }
-            for intercom in options.get(CONF_INTERCOMS, [])
-        ]
+            for intercom in intercoms(options)
+        ],
+        "cameras": [],
+    }
+    if is_enabled(options, FEATURE_VOICE):
+        config["voice"] = _pipeline(options)
+        if phrase := options.get(CONF_WAKE_PHRASE):
+            config["voice"]["phrase"] = phrase
+    if password := rtsp_password(options):
+        config["rtsp"] = {"password": password}
+        if options.get(CONF_RTSP_AUDIO, False):
+            config["rtsp"]["audio"] = True
     if is_enabled(options, FEATURE_CAMERAS):
         # Talk needs its intercom, which may be off or renamed: the button would do nothing.
-        intercoms = {intercom["name"] for intercom in config["intercoms"]}
+        names = intercom_names(options)
         config["cameras"] = [
             {
                 key: value
                 for key, value in camera.items()
-                if value and (key != CONF_CAMERA_INTERCOM or value in intercoms)
+                if value and (key != CONF_CAMERA_INTERCOM or value in names)
             }
             for camera in options.get(CONF_CAMERAS, [])
         ]
@@ -113,12 +108,22 @@ def _pipeline(options: Mapping[str, Any]) -> dict[str, str]:
     return {"pipeline": pipeline} if pipeline else {}
 
 
-def doorbell_buttons(options: Mapping[str, Any]) -> dict[str, str]:
-    """The entity that rings each intercom, by intercom name."""
+def intercoms(options: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The intercoms this panel has: none while the intercom is turned off."""
     if not is_enabled(options, FEATURE_SIP):
-        return {}
+        return []
+    return options.get(CONF_INTERCOMS, [])
+
+
+def intercom_names(options: Mapping[str, Any]) -> set[str]:
+    """The names of the intercoms this panel has."""
+    return {intercom["name"] for intercom in intercoms(options)}
+
+
+def doorbell_buttons(options: Mapping[str, Any]) -> dict[str, str]:
+    """The intercom that each entity rings, by entity."""
     return {
         entity: intercom["name"]
-        for intercom in options.get(CONF_INTERCOMS, [])
+        for intercom in intercoms(options)
         if (entity := intercom.get(CONF_DOORBELL))
     }

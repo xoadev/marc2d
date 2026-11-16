@@ -1,9 +1,13 @@
 """The panel's live link: entities, commands, availability and the doorbell."""
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMockResponse
 
+from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
 from custom_components.marc2d.update import LATEST_RELEASE, RELEASE_DOWNLOADS, async_latest_release
 from homeassistant.components.camera import async_get_image, async_get_stream_source
@@ -163,6 +167,41 @@ async def test_a_panel_cannot_silence_an_intercom_it_does_not_have(hass, panel) 
     assert (await panel.receive_json())["error"]["code"] == "not_found"
 
 
+async def test_a_panel_with_its_intercom_off_cannot_silence_the_others(hass, entry, panel) -> None:
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "features": {"sip": False}}
+    )
+    await hass.async_block_till_done()
+    await panel.send_json({"id": 2, "type": "marc2d/doorbell/answered", "intercom": "Parking"})
+    message = await panel.receive_json()
+    while message.get("id") != 2 or message["type"] != "result":
+        message = await panel.receive_json()
+    assert message["error"]["code"] == "not_found"
+
+
+async def test_one_press_rings_each_panel_once(hass, entry, panel, hass_ws_client) -> None:
+    user = await hass.auth.async_create_user("marc2d Hall", group_ids=["system-users"])
+    hall = MockConfigEntry(
+        domain=DOMAIN,
+        title="Hall",
+        data={"panel": "Hall", "user_id": user.id},
+        options={"intercoms": [INTERCOM]},
+    )
+    hall.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(hall.entry_id)
+    await hass.async_block_till_done()
+    hall_panel, _ = await connect_panel(hass, hall, hass_ws_client)
+
+    hass.states.async_set("binary_sensor.button", "on")
+    await hass.async_block_till_done()
+    ring = {"kind": "doorbell", "intercom": "Parking", "payload": "RING"}
+    for client in (panel, hall_panel):
+        assert (await client.receive_json())["event"] == ring
+        # Anything else queued would come before the answer to this.
+        await client.send_json({"id": 2, "type": "marc2d/state", "values": {}})
+        assert (await client.receive_json())["id"] == 2
+
+
 async def test_doorbell_coming_back_does_not_ring(hass, panel) -> None:
     hass.states.async_set("binary_sensor.button", "unavailable")
     hass.states.async_set("binary_sensor.button", "on")
@@ -177,17 +216,41 @@ async def test_saving_options_keeps_the_panel_connected_and_removes_entities(
     hass, entry, panel
 ) -> None:
     hass.config_entries.async_update_entry(
-        entry, options={"features": {"sensors": False, "siren": False}}
+        entry, options={"features": {"sensors": False, "siren": False, "speaker": False}}
     )
     await hass.async_block_till_done()
     # The entities reload first, so the configuration may not be the first event.
-    event = (await panel.receive_json())["event"]
-    while event["kind"] != "config":
-        event = (await panel.receive_json())["event"]
-    assert event["config"]["sensors"] is False
+    events = [(await panel.receive_json())["event"]]
+    while events[-1]["kind"] != "config":
+        events.append((await panel.receive_json())["event"])
+    # Without their entities, nothing else could stop them.
+    assert {"kind": "siren", "on": False} in events
+    assert {"kind": "stop"} in events
     assert hass.states.get(LIGHT) is None
     assert hass.states.get(SIREN) is None
+    assert hass.states.get("media_player.kitchen_speaker") is None
     assert hass.states.get(MOOD).state == "Normal"
+
+
+async def test_a_disabled_entity_is_not_removed(hass, entry) -> None:
+    registry = er.async_get(hass)
+    registry.async_update_entity(LIGHT, disabled_by=er.RegistryEntryDisabler.USER)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert registry.async_get(LIGHT) is not None
+
+
+async def test_a_report_only_writes_the_entities_whose_value_changed(hass, panel) -> None:
+    battery = "sensor.kitchen_battery"
+    await _report(hass, panel, 2, light=12, battery=80)
+    light_written = hass.states.get(LIGHT).last_reported
+    battery_written = hass.states.get(battery).last_reported
+    await _report(hass, panel, 3, light=12, battery=81)
+    assert hass.states.get(LIGHT).last_reported == light_written
+    assert hass.states.get(battery).last_reported != battery_written
+    battery_written = hass.states.get(battery).last_reported
+    await _report(hass, panel, 4, light=12, battery=81)
+    assert hass.states.get(battery).last_reported == battery_written
 
 
 async def test_another_user_cannot_report(hass, entry, hass_ws_client) -> None:
@@ -386,19 +449,20 @@ DOWNLOADS = f"{RELEASE_DOWNLOADS}v0.2.0"
 APK_HASH = "a" * 64
 
 
+def _release(apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> dict:
+    return {
+        "tag_name": "v0.2.0",
+        "html_url": "https://github.com/xoadev/marc2d/releases/tag/v0.2.0",
+        "assets": [
+            {"name": "marc2d.apk", "browser_download_url": apk_url},
+            {"name": "marc2d.apk.sha256", "browser_download_url": f"{DOWNLOADS}/hash"},
+        ],
+    }
+
+
 def _mock_release(aioclient_mock, apk_url: str = f"{DOWNLOADS}/marc2d.apk") -> None:
     aioclient_mock.clear_requests()
-    aioclient_mock.get(
-        LATEST_RELEASE,
-        json={
-            "tag_name": "v0.2.0",
-            "html_url": "https://github.com/xoadev/marc2d/releases/tag/v0.2.0",
-            "assets": [
-                {"name": "marc2d.apk", "browser_download_url": apk_url},
-                {"name": "marc2d.apk.sha256", "browser_download_url": f"{DOWNLOADS}/hash"},
-            ],
-        },
-    )
+    aioclient_mock.get(LATEST_RELEASE, json=_release(apk_url))
     aioclient_mock.get(f"{DOWNLOADS}/hash", text=f"{APK_HASH}  marc2d.apk\n")
 
 
@@ -480,6 +544,21 @@ async def test_panels_share_one_look_for_the_release(hass, aioclient_mock) -> No
     asked = aioclient_mock.call_count
     assert await async_latest_release(hass) == first
     assert aioclient_mock.call_count == asked
+
+
+async def test_panels_starting_together_share_one_look(hass, aioclient_mock) -> None:
+    async def answer_later(method, url, data) -> AiohttpClientMockResponse:
+        # GitHub takes a while: the other panel asks before the answer is kept.
+        await asyncio.sleep(0)
+        return AiohttpClientMockResponse(method, url, json=_release())
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(LATEST_RELEASE, side_effect=answer_later)
+    aioclient_mock.get(f"{DOWNLOADS}/hash", text=APK_HASH)
+    first, second = await asyncio.gather(async_latest_release(hass), async_latest_release(hass))
+    assert first == second is not None
+    # The release and its hash, once.
+    assert aioclient_mock.call_count == 2
 
 
 @pytest.mark.parametrize(

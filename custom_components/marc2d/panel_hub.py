@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -26,14 +26,6 @@ KEY_PRESENCE = "presence"
 KEY_WIFI_SIGNAL = "wifi_signal"
 KEY_APP_VERSION = "app_version"
 KEY_UPDATING = "updating"
-SENSOR_KEYS = (
-    KEY_LIGHT,
-    KEY_BATTERY,
-    KEY_TEMPERATURE,
-    KEY_CHARGING,
-    KEY_PRESENCE,
-    KEY_WIFI_SIGNAL,
-)
 
 # What each value must be: the panel has its own user, but these reach entities as they come.
 NUMBER = (int, float)
@@ -72,7 +64,7 @@ class PanelHub:
         self.mood = MOOD_NORMAL
         self.brightness: float = DEFAULT_BRIGHTNESS
         self._connections: list[Send] = []
-        self._listeners: list[Callable[[], None]] = []
+        self._listeners: list[tuple[Collection[str], Callable[[], None]]] = []
 
     @property
     def online(self) -> bool:
@@ -101,19 +93,31 @@ class PanelHub:
 
     @callback
     def report(self, values: dict[str, Any]) -> None:
-        """Keep what the panel reports."""
-        self.values.update({key: value for key, value in values.items() if is_valid(key, value)})
-        self._notify()
+        """Keep what the panel reports, telling only those who follow what changed."""
+        changed = {
+            key: value
+            for key, value in values.items()
+            if is_valid(key, value) and (key not in self.values or self.values[key] != value)
+        }
+        if not changed:
+            return
+        self.values.update(changed)
+        self._notify(changed.keys())
 
     @callback
-    def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
-        """Call the listener on every change, until the returned function is called."""
-        self._listeners.append(listener)
-        return lambda: self._listeners.remove(listener)
+    def add_listener(
+        self, listener: Callable[[], None], keys: Collection[str] = ()
+    ) -> Callable[[], None]:
+        """Call the listener when the connection or one of its keys changes, until removed."""
+        item = (keys, listener)
+        self._listeners.append(item)
+        return lambda: self._listeners.remove(item)
 
-    def _notify(self) -> None:
-        for listener in list(self._listeners):
-            listener()
+    def _notify(self, changed: Collection[str] | None = None) -> None:
+        """Without the keys that changed, it is the connection: everyone follows it."""
+        for keys, listener in list(self._listeners):
+            if changed is None or any(key in changed for key in keys):
+                listener()
 
 
 @callback
@@ -129,12 +133,16 @@ def remove_hub(hass: HomeAssistant, entry_id: str) -> None:
     hass.data.get(DATA_HUBS, {}).pop(entry_id, None)
 
 
+def doorbell_event(intercom: str, payload: str) -> dict[str, Any]:
+    """What the panel receives about an intercom's doorbell."""
+    return {"kind": "doorbell", "intercom": intercom, "payload": payload}
+
+
 @callback
 def doorbell_to_all(hass: HomeAssistant, intercom: str, payload: str) -> None:
     """Tell every panel: those without this intercom ignore it."""
-    event = {"kind": "doorbell", "intercom": intercom, "payload": payload}
     for hub in hass.data.get(DATA_HUBS, {}).values():
-        hub.send(event)
+        hub.send(doorbell_event(intercom, payload))
 
 
 # The ones with limits: anything outside is a broken report, not a value to show.

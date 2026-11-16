@@ -109,7 +109,6 @@ class PanelRuntime(
 			{ link.report(PanelLink.VOLUME, JsonPrimitive(it)) },
 		)
 	private val voice = VoiceListener(VoiceModel(context.noBackupFilesDir), link::requestAssist) { _listening.value = it }
-	private var config = PanelConfig()
 	private var haUrl = ""
 	private var started = false
 
@@ -139,15 +138,7 @@ class PanelRuntime(
 		if (started) return
 		started = true
 
-		scope.launch {
-			store.config.collect {
-				config = it
-				phone.apply(it)
-				if (!it.siren) siren.set(false)
-				if (!it.speaker) speaker.stop()
-				if (!it.sensors) PanelLink.SENSORS.forEach(link::forget)
-			}
-		}
+		scope.launch { store.config.collect(phone::apply) }
 		phone.onDoorbellAnswered = link::answer
 		scope.launch { keepListening() }
 		scope.launch { publishCamera() }
@@ -281,7 +272,7 @@ class PanelRuntime(
 	private fun handle(command: HaProtocol.PanelEvent) {
 		when (command) {
 			is HaProtocol.PanelEvent.Siren -> {
-				if (config.siren) siren.set(command.on)
+				siren.set(command.on)
 			}
 
 			is HaProtocol.PanelEvent.Mood -> {
@@ -293,7 +284,7 @@ class PanelRuntime(
 			}
 
 			is HaProtocol.PanelEvent.Play -> {
-				if (config.speaker) speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
+				speaker.play(HaProtocol.mediaUrl(command.url, haUrl))
 			}
 
 			HaProtocol.PanelEvent.Stop -> {
@@ -319,24 +310,17 @@ class PanelRuntime(
 		}
 	}
 
-	private fun reportReading(
-		key: String,
-		value: JsonPrimitive,
-	) {
-		if (config.sensors) link.report(key, value)
-	}
-
 	private suspend fun publishBattery() {
 		val signals = PanelReadings.signalReports()
 		while (true) {
 			readings.wifiSignal()?.let { signal ->
-				if (signals.shouldReport(signal, config.sensors)) reportReading(PanelLink.WIFI_SIGNAL, JsonPrimitive(signal))
+				if (signals.shouldReport(signal)) link.report(PanelLink.WIFI_SIGNAL, JsonPrimitive(signal))
 			}
 			val battery = readings.battery()
 			if (battery != null) {
-				reportReading(PanelLink.BATTERY, JsonPrimitive(battery.level))
-				reportReading(PanelLink.TEMPERATURE, JsonPrimitive(battery.temperature))
-				reportReading(PanelLink.CHARGING, JsonPrimitive(battery.charging))
+				link.report(PanelLink.BATTERY, JsonPrimitive(battery.level))
+				link.report(PanelLink.TEMPERATURE, JsonPrimitive(battery.temperature))
+				link.report(PanelLink.CHARGING, JsonPrimitive(battery.charging))
 			}
 			delay(BATTERY_INTERVAL)
 		}
@@ -347,14 +331,14 @@ class PanelRuntime(
 		// Latest: a new reading replaces the wait, which the new reading works out again.
 		readings.light().collectLatest { lux ->
 			_dark.value = lux < DARK_LUX
-			if (reports.shouldReport(lux, config.sensors)) reportReading(PanelLink.LIGHT, JsonPrimitive(lux.roundToInt()))
+			if (reports.shouldReport(lux)) link.report(PanelLink.LIGHT, JsonPrimitive(lux.roundToInt()))
 			val now = SystemClock.elapsedRealtime()
 			presence.update(lux, now)
 			val remaining = presence.remaining(now)
-			reportReading(PanelLink.PRESENCE, JsonPrimitive(remaining > 0))
+			link.report(PanelLink.PRESENCE, JsonPrimitive(remaining > 0))
 			if (remaining > 0) {
 				delay(remaining)
-				reportReading(PanelLink.PRESENCE, JsonPrimitive(false))
+				link.report(PanelLink.PRESENCE, JsonPrimitive(false))
 			}
 		}
 	}

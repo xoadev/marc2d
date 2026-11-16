@@ -31,7 +31,7 @@ class HaProtocolTest {
 				"""
 				{"kind":"config","config":{
 				  "intercoms":[{"name":"Parking","server":"192.0.2.8","extension":"9901#1","password":"s3"}],
-				  "sensors":false,
+				  "weather":"weather.home",
 				  "future":true
 				}}
 				""".trimIndent(),
@@ -46,7 +46,7 @@ class HaProtocolTest {
 				.single()
 				.name,
 		)
-		assertFalse(result.config.sensors)
+		assertEquals("weather.home", result.config.weather)
 	}
 
 	@Test

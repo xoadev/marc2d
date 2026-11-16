@@ -23,19 +23,10 @@ class PanelReadingsTest {
 	@Test
 	fun `only a real change of Wi-Fi signal is reported`() {
 		val reports = PanelReadings.signalReports()
-		assertTrue(reports.shouldReport(-60, enabled = true))
-		assertFalse(reports.shouldReport(-62, enabled = true))
-		assertFalse(reports.shouldReport(-64, enabled = true))
-		assertTrue(reports.shouldReport(-65, enabled = true))
-	}
-
-	@Test
-	fun `reports again when the sensors come back`() {
-		val reports = PanelReadings.lightReports()
-		assertTrue(reports.shouldReport(100f, enabled = true))
-		assertFalse(reports.shouldReport(101f, enabled = true))
-		assertFalse(reports.shouldReport(101f, enabled = false))
-		assertTrue(reports.shouldReport(101f, enabled = true))
+		assertTrue(reports.shouldReport(-60))
+		assertFalse(reports.shouldReport(-62))
+		assertFalse(reports.shouldReport(-64))
+		assertTrue(reports.shouldReport(-65))
 	}
 }
 

@@ -26,7 +26,6 @@ def test_everything_on_by_default() -> None:
     assert config["intercoms"] == [{**INTERCOM, "number": "8001"}]
     assert config["cameras"] == [{"entity": "camera.door", "name": "Parking"}]
     assert config["weather"] == "weather.home"
-    assert config["sensors"] is True
 
 
 def test_talk_needs_an_intercom_that_is_sent() -> None:
@@ -40,13 +39,7 @@ def test_talk_needs_an_intercom_that_is_sent() -> None:
 
 
 def test_a_new_panel_receives_an_empty_configuration() -> None:
-    assert build_panel_config({}) == {
-        "intercoms": [],
-        "cameras": [],
-        "sensors": True,
-        "siren": True,
-        "speaker": True,
-    }
+    assert build_panel_config({}) == {"intercoms": [], "cameras": []}
 
 
 @pytest.mark.parametrize(
@@ -55,14 +48,19 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
         ("sip", lambda c: c["intercoms"] == []),
         ("cameras", lambda c: c["cameras"] == []),
         ("weather", lambda c: "weather" not in c),
-        ("sensors", lambda c: c["sensors"] is False),
-        ("siren", lambda c: c["siren"] is False),
-        ("speaker", lambda c: c["speaker"] is False),
     ],
 )
 def test_each_toggle_turns_off_only_its_part(feature, check) -> None:
     config = build_panel_config({**OPTIONS, "features": {feature: False}})
     assert check(config)
+
+
+@pytest.mark.parametrize("feature", ["sensors", "siren", "speaker"])
+def test_entity_toggles_only_change_home_assistant(feature) -> None:
+    # The panel obeys and reports the same: the entity is what goes away.
+    assert build_panel_config({**OPTIONS, "features": {feature: False}}) == build_panel_config(
+        OPTIONS
+    )
 
 
 def test_the_doorbell_button_stays_in_home_assistant() -> None:
@@ -127,7 +125,7 @@ async def test_entities_page_saves_its_switches(hass, entry) -> None:
     done = await hass.config_entries.options.async_configure(
         form["flow_id"], {"sensors": False, "siren": True, "speaker": True}
     )
-    assert build_panel_config(done["data"])["sensors"] is False
+    assert done["data"]["features"] == {"sensors": False, "siren": True, "speaker": True}
 
 
 async def test_saving_a_page_keeps_the_others(hass, entry) -> None:

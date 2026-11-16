@@ -24,23 +24,13 @@ data class BatteryReading(
 	val charging: Boolean,
 )
 
-/**
- * Which readings go to Home Assistant: only a [significant] change, as the sensors move all the time and would fill its history.
- * It forgets the last one while the sensors are off: they restart with a value.
- */
+/** Which readings go to Home Assistant: only a [significant] change, as the sensors move all the time and would fill its history. */
 class ChangeFilter<T : Any>(
 	private val significant: (last: T, value: T) -> Boolean,
 ) {
 	private var last: T? = null
 
-	fun shouldReport(
-		value: T,
-		enabled: Boolean,
-	): Boolean {
-		if (!enabled) {
-			last = null
-			return false
-		}
+	fun shouldReport(value: T): Boolean {
 		val previous = last
 		if (previous != null && !significant(previous, value)) return false
 		last = value

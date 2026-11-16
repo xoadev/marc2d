@@ -72,8 +72,8 @@ whatever alarm was active.
 ## Intercom
 
 - The panel registers as a SIP extension on the intercom, which acts as the SIP server.
-- Each intercom has its doorbell button entity in the form. When it fires, the integration tells every panel with that
-  intercom to ring, even if the app is in the background, and they stop ringing after 45 seconds.
+- Each intercom has its doorbell button entity in the form. When it fires, the integration tells each panel that has that
+  button in its form to ring, once, even if the app is in the background, and they stop ringing after 45 seconds.
 - While it rings, the panel shows the camera linked to that intercom, from HA: the call's video only starts on answering.
 - On answering, the panel tells the integration, the others stop ringing, and it calls the intercom's
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
@@ -139,7 +139,7 @@ depend on this connection once registered.
 | `binary_sensor.*_camera_on`    | the camera is on      | if published, on change                |
 
 The panel reports with `marc2d/state` and receives commands and configuration as events of `marc2d/subscribe`. Both
-identify it by its user.
+identify it by its user. Only the entities whose value changed are written.
 
 The siren sounds at full volume on the alarm channel and stops by itself after 10 minutes, because if the
 connection is lost HA could no longer turn it off.
@@ -243,9 +243,6 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "cameras": [
     { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
   ],
-  "sensors": true,
-  "siren": true,
-  "speaker": true,
   "voice": { "pipeline": "01h...", "phrase": "jarvis" },
   "rtsp": { "password": "…", "audio": true },
   "readings": [
@@ -266,14 +263,14 @@ only while it is on, and what a turned-off feature had is kept.
 | Intercom | no intercoms are sent: the panel unregisters, does not ring  |
 | Cameras  | no cameras are sent: the menu hides them                     |
 | Weather  | no weather entity is sent: the panel hides it                |
-| Sensors  | HA deletes those entities and the panel stops reporting them |
-| Siren    | HA deletes the entity and the panel ignores the command      |
-| Speaker  | HA deletes the entity and the panel ignores the audio        |
+| Sensors  | HA deletes those entities and ignores those reports          |
+| Siren    | HA silences the panel and deletes the entity                 |
+| Speaker  | HA stops the audio and deletes the entity                    |
 | Voice    | no voice is sent: the panel does not open the microphone     |
 | Publish  | no password is sent: the panel stops, HA deletes the entity  |
 | Readings | no readings or charts are sent: the panel hides them         |
 
-- What is off is left out of the response, so the panel needs no logic for most toggles.
+- What is off is left out of the response, or only changes HA, so the panel needs no logic for the toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
   way. Administrators can see them in the form, masked.

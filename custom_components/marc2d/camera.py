@@ -75,7 +75,7 @@ class PanelCamera(PanelEntity, Camera):
     async def async_added_to_hass(self) -> None:
         """Follow the panel, which may change its address."""
         await super().async_added_to_hass()
-        self.async_on_remove(self._hub.add_listener(self._follow_address))
+        self.async_on_remove(self._hub.add_listener(self._follow_address, (KEY_ADDRESS,)))
 
     def _current_url(self) -> str | None:
         address = panel_address(self._hub)

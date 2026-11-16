@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from http import HTTPStatus
 import logging
@@ -26,6 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(hours=6)
 DATA_RELEASE = f"{DOMAIN}_latest_release"
+DATA_RELEASE_LOOKUP = f"{DOMAIN}_release_lookup"
 LATEST_RELEASE = "https://api.github.com/repos/xoadev/marc2d/releases/latest"
 RELEASE_DOWNLOADS = "https://github.com/xoadev/marc2d/releases/download/"
 APK_ASSET = "marc2d.apk"
@@ -47,6 +49,7 @@ class PanelAppUpdate(PanelEntity, UpdateEntity):
     _attr_name = "App"
     _attr_should_poll = True
     _attr_supported_features = UpdateEntityFeature.INSTALL | UpdateEntityFeature.PROGRESS
+    _also_follows = (KEY_UPDATING,)
 
     def __init__(self, entry: ConfigEntry, hub: PanelHub, key: str) -> None:
         super().__init__(entry, hub, key)
@@ -90,6 +93,17 @@ async def async_latest_release(hass: HomeAssistant) -> Release | None:
     cached = hass.data.get(DATA_RELEASE)
     if cached and dt_util.utcnow() - cached[0] < SCAN_INTERVAL - timedelta(minutes=1):
         return cached[1]
+    # Panels starting together would each ask before the first answer is kept: they wait for it.
+    lookup = hass.data.get(DATA_RELEASE_LOOKUP)
+    if lookup is None:
+        lookup = hass.async_create_task(_async_look_for_release(hass), eager_start=False)
+        hass.data[DATA_RELEASE_LOOKUP] = lookup
+        lookup.add_done_callback(lambda _: hass.data.pop(DATA_RELEASE_LOOKUP, None))
+    # Shielded: a panel that stops waiting must not cancel the others' answer.
+    return await asyncio.shield(lookup)
+
+
+async def _async_look_for_release(hass: HomeAssistant) -> Release | None:
     session = async_get_clientsession(hass)
     try:
         async with session.get(LATEST_RELEASE, timeout=_TIMEOUT) as response:

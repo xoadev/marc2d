@@ -65,6 +65,5 @@ class PanelLink {
 		const val CHARGING = "charging"
 		const val PRESENCE = "presence"
 		const val WIFI_SIGNAL = "wifi_signal"
-		val SENSORS = listOf(LIGHT, BATTERY, TEMPERATURE, CHARGING, PRESENCE, WIFI_SIGNAL)
 	}
 }

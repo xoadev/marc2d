@@ -11,26 +11,10 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.typing import ConfigType
 
 from .enrollment import DOMAIN, async_remove_user
-from .panel_config import (
-    FEATURE_SENSORS,
-    FEATURE_SIREN,
-    FEATURE_SPEAKER,
-    doorbell_buttons,
-    is_enabled,
-    rtsp_password,
-)
-from .panel_hub import (
-    DOORBELL_RING,
-    KEY_CAMERA,
-    KEY_CAMERA_ON,
-    KEY_OVERHEATING,
-    KEY_PLAYING,
-    KEY_SIREN,
-    SENSOR_KEYS,
-    doorbell_to_all,
-    get_hub,
-    remove_hub,
-)
+from .media_player import STOP
+from .panel_config import FEATURE_SIREN, FEATURE_SPEAKER, doorbell_buttons, is_enabled
+from .panel_hub import DOORBELL_RING, doorbell_event, get_hub, remove_hub
+from .siren import SIREN_OFF
 from .websocket import CONF_USER_ID, async_register, config_event
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -54,8 +38,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create the entities, watch the doorbells and follow the option changes."""
-    _remove_turned_off_entities(hass, entry)
+    # The unique IDs of the entities the platforms make: they decide what is on.
+    entry.runtime_data = set()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _remove_entities_not_made(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     _watch_doorbells(hass, entry)
     return True
@@ -73,23 +59,21 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
-    get_hub(hass, entry.entry_id).send(config_event(entry))
-
-
-def _remove_turned_off_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    off = set()
-    if not is_enabled(entry.options, FEATURE_SENSORS):
-        off.update((*SENSOR_KEYS, KEY_OVERHEATING))
+    hub = get_hub(hass, entry.entry_id)
+    # Without its entity nothing could stop what is sounding: the panel obeys whatever it is sent.
     if not is_enabled(entry.options, FEATURE_SIREN):
-        off.add(KEY_SIREN)
+        hub.send(SIREN_OFF)
     if not is_enabled(entry.options, FEATURE_SPEAKER):
-        off.add(KEY_PLAYING)
-    if not rtsp_password(entry.options):
-        off.update((KEY_CAMERA, KEY_CAMERA_ON))
+        hub.send(STOP)
+    await hass.config_entries.async_reload(entry.entry_id)
+    hub.send(config_event(entry))
+
+
+def _remove_entities_not_made(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """What a turned-off feature had would otherwise stay as an unavailable entity."""
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if entity.unique_id.removeprefix(f"{entry.entry_id}_") in off:
+        if entity.unique_id not in entry.runtime_data:
             registry.async_remove(entity.entity_id)
 
 
@@ -97,11 +81,13 @@ def _watch_doorbells(hass: HomeAssistant, entry: ConfigEntry) -> None:
     buttons = doorbell_buttons(entry.options)
     if not buttons:
         return
+    hub = get_hub(hass, entry.entry_id)
 
     @callback
     def changed(event: Event[EventStateChangedData]) -> None:
+        # Only its own panel: every panel with this button watches it too.
         if _is_press(event.data["old_state"], event.data["new_state"]):
-            doorbell_to_all(hass, buttons[event.data["entity_id"]], DOORBELL_RING)
+            hub.send(doorbell_event(buttons[event.data["entity_id"]], DOORBELL_RING))
 
     entry.async_on_unload(async_track_state_change_event(hass, list(buttons), changed))
 

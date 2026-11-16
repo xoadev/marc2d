@@ -13,6 +13,8 @@ from .entity import PanelOnOffEntity
 from .panel_config import FEATURE_SIREN, is_enabled
 from .panel_hub import KEY_SIREN, get_hub
 
+SIREN_OFF = {"kind": "siren", "on": False}
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, add_entities: AddEntitiesCallback
@@ -34,4 +36,4 @@ class PanelSiren(PanelOnOffEntity, SirenEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Silence it."""
-        self._hub.send({"kind": "siren", "on": False})
+        self._hub.send(SIREN_OFF)

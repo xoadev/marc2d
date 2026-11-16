@@ -15,11 +15,15 @@ class PanelEntity(Entity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    # What else the panel reports that this entity shows, besides its own key.
+    _also_follows: tuple[str, ...] = ()
 
     def __init__(self, entry: ConfigEntry, hub: PanelHub, key: str) -> None:
         self._hub = hub
         self._key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
+        # Even a disabled entity is made: what was not, setup removes from the registry.
+        entry.runtime_data.add(self._attr_unique_id)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -33,7 +37,9 @@ class PanelEntity(Entity):
 
     async def async_added_to_hass(self) -> None:
         """Follow the panel."""
-        self.async_on_remove(self._hub.add_listener(self.async_write_ha_state))
+        self.async_on_remove(
+            self._hub.add_listener(self.async_write_ha_state, (self._key, *self._also_follows))
+        )
 
 
 class PanelOnOffEntity(PanelEntity):

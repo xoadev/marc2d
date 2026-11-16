@@ -24,6 +24,8 @@ from .entity import PanelEntity
 from .panel_config import FEATURE_SPEAKER, is_enabled
 from .panel_hub import KEY_PLAYING, KEY_VOLUME, get_hub
 
+STOP = {"kind": "stop"}
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, add_entities: AddEntitiesCallback
@@ -38,6 +40,7 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
 
     _attr_name = "Speaker"
     _attr_media_content_type = MediaType.MUSIC
+    _also_follows = (KEY_VOLUME,)
     _attr_supported_features = (
         MediaPlayerEntityFeature.PLAY_MEDIA
         | MediaPlayerEntityFeature.MEDIA_ANNOUNCE
@@ -75,7 +78,7 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
 
     async def async_media_stop(self) -> None:
         """Stop the audio."""
-        self._hub.send({"kind": "stop"})
+        self._hub.send(STOP)
 
     async def async_browse_media(
         self, media_content_type: str | None = None, media_content_id: str | None = None

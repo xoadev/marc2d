@@ -60,6 +60,7 @@ class PanelOverheating(PanelEntity, BinarySensorEntity):
     _attr_name = "Overheating"
     _attr_device_class = BinarySensorDeviceClass.HEAT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _also_follows = (KEY_TEMPERATURE,)
 
     @property
     def is_on(self) -> bool | None:

@@ -15,7 +15,8 @@ class PanelConfigTest {
 
 	@Test
 	fun `a stored configuration it cannot read is ignored`() {
-		assertEquals(PanelConfig(sensors = false), PanelConfig.fromStored("""{"sensors":false,"gone":1}"""))
+		// What an older version stored, such as the flags the entities had, is left behind.
+		assertEquals(PanelConfig(weather = "weather.home"), PanelConfig.fromStored("""{"weather":"weather.home","siren":false}"""))
 		assertNull(PanelConfig.fromStored("""{"intercoms":"not a list"}"""))
 		assertNull(PanelConfig.fromStored("""{"intercoms":[{"name":"missing the rest"}]}"""))
 		assertNull(PanelConfig.fromStored("not json"))

@@ -79,7 +79,7 @@ class HaClientTest {
 				fakeHa {
 					val id = subscribeId()
 					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
-					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"sensors":false}}}"""))
+					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"weather":"weather.home"}}}"""))
 					awaitCancellation()
 				}
 			val config = CompletableDeferred<PanelConfig>()
@@ -87,7 +87,7 @@ class HaClientTest {
 				launch {
 					HaClient().run(connection, PanelLink(), {}, { config.complete(it) }, {}, {})
 				}
-			assertEquals(false, withTimeout(5.seconds) { config.await() }.sensors)
+			assertEquals("weather.home", withTimeout(5.seconds) { config.await() }.weather)
 			job.cancel()
 		}
 

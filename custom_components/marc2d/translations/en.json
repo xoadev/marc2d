@@ -79,8 +79,8 @@
         },
         "data_description": {
           "sensors": "Light, battery and its temperature, overheating, charging, Wi-Fi signal, app version and presence, guessed from sudden changes of light. Off: Home Assistant removes those entities.",
-          "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it removes the entity and the panel ignores the command.",
-          "speaker": "A media player for tts.speak and any other audio. Off: it removes the entity."
+          "siren": "Lets Home Assistant sound the panel's siren at full volume. Off: it silences the panel and removes the entity.",
+          "speaker": "A media player for tts.speak and any other audio. Off: it stops the audio and removes the entity."
         }
       },
       "rtsp": {
