@@ -144,7 +144,7 @@ class IntercomPhone(
 		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
 		ringing = intercom
 		startMedia(intercom)
-		_call.value = IntercomCall(intercom.name, answered = false, live = media != null)
+		show(intercom.name, answered = false)
 		ringer.start()
 		main.postDelayed(ringTimeout, RING_TIMEOUT_MILLIS)
 	}
@@ -157,10 +157,27 @@ class IntercomPhone(
 
 	private fun stopDoorbell() {
 		silence()
-		if (activeCall == null && dialing == null) {
-			stopMedia()
-			_call.value = null
-		}
+		if (activeCall == null && dialing == null) closeCall()
+	}
+
+	private fun show(
+		name: String,
+		answered: Boolean,
+	) {
+		_call.value = IntercomCall(name, answered, live = media != null)
+	}
+
+	/** The call screen goes, and with it the intercom's media. */
+	private fun closeCall() {
+		stopMedia()
+		_call.value = null
+	}
+
+	/** Opens the intercom's media, when it has any, and the panel starts speaking. */
+	private fun talk(intercom: IntercomConfig) {
+		startMedia(intercom)
+		media?.answer()
+		show(intercom.name, answered = true)
 	}
 
 	private fun startMedia(intercom: IntercomConfig) {
@@ -182,9 +199,7 @@ class IntercomPhone(
 	private fun dial(intercom: IntercomConfig) {
 		silence()
 		onDoorbellAnswered(intercom.name)
-		startMedia(intercom)
-		media?.answer()
-		_call.value = IntercomCall(intercom.name, answered = true, live = media != null)
+		talk(intercom)
 		dialing = intercom
 		dialDeadline = SystemClock.elapsedRealtime() + DIAL_TIMEOUT_MILLIS
 		placeCall(intercom)
@@ -207,10 +222,7 @@ class IntercomPhone(
 		} else {
 			dialing = null
 			// Over RTSP the conversation goes on without SIP: only the intercom does not know someone answered.
-			if (media?.isAnswered != true) {
-				stopMedia()
-				_call.value = null
-			}
+			if (media?.isAnswered != true) closeCall()
 		}
 	}
 
@@ -240,9 +252,7 @@ class IntercomPhone(
 			return
 		}
 		// Nobody rang: over RTSP there is no call to answer, it is enough to speak.
-		startMedia(intercom)
-		media?.answer()
-		_call.value = IntercomCall(intercom.name, answered = true, live = true)
+		talk(intercom)
 	}
 
 	fun answer() {
@@ -316,7 +326,7 @@ class IntercomPhone(
 						silence()
 						activeCall = call
 						intercomFor(call)?.let(::startMedia)
-						_call.value = IntercomCall(callName(call), answered = false, live = media != null)
+						show(callName(call), answered = false)
 						// A call can arrive without HA having said anything: it has to ring by itself too.
 						ringer.start()
 					}
@@ -327,7 +337,7 @@ class IntercomPhone(
 						dialing = null
 						connected = true
 						routeToSpeaker(call)
-						_call.value = IntercomCall(callName(call), answered = true, live = media != null)
+						show(callName(call), answered = true)
 					}
 
 					Call.State.End, Call.State.Error, Call.State.Released -> {
@@ -348,8 +358,7 @@ class IntercomPhone(
 									connected = false
 									dialing = null
 									main.removeCallbacks(redial)
-									stopMedia()
-									_call.value = null
+									closeCall()
 								}
 							}
 						}
