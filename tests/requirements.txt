@@ -1,6 +1,6 @@
 pytest-homeassistant-custom-component==0.13.375
-pytest-cov
-ruff
+pytest-cov==7.1.0
+ruff==0.17.4
 PyTurboJPEG==1.8.3
 av==19.0.0
 numpy==2.3.2

@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: ktlint, Compose rules and tests
-        run: make app-check
+      - name: ktlint and Compose rules
+        run: make lint-app
+      - name: Tests
+        run: make test-app
       - name: Build
         run: make build
 
@@ -24,8 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
-      - name: Format, lint and tests
-        run: make integration-check
+      - name: Format and lint
+        run: make lint-integration
+      - name: Tests
+        run: make test-integration
       - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master
       - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
@@ -36,6 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker://rhysd/actionlint:1.7.12
+      - name: Shared head of AGENTS.md
+        run: make agents-check
 
   lint-markdown:
     runs-on: ubuntu-latest
