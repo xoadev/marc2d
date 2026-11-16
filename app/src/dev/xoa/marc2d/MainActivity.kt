@@ -31,17 +31,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
-	private var micGranted by mutableStateOf(false)
 	private var kioskActive by mutableStateOf(false)
 	private val kiosk by lazy { Kiosk(this) }
 
 	private var missingPermissions by mutableStateOf(emptyList<String>())
+	private val micGranted get() = Manifest.permission.RECORD_AUDIO !in missingPermissions
 	private var askedByTap = false
 
 	private val permissions =
@@ -95,13 +94,25 @@ class MainActivity : ComponentActivity() {
 					// The screen does not turn off during a call.
 					LocalView.current.keepScreenOn = call != null || camerasOpen || scanOpen
 
-					val activeCall = call
 					val needsSetup = haStatus == HaStatus.NotConfigured
-					when {
-						activeCall != null -> {
+					val activeCall = call
+					val openChart = chartOpen
+					val cameraConnection = connection
+					val screen =
+						when {
+							activeCall != null -> Screen.Call(activeCall)
+							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
+							scanOpen -> Screen.Scan
+							settingsOpen || needsSetup -> Screen.Settings
+							openChart != null -> Screen.Chart(openChart)
+							menuOpen -> Screen.Menu
+							else -> Screen.Main
+						}
+					when (screen) {
+						is Screen.Call -> {
 							CallScreen(
-								call = activeCall,
-								camera = ringingCamera(activeCall, cameras),
+								call = screen.call,
+								camera = ringingCamera(screen.call, cameras),
 								connection = connection,
 								onVideoView = runtime.phone::setVideoView,
 								onLiveSurface = runtime.phone::setLiveSurface,
@@ -110,17 +121,17 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						camerasOpen && connection != null && cameras.isNotEmpty() -> {
+						is Screen.Cameras -> {
 							BackHandler { camerasOpen = false }
 							CameraScreen(
 								cameras = cameras,
-								connection = connection!!,
+								connection = screen.connection,
 								onTalk = runtime.phone::callIntercom,
 								onClose = { camerasOpen = false },
 							)
 						}
 
-						scanOpen -> {
+						Screen.Scan -> {
 							BackHandler { scanOpen = false }
 							QrScanScreen(
 								onInvite = { invite ->
@@ -131,7 +142,7 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						settingsOpen || needsSetup -> {
+						Screen.Settings -> {
 							BackHandler(enabled = settingsOpen) { settingsOpen = false }
 							SettingsScreen(
 								initial = connection,
@@ -157,16 +168,16 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						chartOpen != null -> {
+						is Screen.Chart -> {
 							BackHandler { chartOpen = null }
 							ChartScreen(
-								chart = charts.firstOrNull { it.name == chartOpen },
-								name = chartOpen.orEmpty(),
+								chart = charts.firstOrNull { it.name == screen.name },
+								name = screen.name,
 								onClose = { chartOpen = null },
 							)
 						}
 
-						menuOpen -> {
+						Screen.Menu -> {
 							BackHandler { menuOpen = false }
 							PanelMenu(
 								onCameras =
@@ -191,7 +202,7 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						else -> {
+						Screen.Main -> {
 							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
@@ -213,9 +224,7 @@ class MainActivity : ComponentActivity() {
 						}
 					}
 					// The droid says it on the main screen: nothing fixed there, as the OLED would keep it.
-					val showingCameras = camerasOpen && connection != null && cameras.isNotEmpty()
-					val onMainScreen = activeCall == null && !showingCameras && !scanOpen && !settingsOpen && !needsSetup && !menuOpen && chartOpen == null
-					if (cameraOn && !onMainScreen) RecordingMark()
+					if (cameraOn && screen != Screen.Main) RecordingMark()
 				}
 			}
 		}
@@ -236,7 +245,6 @@ class MainActivity : ComponentActivity() {
 	}
 
 	private fun refreshPermissions() {
-		micGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 		missingPermissions =
 			listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
 				.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
@@ -265,6 +273,29 @@ class MainActivity : ComponentActivity() {
 	}
 }
 
+/** What fills the screen: the first that applies, in this order. */
+private sealed interface Screen {
+	data class Call(
+		val call: IntercomCall,
+	) : Screen
+
+	data class Cameras(
+		val connection: HaConnection,
+	) : Screen
+
+	data object Scan : Screen
+
+	data object Settings : Screen
+
+	data class Chart(
+		val name: String,
+	) : Screen
+
+	data object Menu : Screen
+
+	data object Main : Screen
+}
+
 /** The camera is on, on the screens where the droid is not. */
 @Composable
 private fun RecordingMark() {
@@ -274,7 +305,7 @@ private fun RecordingMark() {
 				.align(Alignment.TopCenter)
 				.padding(top = 8.dp)
 				.size(16.dp)
-				.background(Color(0xFFE02020)),
+				.background(PixelRed),
 		)
 	}
 }
