@@ -1,14 +1,17 @@
 package dev.xoa.marc2d
 
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Surface
+import android.view.TextureView
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.Call
+import org.linphone.core.CallParams
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
 import org.linphone.core.Factory
@@ -46,9 +49,9 @@ class IntercomPhone(
 	private var applied: PanelConfig? = null
 	private var activeCall: Call? = null
 
-	/** The intercom's video, sound and the panel's voice, for one with an RTSP URL. */
-	private var media: RtspCall? = null
-	private var liveSurface: Surface? = null
+	/** What carries the open call besides SIP signalling, from its ring until the call screen goes. */
+	private var media: CallMedia? = null
+	private var videoView: TextureView? = null
 
 	/** Whether the SIP call got through: once it ends, so does the conversation. */
 	private var connected = false
@@ -164,7 +167,7 @@ class IntercomPhone(
 		name: String,
 		answered: Boolean,
 	) {
-		_call.value = IntercomCall(name, answered, live = media != null)
+		_call.value = IntercomCall(name, answered, live = media?.live == true)
 	}
 
 	/** The call screen goes, and with it the intercom's media. */
@@ -173,22 +176,18 @@ class IntercomPhone(
 		_call.value = null
 	}
 
-	/** Opens the intercom's media, when it has any, and the panel starts speaking. */
+	/** Opens the intercom's media and the panel starts speaking. */
 	private fun talk(intercom: IntercomConfig) {
-		startMedia(intercom)
-		media?.answer()
+		startMedia(intercom).answer()
 		show(intercom.name, answered = true)
 	}
 
-	private fun startMedia(intercom: IntercomConfig) {
-		val url = intercom.rtsp ?: return
-		if (media != null) return
-		media =
-			RtspCall(context, url).apply {
-				setSurface(liveSurface)
-				start()
-			}
-	}
+	/** The open call's media, or the [intercom]'s, opened now: an unknown caller is SIP only. */
+	private fun startMedia(intercom: IntercomConfig?): CallMedia =
+		media ?: (intercom?.rtsp?.let { RtspCallMedia(RtspCall(context, it).apply { start() }) } ?: SipCallMedia(core)).also {
+			media = it
+			it.show(videoView)
+		}
 
 	private fun stopMedia() {
 		media?.stop()
@@ -209,50 +208,44 @@ class IntercomPhone(
 		val address = Factory.instance().createAddress("sip:${intercom.number}@${intercom.server}")
 		val params = core.createCallParams(null)
 		if (address != null && params != null) {
-			callMedia(intercom, params)
+			startMedia(intercom).configure(params)
 			activeCall = core.inviteAddressWithParams(address, params)
 		}
-		if (activeCall == null) retryOrEnd()
+		if (activeCall == null) sipCallEnded()
 	}
 
-	/** After a button press, the VTO does not answer while its own group call lasts: keep trying. */
-	private fun retryOrEnd() {
-		if (dialing != null && SystemClock.elapsedRealtime() < dialDeadline) {
-			main.postDelayed(redial, REDIAL_DELAY_MILLIS)
-		} else {
-			dialing = null
-			// Over RTSP the conversation goes on without SIP: only the intercom does not know someone answered.
-			if (media?.isAnswered != true) closeCall()
-		}
+	/** The SIP call ended, or could not be placed. */
+	private fun sipCallEnded() {
+		// After a button press, the VTO does not answer while its own group call lasts: keep trying.
+		val retrying = dialing != null && SystemClock.elapsedRealtime() < dialDeadline
+		apply(afterSipCallEnds(connected, retrying, talkingWithoutSip = media?.isTalking == true))
 	}
 
-	/**
-	 * The call's media. Over RTSP, SIP only tells the intercom someone answered: neither sound nor video. Otherwise the door
-	 * station is visible but sees nothing.
-	 */
-	private fun callMedia(
-		intercom: IntercomConfig?,
-		params: org.linphone.core.CallParams,
-	) {
-		if (intercom?.rtsp != null) {
-			params.isVideoEnabled = false
-			params.audioDirection = MediaDirection.Inactive
-			return
+	private fun apply(end: SipCallEnd) {
+		when (end) {
+			SipCallEnd.Retry -> {
+				main.postDelayed(redial, REDIAL_DELAY_MILLIS)
+			}
+
+			SipCallEnd.KeepTalking -> {
+				dialing = null
+			}
+
+			SipCallEnd.End -> {
+				connected = false
+				dialing = null
+				main.removeCallbacks(redial)
+				closeCall()
+			}
 		}
-		params.isVideoEnabled = true
-		params.videoDirection = MediaDirection.RecvOnly
 	}
 
 	/** To talk through the intercom without anyone having rung. */
 	fun callIntercom(name: String) {
 		if (activeCall != null || dialing != null || media != null) return
 		val intercom = applied?.intercoms?.firstOrNull { it.name == name } ?: return
-		if (intercom.rtsp == null) {
-			dial(intercom)
-			return
-		}
-		// Nobody rang: over RTSP there is no call to answer, it is enough to speak.
-		talk(intercom)
+		// Nobody rang: when the conversation goes without SIP there is no call to answer, it is enough to speak.
+		if (startMedia(intercom).live) talk(intercom) else dial(intercom)
 	}
 
 	fun answer() {
@@ -261,9 +254,11 @@ class IntercomPhone(
 			return
 		}
 		val call = activeCall ?: return
+		// Hung up already: the call is going away.
+		val media = media ?: return
 		val params = core.createCallParams(call) ?: return
-		callMedia(intercomFor(call), params)
-		media?.answer()
+		media.configure(params)
+		media.answer()
 		call.acceptWithParams(params)
 	}
 
@@ -287,14 +282,10 @@ class IntercomPhone(
 		}
 	}
 
-	fun setVideoView(view: Any?) {
-		core.nativeVideoWindowId = view
-	}
-
-	/** Where the RTSP video goes. */
-	fun setLiveSurface(surface: Surface?) {
-		liveSurface = surface
-		media?.setSurface(surface)
+	/** The call screen's video, which the call's media shows while it lasts. */
+	fun setVideoView(view: TextureView?) {
+		videoView = view
+		media?.show(view)
 	}
 
 	private fun listener() =
@@ -325,7 +316,7 @@ class IntercomPhone(
 					Call.State.IncomingReceived, Call.State.IncomingEarlyMedia -> {
 						silence()
 						activeCall = call
-						intercomFor(call)?.let(::startMedia)
+						startMedia(intercomFor(call))
 						show(callName(call), answered = false)
 						// A call can arrive without HA having said anything: it has to ring by itself too.
 						ringer.start()
@@ -344,23 +335,7 @@ class IntercomPhone(
 						if (activeCall == call) {
 							silence()
 							activeCall = null
-							val retrying = dialing != null && SystemClock.elapsedRealtime() < dialDeadline
-							when (afterSipCallEnds(connected, retrying, talkingOverRtsp = media?.isAnswered == true)) {
-								SipCallEnd.Retry -> {
-									main.postDelayed(redial, REDIAL_DELAY_MILLIS)
-								}
-
-								SipCallEnd.KeepTalking -> {
-									dialing = null
-								}
-
-								SipCallEnd.End -> {
-									connected = false
-									dialing = null
-									main.removeCallbacks(redial)
-									closeCall()
-								}
-							}
+							sipCallEnded()
 						}
 					}
 
@@ -403,18 +378,117 @@ class IntercomPhone(
 internal enum class SipCallEnd { Retry, KeepTalking, End }
 
 /**
- * What a SIP call that ends leaves. One that got through ends everything: the intercom or the panel hung up. One that did
- * not is tried again while answering lasts. Otherwise only a conversation already going over RTSP goes on: an intercom
- * that rang and gave up, with no one answering, takes its call screen with it.
+ * What a SIP call that ends, or cannot be placed, leaves. One that got through ends everything: the intercom or the panel
+ * hung up. One that did not is tried again while answering lasts. Otherwise only a conversation already going without SIP
+ * goes on: an intercom that rang and gave up, with no one answering, takes its call screen with it.
  */
 internal fun afterSipCallEnds(
 	connected: Boolean,
 	retrying: Boolean,
-	talkingOverRtsp: Boolean,
+	talkingWithoutSip: Boolean,
 ): SipCallEnd =
 	when {
 		connected -> SipCallEnd.End
 		retrying -> SipCallEnd.Retry
-		talkingOverRtsp -> SipCallEnd.KeepTalking
+		talkingWithoutSip -> SipCallEnd.KeepTalking
 		else -> SipCallEnd.End
 	}
+
+/** What carries an intercom's call besides SIP signalling, chosen once from its configuration. */
+private interface CallMedia {
+	/** Its video and sound come without SIP, from the ring: no SIP call is needed to talk. */
+	val live: Boolean
+
+	/** Whether a conversation is going on without SIP, so it outlives the SIP call. */
+	val isTalking: Boolean
+
+	/** Someone answered: the panel starts speaking. */
+	fun answer()
+
+	/** What the SIP call carries. */
+	fun configure(params: CallParams)
+
+	/** Where its video goes, or nothing while there is no call screen. */
+	fun show(view: TextureView?)
+
+	fun stop()
+}
+
+/** Sound and video in the SIP call. The door station is visible but sees nothing. */
+private class SipCallMedia(
+	private val core: Core,
+) : CallMedia {
+	override val live = false
+	override val isTalking = false
+
+	override fun answer() = Unit
+
+	override fun configure(params: CallParams) {
+		params.isVideoEnabled = true
+		params.videoDirection = MediaDirection.RecvOnly
+	}
+
+	override fun show(view: TextureView?) {
+		core.nativeVideoWindowId = view
+	}
+
+	override fun stop() {
+		core.nativeVideoWindowId = null
+	}
+}
+
+/** The intercom's video, sound and the panel's voice over RTSP. SIP only tells the intercom someone answered or hung up. */
+private class RtspCallMedia(
+	private val call: RtspCall,
+) : CallMedia {
+	private var surface: Surface? = null
+
+	override val live = true
+	override val isTalking get() = call.isAnswered
+
+	override fun answer() = call.answer()
+
+	override fun configure(params: CallParams) {
+		params.isVideoEnabled = false
+		params.audioDirection = MediaDirection.Inactive
+	}
+
+	override fun show(view: TextureView?) {
+		release()
+		view ?: return
+		view.surfaceTexture?.let(::showOn)
+		view.surfaceTextureListener =
+			object : TextureView.SurfaceTextureListener {
+				override fun onSurfaceTextureAvailable(
+					texture: SurfaceTexture,
+					width: Int,
+					height: Int,
+				) = showOn(texture)
+
+				override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+					release()
+					return true
+				}
+
+				override fun onSurfaceTextureSizeChanged(
+					texture: SurfaceTexture,
+					width: Int,
+					height: Int,
+				) = Unit
+
+				override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+			}
+	}
+
+	override fun stop() = call.stop()
+
+	private fun showOn(texture: SurfaceTexture) {
+		surface = Surface(texture).also(call::setSurface)
+	}
+
+	private fun release() {
+		call.setSurface(null)
+		surface?.release()
+		surface = null
+	}
+}

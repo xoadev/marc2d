@@ -1,7 +1,5 @@
 package dev.xoa.marc2d
 
-import android.graphics.SurfaceTexture
-import android.view.Surface
 import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -28,7 +26,6 @@ fun CallScreen(
 	camera: CameraConfig?,
 	connection: HaConnection?,
 	onVideoView: (TextureView?) -> Unit,
-	onLiveSurface: (Surface?) -> Unit,
 	onAnswer: () -> Unit,
 	onHangUp: () -> Unit,
 	modifier: Modifier = Modifier,
@@ -39,15 +36,12 @@ fun CallScreen(
 				.fillMaxSize()
 				.background(Color.Black),
 	) {
-		if (call.live) {
-			LiveVideo(onLiveSurface)
-		} else {
-			AndroidView(
-				factory = { context -> TextureView(context).also(onVideoView) },
-				onRelease = { onVideoView(null) },
-				modifier = Modifier.fillMaxSize(),
-			)
-		}
+		// The intercom's video, whichever way it comes: the phone hands the view to the call's media.
+		AndroidView(
+			factory = { context -> TextureView(context).also(onVideoView) },
+			onRelease = { onVideoView(null) },
+			modifier = Modifier.fillMaxSize(),
+		)
 		if (camera != null && connection != null) CameraView(camera, connection, active = true)
 		Text(
 			text = if (call.answered) call.name else "Call from ${call.name}",
@@ -81,43 +75,4 @@ fun CallScreen(
 					.padding(32.dp),
 		)
 	}
-}
-
-/** The intercom's RTSP video: its surface goes to the decoder while it exists. */
-@Composable
-private fun LiveVideo(onSurface: (Surface?) -> Unit) {
-	AndroidView(
-		factory = { context ->
-			TextureView(context).apply {
-				surfaceTextureListener =
-					object : TextureView.SurfaceTextureListener {
-						private var surface: Surface? = null
-
-						override fun onSurfaceTextureAvailable(
-							texture: SurfaceTexture,
-							width: Int,
-							height: Int,
-						) {
-							surface = Surface(texture).also(onSurface)
-						}
-
-						override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-							onSurface(null)
-							surface?.release()
-							surface = null
-							return true
-						}
-
-						override fun onSurfaceTextureSizeChanged(
-							texture: SurfaceTexture,
-							width: Int,
-							height: Int,
-						) = Unit
-
-						override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
-					}
-			}
-		},
-		modifier = Modifier.fillMaxSize(),
-	)
 }

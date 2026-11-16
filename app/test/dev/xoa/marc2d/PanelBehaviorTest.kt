@@ -294,13 +294,20 @@ class SipCallEndTest {
 	@Test
 	fun `an intercom that rang and gave up takes its call screen with it`() {
 		// Over RTSP the video was open from the ring, but no one answered.
-		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = false, retrying = false, talkingOverRtsp = false))
+		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = false, retrying = false, talkingWithoutSip = false))
 	}
 
 	@Test
 	fun `a conversation over RTSP goes on when SIP gives up, and a hang up ends it`() {
-		assertEquals(SipCallEnd.KeepTalking, afterSipCallEnds(connected = false, retrying = false, talkingOverRtsp = true))
-		assertEquals(SipCallEnd.Retry, afterSipCallEnds(connected = false, retrying = true, talkingOverRtsp = true))
-		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = true, retrying = false, talkingOverRtsp = true))
+		assertEquals(SipCallEnd.KeepTalking, afterSipCallEnds(connected = false, retrying = false, talkingWithoutSip = true))
+		assertEquals(SipCallEnd.Retry, afterSipCallEnds(connected = false, retrying = true, talkingWithoutSip = true))
+		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = true, retrying = false, talkingWithoutSip = true))
+	}
+
+	@Test
+	fun `a call that cannot be placed is tried again while answering lasts, then ends the SIP-only call screen`() {
+		// The VTO refuses calls while its own group call lasts: placing one fails the same way as one that ends.
+		assertEquals(SipCallEnd.Retry, afterSipCallEnds(connected = false, retrying = true, talkingWithoutSip = false))
+		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = false, retrying = false, talkingWithoutSip = false))
 	}
 }
