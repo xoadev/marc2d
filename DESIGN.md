@@ -58,8 +58,9 @@ or add a word. They are white, and red is reserved for **Hang up**.
 
 ## Screens
 
-- **Main:** time, date, weather, readings and droid, with no buttons. The readings are one gray line under the date;
-  only a warning turns one yellow. Tapping anywhere opens the menu.
+- **Main:** time, date, weather, readings and droid, with no buttons. The readings are a column of tiles on the left,
+  each with a 12×12 pixel icon (battery, car, thermometer, power or water) and its value in gray; a percentage gets a bar
+  of ten pixel cells, and the battery icon fills instead. Only a warning turns one yellow. Tapping anywhere opens the menu.
 - **Menu:** large buttons on black. It closes with the X, by tapping outside, and on its own after 10 seconds.
 - **Settings:** black background, straight-edged fields and text buttons with the same shape as the rest. It
   closes with the X.

@@ -6,7 +6,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -41,6 +40,9 @@ private val DateColor = Color(0xFFA0A0A0)
 private val WarningColor = Color(0xFFE0A030)
 private const val MAX_CLOCK_HEIGHT = 0.5f
 private val WEATHER_LIST_WIDTH = 160.dp
+
+// The readings' column, on the left as the weather is on the right, so that the droid never covers them.
+private val READINGS_WIDTH = 200.dp
 private const val DROID_WIDTH = 0.1f
 
 @Composable
@@ -82,7 +84,10 @@ fun ClockScreen(
 					.fillMaxWidth()
 					.offset(offsetX.dp, offsetY.dp)
 					// In landscape the forecast goes in a list to the right of the time.
-					.padding(start = 24.dp, end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp),
+					.padding(
+						start = if (landscape && readings.isNotEmpty()) READINGS_WIDTH else 24.dp,
+						end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp,
+					),
 			horizontalAlignment = Alignment.CenterHorizontally,
 			verticalArrangement = Arrangement.spacedBy(8.dp),
 		) {
@@ -107,7 +112,6 @@ fun ClockScreen(
 				fontSize = 28.sp,
 				textAlign = TextAlign.Center,
 			)
-			if (readings.isNotEmpty()) Readings(readings)
 		}
 		if (visibleWeather != null) {
 			WeatherPanel(
@@ -119,6 +123,17 @@ fun ClockScreen(
 						.align(Alignment.TopEnd)
 						.offset(offsetX.dp, offsetY.dp)
 						.padding(16.dp),
+			)
+		}
+		if (readings.isNotEmpty()) {
+			ReadingTiles(
+				readings = readings,
+				modifier =
+					Modifier
+						.align(Alignment.TopStart)
+						.offset(offsetX.dp, offsetY.dp)
+						// Below the permissions icon, when it is there.
+						.padding(start = 24.dp, top = if (onFixPermissions != null) CLOSE_BUTTON + 32.dp else 24.dp),
 			)
 		}
 		DroidSprite(
@@ -152,20 +167,3 @@ fun ClockScreen(
 		}
 	}
 }
-
-/** Other entities' values on one line, in gray; only one that crosses its limits is in the warning colour. */
-@Composable
-private fun Readings(readings: List<Reading>) {
-	Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-		readings.forEach { reading ->
-			Text(
-				text = listOfNotNull(reading.name, reading.value + (reading.unit?.let { if (it == "%") it else " $it" } ?: "")).joinToString(" "),
-				color = if (reading.warning) ReadingWarningColor else DateColor,
-				fontSize = 24.sp,
-				maxLines = 1,
-			)
-		}
-	}
-}
-
-private val ReadingWarningColor = Color(0xFFF0C020)

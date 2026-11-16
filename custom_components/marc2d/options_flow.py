@@ -114,6 +114,22 @@ READING_FIELDS = {
     "warn_above": _field(
         "Warning above", {"number": {"mode": "box", "step": "any"}}, required=False
     ),
+    # Pixel icons drawn by the panel; the battery fills with the value. Without one, the name shows.
+    "icon": _field(
+        "Icon",
+        {
+            "select": {
+                "options": [
+                    {"value": "battery", "label": "Battery"},
+                    {"value": "car", "label": "Car"},
+                    {"value": "thermometer", "label": "Thermometer"},
+                    {"value": "power", "label": "Power"},
+                    {"value": "water", "label": "Water"},
+                ]
+            }
+        },
+        required=False,
+    ),
 }
 CHART_FIELDS = {
     "entity": _field("Entity with values by the hour", {"entity": {}}),

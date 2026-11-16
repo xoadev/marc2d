@@ -352,14 +352,17 @@ async def test_the_display_page_saves_readings_and_charts(hass, entry) -> None:
     form = await open_page(hass, entry, "display")
     fields = form["data_schema"].schema["readings"].config["fields"]
     assert fields["warn_below"]["required"] is False
+    icons = [option["value"] for option in fields["icon"]["selector"]["select"]["options"]]
+    assert "battery" in icons
+    assert "car" in icons
     done = await hass.config_entries.options.async_configure(
         form["flow_id"],
         {
             "enabled": True,
-            "readings": [{"entity": "sensor.car_battery", "name": "Car"}],
+            "readings": [{"entity": "sensor.car_battery", "name": "Car", "icon": "car"}],
             "charts": [{"entity": "sensor.electricity_price", "name": "Electricity"}],
         },
     )
     config = build_panel_config(done["data"])
-    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car"}]
+    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car", "icon": "car"}]
     assert config["charts"][0]["name"] == "Electricity"

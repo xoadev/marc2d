@@ -4,6 +4,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class EntityReadingsTest {
 	/** As `subscribe_entities` sends it, with the attributes of an electricity price in the Nord Pool format. */
@@ -38,8 +39,31 @@ class EntityReadingsTest {
 				),
 				event,
 			)
-		assertEquals(listOf(Reading("Car", "73", "%", warning = true), Reading("Door", "open", null, warning = false)), readings)
+		assertEquals(
+			listOf(Reading("Car", "73", "%", warning = true, level = 0.73f), Reading("Door", "open", null, warning = false)),
+			readings,
+		)
 		assertEquals(false, EntityReadings.readings(listOf(ReadingConfig("sensor.car_battery", "Car", warnBelow = 20.0)), event).single().warning)
+	}
+
+	@Test
+	fun `a percentage gives a level, and the icon comes from the configuration`() {
+		val car = EntityReadings.readings(listOf(ReadingConfig("sensor.car_battery", "Car", icon = "car")), event).single()
+		assertEquals(0.73f, car.level)
+		assertEquals(ReadingIcon.Car, ReadingIcon.parse(car.icon))
+		assertNull(ReadingIcon.parse("from a future version"))
+		assertEquals("%", unitSuffix("%"))
+		assertEquals(" kWh", unitSuffix("kWh"))
+	}
+
+	@Test
+	fun `the battery fills with its level`() {
+		val empty = batteryRows(0f)
+		val full = batteryRows(1f)
+		assertTrue(empty.all { it.length == 12 } && full.all { it.length == 12 })
+		assertEquals(0, empty[5].substring(2, 8).count { it == '#' })
+		assertEquals(6, full[5].substring(2, 8).count { it == '#' })
+		assertEquals(4, batteryRows(0.7f)[5].substring(2, 8).count { it == '#' })
 	}
 
 	@Test

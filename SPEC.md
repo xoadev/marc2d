@@ -22,9 +22,10 @@ The project is in testing and has no users: break whatever needs breaking.
   and gray, in a list next to the time. They come from the `weather.*` entity
   named in the configuration, not from a service of our own. They update every 10 minutes and
   are hidden if the data is more than an hour old.
-- Under the date, the readings: the value and unit of any entity named in the configuration, such as the car's battery,
-  on one line, in gray. A reading turns yellow only when it crosses one of its warning limits. They update with the
-  weather, in one request for every entity.
+- In a column on the left, as the weather is on the right, the readings: a tile per entity named in the configuration,
+  such as the car's battery, with its icon and its value and unit, in gray. A percentage gets a level bar, and the battery
+  icon fills with it. Without an icon the name says what it is. A reading turns yellow only when it crosses one of its
+  warning limits. They update with the weather, in one request for every entity, and the droid never covers them.
 - At the bottom, a warning only if something fails: HA, registration with an intercom or the microphone permission.
 - If a permission is missing, a warning icon in the top left corner asks for it again, or opens the app's Android
   settings if Android no longer shows the dialog.
@@ -253,7 +254,7 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "voice": { "pipeline": "01h...", "phrase": "jarvis" },
   "rtsp": { "password": "…", "audio": true },
   "readings": [
-    { "entity": "sensor.car_battery", "name": "Car", "warn_below": 20 }
+    { "entity": "sensor.car_battery", "name": "Car", "warn_below": 20, "icon": "car" }
   ],
   "charts": [
     { "entity": "sensor.electricity_price", "name": "Electricity" }

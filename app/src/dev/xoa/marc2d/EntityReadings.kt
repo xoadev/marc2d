@@ -19,6 +19,8 @@ data class ReadingConfig(
 	val name: String,
 	@SerialName("warn_below") val warnBelow: Double? = null,
 	@SerialName("warn_above") val warnAbove: Double? = null,
+	/** One of [ReadingIcon], or none: then the name says what it is. */
+	val icon: String? = null,
 )
 
 /** A chart by the hour, opened from the menu. */
@@ -33,6 +35,9 @@ data class Reading(
 	val value: String,
 	val unit: String?,
 	val warning: Boolean,
+	val icon: String? = null,
+	/** From 0 to 1, for a percentage: a level bar, or the battery's fill. */
+	val level: Float? = null,
 )
 
 data class HourValue(
@@ -63,7 +68,9 @@ object EntityReadings {
 			val warning =
 				number != null &&
 					((config.warnBelow != null && number < config.warnBelow) || (config.warnAbove != null && number > config.warnAbove))
-			Reading(config.name, number?.let(::format) ?: state, entity.attribute("unit_of_measurement"), warning)
+			val unit = entity.attribute("unit_of_measurement")
+			val level = if (unit == "%" && number != null) (number / 100).toFloat().coerceIn(0f, 1f) else null
+			Reading(config.name, number?.let(::format) ?: state, unit, warning, config.icon, level)
 		}
 
 	/**

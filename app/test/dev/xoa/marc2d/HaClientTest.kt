@@ -122,7 +122,7 @@ class HaClientTest {
 			assertEquals("subscribe_entities", request["type"]!!.jsonPrimitive.content)
 			assertEquals("[\"sensor.car_battery\",\"sensor.price\"]", request["entity_ids"].toString())
 			val (readings, charts) = withTimeout(5.seconds) { shown.await() }
-			assertEquals(listOf(Reading("Car", "73", "%", warning = false)), readings)
+			assertEquals(listOf(Reading("Car", "73", "%", warning = false, level = 0.73f)), readings)
 			assertEquals("Electricity", charts.single().name)
 			job.cancel()
 		}
