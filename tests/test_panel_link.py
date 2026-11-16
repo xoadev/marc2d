@@ -3,9 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
 from custom_components.marc2d.update import LATEST_RELEASE, RELEASE_DOWNLOADS, async_latest_release
 from homeassistant.components.camera import async_get_image, async_get_stream_source
@@ -13,6 +11,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
+
+from .conftest import connect_panel
 
 INTERCOM = {
     "name": "Parking",
@@ -27,36 +27,17 @@ MOOD = "select.kitchen_state"
 
 
 @pytest.fixture
-async def entry(hass: HomeAssistant, enable_custom_integrations, hass_owner_user):
-    """A panel with an intercom, set up."""
-    assert await async_setup_component(hass, "http", {})
-    assert await async_setup_component(hass, "websocket_api", {})
-    assert await async_setup_component(hass, "media_source", {})
+def entry_options(hass: HomeAssistant) -> dict:
+    """An intercom, whose doorbell button exists before the panel starts."""
     hass.states.async_set("binary_sensor.button", "off")
-    user = await hass.auth.async_create_user("marc2d Kitchen", group_ids=["system-users"])
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Kitchen",
-        data={"panel": "Kitchen", "user_id": user.id},
-        options={"intercoms": [INTERCOM]},
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
+    return {"intercoms": [INTERCOM]}
 
 
 @pytest.fixture
 async def panel(hass, entry, hass_ws_client):
     """The panel connected, past its first events."""
-    user = await hass.auth.async_get_user(entry.data["user_id"])
-    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
-    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
-    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
-    assert (await client.receive_json())["success"] is True
-    assert (await client.receive_json())["event"]["kind"] == "config"
-    assert (await client.receive_json())["event"] == {"kind": "mood", "value": "Normal"}
-    assert (await client.receive_json())["event"] == {"kind": "brightness", "level": 100}
+    client, events = await connect_panel(hass, entry, hass_ws_client)
+    assert events[1:] == [{"kind": "mood", "value": "Normal"}, {"kind": "brightness", "level": 100}]
     return client
 
 
@@ -301,11 +282,9 @@ async def published(hass, entry):
     return entry
 
 
-async def _report_address(hass, panel, address: str, message_id: int = 90) -> None:
-    await panel.send_json(
-        {"id": message_id, "type": "marc2d/state", "values": {"address": address}}
-    )
-    await panel.receive_json()
+async def _report(hass, client, message_id: int, **values) -> None:
+    await client.send_json({"id": message_id, "type": "marc2d/state", "values": values})
+    assert (await client.receive_json())["success"] is True
     await hass.async_block_till_done()
 
 
@@ -325,38 +304,26 @@ async def test_turning_it_off_removes_the_camera(hass, published) -> None:
 
 async def test_the_camera_needs_the_panel_and_its_address(hass, published, hass_ws_client) -> None:
     assert hass.states.get(RTSP).state == "unavailable"
-    user = await hass.auth.async_get_user(published.data["user_id"])
-    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
-    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
-    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
-    assert (await client.receive_json())["success"] is True
-    config = (await client.receive_json())["event"]["config"]
-    assert config["rtsp"] == {"password": "p@ss/word"}
-    await client.receive_json()
-    await client.receive_json()
+    client, events = await connect_panel(hass, published, hass_ws_client)
+    assert events[0]["config"]["rtsp"] == {"password": "p@ss/word"}
     await hass.async_block_till_done()
     assert hass.states.get(RTSP).state == "unavailable"
 
-    await _report_address(hass, client, "192.0.2.20")
+    await _report(hass, client, 90, address="192.0.2.20")
     assert hass.states.get(RTSP).state != "unavailable"
     source = await async_get_stream_source(hass, RTSP)
     assert source == "rtsp://marc2d:p%40ss%2Fword@192.0.2.20:8554/camera"
 
-    await _report_address(hass, client, "192.0.2.21", 91)
+    await _report(hass, client, 91, address="192.0.2.21")
     assert "192.0.2.21" in await async_get_stream_source(hass, RTSP)
 
-    await _report_address(hass, client, "not an address@evil", 92)
+    await _report(hass, client, 92, address="not an address@evil")
     assert hass.states.get(RTSP).state == "unavailable"
 
 
 async def test_a_picture_waits_for_the_camera_to_start(hass, published, hass_ws_client) -> None:
-    user = await hass.auth.async_get_user(published.data["user_id"])
-    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
-    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
-    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
-    for _ in range(4):
-        await client.receive_json()
-    await _report_address(hass, client, "192.0.2.20")
+    client, _ = await connect_panel(hass, published, hass_ws_client)
+    await _report(hass, client, 90, address="192.0.2.20")
     with patch(
         "homeassistant.components.stream.Stream.async_get_image",
         AsyncMock(return_value=b"jpeg"),
@@ -366,24 +333,8 @@ async def test_a_picture_waits_for_the_camera_to_start(hass, published, hass_ws_
     assert get_image.await_args.kwargs["wait_for_next_keyframe"] is True
 
 
-async def _connect(hass, entry, hass_ws_client):
-    user = await hass.auth.async_get_user(entry.data["user_id"])
-    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
-    client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
-    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
-    for _ in range(4):
-        await client.receive_json()
-    return client
-
-
-async def _report(hass, client, message_id: int, **values) -> None:
-    await client.send_json({"id": message_id, "type": "marc2d/state", "values": values})
-    assert (await client.receive_json())["success"] is True
-    await hass.async_block_till_done()
-
-
 async def test_the_camera_on_sensor_follows_the_panel(hass, published, hass_ws_client) -> None:
-    client = await _connect(hass, published, hass_ws_client)
+    client, _ = await connect_panel(hass, published, hass_ws_client)
     await _report(hass, client, 2, camera_on=True)
     assert hass.states.get("binary_sensor.kitchen_camera_on").state == "on"
     await _report(hass, client, 3, camera_on=False)

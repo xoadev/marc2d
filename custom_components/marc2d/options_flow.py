@@ -65,6 +65,10 @@ def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[
     return {"label": label, "required": required, "selector": selector}
 
 
+def _list_of(fields: dict[str, Any]) -> ObjectSelector:
+    return ObjectSelector(ObjectSelectorConfig(fields=fields, multiple=True, label_field="name"))
+
+
 INTERCOM_FIELDS = {
     "name": _field("Name", {"text": {}}),
     "server": _field("Address", {"text": {}}),
@@ -142,12 +146,7 @@ class Marc2dOptionsFlow(OptionsFlow):
         return self._page(
             "intercoms",
             FEATURE_SIP,
-            {
-                probatio.Optional(CONF_INTERCOMS): ObjectSelector(
-                    ObjectSelectorConfig(fields=INTERCOM_FIELDS, multiple=True, label_field="name")
-                )
-            },
-            self._options,
+            {probatio.Optional(CONF_INTERCOMS): _list_of(INTERCOM_FIELDS)},
         )
 
     async def async_step_cameras(
@@ -170,12 +169,7 @@ class Marc2dOptionsFlow(OptionsFlow):
         return self._page(
             "cameras",
             FEATURE_CAMERAS,
-            {
-                probatio.Optional(CONF_CAMERAS): ObjectSelector(
-                    ObjectSelectorConfig(fields=fields, multiple=True, label_field="name")
-                )
-            },
-            self._options,
+            {probatio.Optional(CONF_CAMERAS): _list_of(fields)},
         )
 
     async def async_step_display(
@@ -191,14 +185,9 @@ class Marc2dOptionsFlow(OptionsFlow):
             "display",
             FEATURE_DISPLAY,
             {
-                probatio.Optional(CONF_READINGS): ObjectSelector(
-                    ObjectSelectorConfig(fields=READING_FIELDS, multiple=True, label_field="name")
-                ),
-                probatio.Optional(CONF_CHARTS): ObjectSelector(
-                    ObjectSelectorConfig(fields=CHART_FIELDS, multiple=True, label_field="name")
-                ),
+                probatio.Optional(CONF_READINGS): _list_of(READING_FIELDS),
+                probatio.Optional(CONF_CHARTS): _list_of(CHART_FIELDS),
             },
-            self._options,
         )
 
     async def async_step_weather(
@@ -221,8 +210,7 @@ class Marc2dOptionsFlow(OptionsFlow):
                     EntitySelectorConfig(domain="weather")
                 )
             },
-            self._options,
-            errors,
+            errors=errors,
         )
 
     async def async_step_entities(
@@ -258,22 +246,16 @@ class Marc2dOptionsFlow(OptionsFlow):
             self._options[CONF_PIPELINE] = user_input.get(CONF_PIPELINE)
             self._options[CONF_WAKE_PHRASE] = user_input.get(CONF_WAKE_PHRASE)
             return self.async_create_entry(data=self._options)
-        features = self._options.get(SECTION_FEATURES, {})
-        suggested = {
-            CONF_ENABLED: features.get(FEATURE_VOICE, False),
-            CONF_PIPELINE: self._options.get(CONF_PIPELINE),
-            CONF_WAKE_PHRASE: self._options.get(CONF_WAKE_PHRASE) or DEFAULT_WAKE_PHRASE,
-        }
-        schema = probatio.Schema(
+        return self._page(
+            "voice",
+            FEATURE_VOICE,
             {
-                probatio.Required(CONF_ENABLED, default=False): BooleanSelector(),
                 probatio.Optional(CONF_PIPELINE): AssistPipelineSelector(),
                 probatio.Optional(CONF_WAKE_PHRASE): TextSelector(),
-            }
-        )
-        return self.async_show_form(
-            step_id="voice",
-            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            },
+            suggested={
+                CONF_WAKE_PHRASE: self._options.get(CONF_WAKE_PHRASE) or DEFAULT_WAKE_PHRASE
+            },
         )
 
     async def async_step_rtsp(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -285,31 +267,22 @@ class Marc2dOptionsFlow(OptionsFlow):
             errors[CONF_RTSP_PASSWORD] = "too_short"
         elif user_input is not None:
             self._set_enabled(FEATURE_RTSP, user_input)
-            self._options[CONF_RTSP_PASSWORD] = user_input.get(CONF_RTSP_PASSWORD) or (
-                self._options.get(CONF_RTSP_PASSWORD) or secrets.token_urlsafe(24)
+            self._options[CONF_RTSP_PASSWORD] = (
+                chosen or self._options.get(CONF_RTSP_PASSWORD) or secrets.token_urlsafe(24)
             )
             self._options[CONF_RTSP_AUDIO] = user_input.get(CONF_RTSP_AUDIO, False)
             return self.async_create_entry(data=self._options)
-        features = self._options.get(SECTION_FEATURES, {})
-        suggested = {
-            CONF_ENABLED: features.get(FEATURE_RTSP, False),
-            CONF_RTSP_PASSWORD: self._options.get(CONF_RTSP_PASSWORD),
-            CONF_RTSP_AUDIO: self._options.get(CONF_RTSP_AUDIO, False),
-        }
-        schema = probatio.Schema(
+        # The placeholder and not the password: this text is not masked, the field below is.
+        address = panel_address(get_hub(self.hass, self.config_entry.entry_id)) or "PANEL_ADDRESS"
+        return self._page(
+            "rtsp",
+            FEATURE_RTSP,
             {
-                probatio.Required(CONF_ENABLED, default=False): BooleanSelector(),
                 probatio.Optional(CONF_RTSP_PASSWORD): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD)
                 ),
                 probatio.Required(CONF_RTSP_AUDIO, default=False): BooleanSelector(),
-            }
-        )
-        # The placeholder and not the password: this text is not masked, the field below is.
-        address = panel_address(get_hub(self.hass, self.config_entry.entry_id)) or "PANEL_ADDRESS"
-        return self.async_show_form(
-            step_id="rtsp",
-            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            },
             errors=errors,
             description_placeholders={"url": stream_url(address, "PASSWORD")},
         )
@@ -324,13 +297,22 @@ class Marc2dOptionsFlow(OptionsFlow):
         step_id: str,
         feature: str,
         fields: dict[Any, Any],
-        values: Any,
-        errors: dict[str, str] | None = None,
+        suggested: dict[str, Any] | None = None,
+        **form: Any,
     ) -> ConfigFlowResult:
-        schema = {probatio.Required(CONF_ENABLED, default=True): BooleanSelector(), **fields}
-        suggested = {**values, CONF_ENABLED: is_enabled(self._options, feature)}
+        """The feature's switch, on by default unless the feature is not, above its fields.
+
+        `form` reaches the form as is: its errors and description placeholders.
+        """
+        default = is_enabled({}, feature)
+        schema = {probatio.Required(CONF_ENABLED, default=default): BooleanSelector(), **fields}
+        values = {
+            **self._options,
+            **(suggested or {}),
+            CONF_ENABLED: is_enabled(self._options, feature),
+        }
         return self.async_show_form(
             step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(probatio.Schema(schema), suggested),
-            errors=errors or {},
+            data_schema=self.add_suggested_values_to_schema(probatio.Schema(schema), values),
+            **form,
         )

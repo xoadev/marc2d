@@ -1,13 +1,11 @@
 """The panel's settings: the form, what each toggle sends and who can read it."""
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_config import build_panel_config
-from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import InvalidData
-from homeassistant.setup import async_setup_component
+
+from .conftest import connect_panel
 
 INTERCOM = {
     "name": "Parking",
@@ -72,28 +70,6 @@ def test_the_doorbell_button_stays_in_home_assistant() -> None:
     assert "doorbell" not in config["intercoms"][0]
 
 
-@pytest.fixture
-async def entry(hass: HomeAssistant, enable_custom_integrations, hass_owner_user):
-    """A panel with its own user."""
-    assert await async_setup_component(hass, "http", {})
-    assert await async_setup_component(hass, "websocket_api", {})
-    assert await async_setup_component(hass, "media_source", {})
-    user = await hass.auth.async_create_user("marc2d Kitchen", group_ids=["system-users"])
-    entry = MockConfigEntry(
-        domain=DOMAIN, title="Kitchen", data={"panel": "Kitchen", "user_id": user.id}
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
-
-
-async def panel_token(hass: HomeAssistant, entry) -> str:
-    user = await hass.auth.async_get_user(entry.data["user_id"])
-    refresh = await hass.auth.async_create_refresh_token(user, "http://panel/")
-    return hass.auth.async_create_access_token(refresh)
-
-
 async def open_page(hass, entry, page):
     options = hass.config_entries.options
     menu = await options.async_init(entry.entry_id)
@@ -102,12 +78,7 @@ async def open_page(hass, entry, page):
 
 
 async def test_saving_a_page_reaches_the_panel_at_once(hass, entry, hass_ws_client) -> None:
-    client = await hass_ws_client(hass, await panel_token(hass, entry))
-    await client.send_json({"id": 1, "type": "marc2d/subscribe"})
-    assert (await client.receive_json())["success"] is True
-    assert (await client.receive_json())["event"]["kind"] == "config"
-    assert (await client.receive_json())["event"]["kind"] == "mood"
-    assert (await client.receive_json())["event"]["kind"] == "brightness"
+    client, _ = await connect_panel(hass, entry, hass_ws_client)
 
     page = await open_page(hass, entry, "intercoms")
     done = await hass.config_entries.options.async_configure(

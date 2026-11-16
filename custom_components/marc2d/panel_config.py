@@ -37,10 +37,14 @@ RTSP_USER = "marc2d"
 RTSP_PORT = 8554
 RTSP_PATH = "/camera"
 
+# Everything else is on until it is turned off: an empty value already does nothing. These are not:
+# voice keeps the microphone open, and publishing opens a camera in a home to the network.
+OFF_BY_DEFAULT = {FEATURE_VOICE, FEATURE_RTSP}
+
 
 def is_enabled(options: Mapping[str, Any], feature: str) -> bool:
-    """Everything is on until it is turned off: an empty value already does nothing."""
-    return bool(options.get(SECTION_FEATURES, {}).get(feature, True))
+    """Whether the feature is on, or its default when it was never set."""
+    return bool(options.get(SECTION_FEATURES, {}).get(feature, feature not in OFF_BY_DEFAULT))
 
 
 def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
@@ -52,8 +56,7 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
         "siren": is_enabled(options, FEATURE_SIREN),
         "speaker": is_enabled(options, FEATURE_SPEAKER),
     }
-    # The only one off by default: it keeps the microphone open.
-    if options.get(SECTION_FEATURES, {}).get(FEATURE_VOICE, False):
+    if is_enabled(options, FEATURE_VOICE):
         config["voice"] = _pipeline(options)
         if phrase := options.get(CONF_WAKE_PHRASE):
             config["voice"]["phrase"] = phrase
@@ -99,8 +102,8 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def rtsp_password(options: Mapping[str, Any]) -> str | None:
-    """The stream's password, only if published: off by default, it is a camera in a home."""
-    if not options.get(SECTION_FEATURES, {}).get(FEATURE_RTSP, False):
+    """The stream's password, only if published."""
+    if not is_enabled(options, FEATURE_RTSP):
         return None
     return options.get(CONF_RTSP_PASSWORD) or None
 
