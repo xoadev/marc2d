@@ -128,6 +128,48 @@ class HaClientTest {
 		}
 
 	@Test
+	fun `reads the weather in the same request as the readings`() =
+		runBlocking {
+			val asked = CompletableDeferred<String>()
+			val connection =
+				fakeHa {
+					val id = subscribeId()
+					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
+					send(
+						Frame.Text(
+							"""{"id":$id,"type":"event","event":{"kind":"config","config":{
+							"weather":"weather.home","readings":[{"entity":"sensor.outside","name":"Out"}]}}}""",
+						),
+					)
+					val request = (incoming.receive() as Frame.Text).readText()
+					asked.complete(request)
+					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
+					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
+					send(
+						Frame.Text(
+							"""{"id":$stateId,"type":"event","event":{"a":{
+							"weather.home":{"s":"sunny","a":{"temperature":21}},"sensor.outside":{"s":"18","a":{}}}}}""",
+						),
+					)
+					var forecast = -1
+					while (forecast < 0) {
+						val text = (incoming.receive() as Frame.Text).readText()
+						if ("get_forecasts" in text) forecast = HaProtocol.parse(text)["id"]!!.jsonPrimitive.int
+					}
+					send(Frame.Text("""{"id":$forecast,"type":"result","success":true,"result":{"response":{}}}"""))
+					awaitCancellation()
+				}
+			val weather = CompletableDeferred<WeatherReport?>()
+			val job = launch { HaClient().run(connection, PanelLink(), {}, {}, { weather.complete(it) }, {}) }
+			val request = HaProtocol.parse(withTimeout(5.seconds) { asked.await() })
+			assertEquals("[\"weather.home\",\"sensor.outside\"]", request["entity_ids"].toString())
+			val report = withTimeout(5.seconds) { weather.await() }
+			assertEquals("sunny", report?.condition)
+			assertEquals(21.0, report?.temperature)
+			job.cancel()
+		}
+
+	@Test
 	fun `a refusal ends the connection, so that retrying opens a new one`() =
 		runBlocking {
 			val connection =

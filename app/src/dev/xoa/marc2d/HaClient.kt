@@ -153,14 +153,16 @@ class HaClient {
 				onStatus(result.toStatus())
 			}
 			val entity = weather
-			val report = entity?.let { fetchWeather(it, nextId) }
+			val entities = (listOfNotNull(entity) + readings.map { it.entity } + charts.map { it.entity }).distinct()
+			val states = if (entities.isEmpty()) null else fetchStates(entities, nextId)
+			val report = entity?.let { states?.let { fetchWeather(entity, it, nextId) } }
 			// A failed refresh keeps the last report, which hides by itself once it is an hour old.
 			if (entity == null || report != null) onWeather(report)
 			if (readings.isEmpty() && charts.isEmpty()) {
 				onDisplay(emptyList(), emptyList())
 			} else {
 				// A failed refresh keeps what was shown.
-				fetchStates((readings.map { it.entity } + charts.map { it.entity }).distinct(), nextId)?.let { event ->
+				states?.let { event ->
 					onDisplay(EntityReadings.readings(readings, event), charts.mapNotNull { EntityReadings.chart(it, event) })
 				}
 			}
@@ -187,17 +189,12 @@ class HaClient {
 			is HaProtocol.ConfigResult.Invalid -> HaStatus.InvalidConfig(reason)
 		}
 
-	/** Subscribes only to receive the current state: each refresh also brings the forecast. */
+	/** The current weather comes with the other states: each refresh also brings the forecast. */
 	private suspend fun DefaultClientWebSocketSession.fetchWeather(
 		entity: String,
+		state: JsonObject,
 		nextId: () -> Int,
 	): WeatherReport? {
-		val stateId = nextId()
-		send(Frame.Text(HaProtocol.entityState(stateId, entity)))
-		if (!HaProtocol.isSuccess(awaitResult(stateId))) return null
-		val state = awaitEvent(stateId)
-		send(Frame.Text(HaProtocol.unsubscribe(nextId(), stateId)))
-
 		val forecastId = nextId()
 		send(Frame.Text(HaProtocol.hourlyForecast(forecastId, entity)))
 		return HaProtocol.weather(entity, state, awaitResult(forecastId), Instant.now())

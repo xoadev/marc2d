@@ -136,7 +136,8 @@ object EntityReadings {
 			"%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
 		}
 
-	private class Entity(
+	/** An entity of a `subscribe_entities` event: its state, none while unavailable or unknown, and its attributes. */
+	class Entity(
 		val state: String?,
 		val attributes: JsonObject?,
 	) {
@@ -144,7 +145,7 @@ object EntityReadings {
 		fun attribute(name: String): String? = (attributes?.get(name) as? JsonPrimitive)?.contentOrNull
 	}
 
-	private fun entity(
+	fun entity(
 		event: JsonObject,
 		id: String,
 	): Entity? {

@@ -146,8 +146,12 @@ object HaProtocol {
 					?.let { AssistEvent.Started(it.toByte()) }
 			}
 
-			"stt-vad-end", "stt-end", "error" -> {
-				if (event["type"]?.jsonPrimitive?.content == "error") AssistEvent.Ended else AssistEvent.StopListening
+			"stt-vad-end", "stt-end" -> {
+				AssistEvent.StopListening
+			}
+
+			"error" -> {
+				AssistEvent.Ended
 			}
 
 			"tts-end" -> {
@@ -201,11 +205,6 @@ object HaProtocol {
 			put("intercom", intercom)
 		}.toString()
 
-	fun entityState(
-		id: Int,
-		entity: String,
-	): String = entityStates(id, listOf(entity))
-
 	/** The first event brings the state of them all. */
 	fun entityStates(
 		id: Int,
@@ -250,22 +249,9 @@ object HaProtocol {
 		forecast: JsonObject,
 		now: Instant,
 	): WeatherReport? {
-		val current =
-			(state["event"] as? JsonObject)
-				?.let { it["a"] as? JsonObject }
-				?.let { it[entity] as? JsonObject }
-				?: return null
-		val condition =
-			current["s"]
-				?.jsonPrimitive
-				?.contentOrNull
-				?.takeUnless { it == "unavailable" || it == "unknown" }
-				?: return null
-		val temperature =
-			(current["a"] as? JsonObject)
-				?.get("temperature")
-				?.jsonPrimitive
-				?.doubleOrNull
+		val current = EntityReadings.entity(state, entity) ?: return null
+		val condition = current.state ?: return null
+		val temperature = current.attribute("temperature")?.toDoubleOrNull()
 		return WeatherReport(condition, temperature, hours(entity, forecast), now)
 	}
 
