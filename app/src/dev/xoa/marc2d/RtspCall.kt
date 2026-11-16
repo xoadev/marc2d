@@ -31,6 +31,10 @@ class RtspCall(
 
 	@Volatile private var answered = false
 
+	/** Whether someone answered, so that the conversation goes on without SIP. */
+	val isAnswered: Boolean
+		get() = answered
+
 	@Volatile private var session: RtspSession? = null
 
 	@Volatile private var surface: Surface? = null

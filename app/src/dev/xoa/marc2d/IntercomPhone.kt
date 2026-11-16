@@ -207,7 +207,10 @@ class IntercomPhone(
 		} else {
 			dialing = null
 			// Over RTSP the conversation goes on without SIP: only the intercom does not know someone answered.
-			if (media == null) _call.value = null
+			if (media?.isAnswered != true) {
+				stopMedia()
+				_call.value = null
+			}
 		}
 	}
 
@@ -331,15 +334,23 @@ class IntercomPhone(
 						if (activeCall == call) {
 							silence()
 							activeCall = null
-							if (connected) {
-								// The intercom hung up, or the panel did.
-								connected = false
-								dialing = null
-								main.removeCallbacks(redial)
-								stopMedia()
-								_call.value = null
-							} else {
-								retryOrEnd()
+							val retrying = dialing != null && SystemClock.elapsedRealtime() < dialDeadline
+							when (afterSipCallEnds(connected, retrying, talkingOverRtsp = media?.isAnswered == true)) {
+								SipCallEnd.Retry -> {
+									main.postDelayed(redial, REDIAL_DELAY_MILLIS)
+								}
+
+								SipCallEnd.KeepTalking -> {
+									dialing = null
+								}
+
+								SipCallEnd.End -> {
+									connected = false
+									dialing = null
+									main.removeCallbacks(redial)
+									stopMedia()
+									_call.value = null
+								}
 							}
 						}
 					}
@@ -379,3 +390,22 @@ class IntercomPhone(
 
 	private fun callName(call: Call): String = intercomFor(call)?.name ?: call.remoteAddress.displayName ?: "Intercom"
 }
+
+internal enum class SipCallEnd { Retry, KeepTalking, End }
+
+/**
+ * What a SIP call that ends leaves. One that got through ends everything: the intercom or the panel hung up. One that did
+ * not is tried again while answering lasts. Otherwise only a conversation already going over RTSP goes on: an intercom
+ * that rang and gave up, with no one answering, takes its call screen with it.
+ */
+internal fun afterSipCallEnds(
+	connected: Boolean,
+	retrying: Boolean,
+	talkingOverRtsp: Boolean,
+): SipCallEnd =
+	when {
+		connected -> SipCallEnd.End
+		retrying -> SipCallEnd.Retry
+		talkingOverRtsp -> SipCallEnd.KeepTalking
+		else -> SipCallEnd.End
+	}

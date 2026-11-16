@@ -278,3 +278,18 @@ class RingingCameraTest {
 		assertEquals(null, ringingCamera(IntercomCall("Door", answered = false, live = true), cameras), "its own video comes over RTSP")
 	}
 }
+
+class SipCallEndTest {
+	@Test
+	fun `an intercom that rang and gave up takes its call screen with it`() {
+		// Over RTSP the video was open from the ring, but no one answered.
+		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = false, retrying = false, talkingOverRtsp = false))
+	}
+
+	@Test
+	fun `a conversation over RTSP goes on when SIP gives up, and a hang up ends it`() {
+		assertEquals(SipCallEnd.KeepTalking, afterSipCallEnds(connected = false, retrying = false, talkingOverRtsp = true))
+		assertEquals(SipCallEnd.Retry, afterSipCallEnds(connected = false, retrying = true, talkingOverRtsp = true))
+		assertEquals(SipCallEnd.End, afterSipCallEnds(connected = true, retrying = false, talkingOverRtsp = true))
+	}
+}

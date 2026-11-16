@@ -263,7 +263,9 @@ class RtspServer(
 		@Volatile private var soundChannel: Int? = null
 		private var acquired = false
 		private var playing = false
-		private var authorized = false
+
+		// Read by the handshake's deadline.
+		@Volatile private var authorized = false
 		private var failures = 0
 
 		// Read by the camera's and the microphone's threads.
@@ -276,12 +278,20 @@ class RtspServer(
 				coroutineScope {
 					val watcher = launch { closeOnCancel(socket) }
 					val sender = launch { sendFrames() }
+					// A deadline for the whole handshake, not for each read: OPTIONS needs no password, and a client could keep
+					// its place by asking for it now and then.
+					val deadline =
+						launch {
+							delay(handshakeTimeout)
+							if (!authorized) socket.close()
+						}
 					try {
 						while (true) {
 							val request = readRequest(input) ?: break
 							if (!answer(request)) break
 						}
 					} finally {
+						deadline.cancel()
 						sender.cancel()
 						watcher.cancel()
 					}

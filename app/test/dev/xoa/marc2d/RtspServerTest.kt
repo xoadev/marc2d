@@ -267,6 +267,28 @@ class RtspServerTest {
 	}
 
 	@Test
+	fun `a client that keeps asking without the password does not keep its place either`() {
+		withServer(FakeSource(), handshakeTimeout = 300.milliseconds) { port ->
+			RtspClient(port).use { client ->
+				// OPTIONS needs no password, and each one used to restart the wait.
+				val closed =
+					withContext(Dispatchers.IO) {
+						repeat(20) {
+							try {
+								client.request("OPTIONS")
+							} catch (_: Exception) {
+								return@withContext true
+							}
+							Thread.sleep(200)
+						}
+						false
+					}
+				assertTrue(closed, "still connected after 4 s without the password")
+			}
+		}
+	}
+
+	@Test
 	fun `once it has the password, a slow client keeps its connection`() {
 		withServer(FakeSource(), handshakeTimeout = 300.milliseconds) { port ->
 			RtspClient(port).use { client ->

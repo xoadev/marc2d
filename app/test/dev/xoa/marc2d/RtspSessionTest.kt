@@ -114,6 +114,24 @@ class RtspSessionTest {
 	}
 
 	@Test
+	fun `the credentials are percent-decoded, and a plus stays a plus`() {
+		assertEquals("admin" to "p+s@ss", RtspSession.credentials("admin:p+s%40ss"))
+		assertEquals("admin" to "a:b", RtspSession.credentials("admin:a%3Ab"))
+		assertEquals("admin" to "", RtspSession.credentials("admin"))
+	}
+
+	@Test
+	fun `a frame that never ends is dropped before it fills the memory`() {
+		val depacketizer = H264Depacketizer()
+		val big = byteArrayOf(0x41) + ByteArray(60_000)
+		// Over the limit without a marker: what came is let go, not kept.
+		repeat(100) { assertNull(depacketizer.push(rtp(it, false, big), rtpData(it, false, big))) }
+		assertNull(depacketizer.push(rtp(100, true, big), rtpData(100, true, big)), "the rest of the dropped frame")
+		val single = byteArrayOf(0x41, 7)
+		assertContentEquals(H264Depacketizer.START_CODE + single, depacketizer.push(rtp(101, true, single), rtpData(101, true, single)))
+	}
+
+	@Test
 	fun `opens video, sound and the backchannel, on the channels the intercom chose`() {
 		val server = ServerSocket(0)
 		val requests = LinkedBlockingQueue<String>()

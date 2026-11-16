@@ -199,10 +199,7 @@ class RtspSession private constructor(
 					throw IOException("Not a URL")
 				}
 			if (address.scheme != "rtsp" || address.host == null) throw IOException("Not an RTSP URL")
-			val credentials =
-				address.rawUserInfo?.split(":", limit = 2)?.let { parts ->
-					parts.map { URLDecoder.decode(it, Charsets.UTF_8) }.let { it[0] to it.getOrElse(1) { "" } }
-				}
+			val credentials = address.rawUserInfo?.let(::credentials)
 			val port = if (address.port > 0) address.port else DEFAULT_PORT
 			// The request URL is the same without the credentials.
 			val bare =
@@ -244,6 +241,12 @@ class RtspSession private constructor(
 				socket.close()
 				throw e as? IOException ?: IOException(e::class.simpleName)
 			}
+		}
+
+		/** The user and password of a URL's user info, percent-decoded: a `+` there is a plus, not a space as in a form. */
+		fun credentials(rawUserInfo: String): Pair<String, String> {
+			val parts = rawUserInfo.split(":", limit = 2).map { URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8) }
+			return parts[0] to parts.getOrElse(1) { "" }
 		}
 
 		/** The first channel of the reply's `interleaved=`, if it says one. */
@@ -421,6 +424,10 @@ class H264Depacketizer {
 	private var fragment: ByteArrayOutputStream? = null
 	private var lastSequence: Int? = null
 
+	/** What the frame being rebuilt holds so far, to let go of one that never ends. */
+	private var frameBytes = 0
+	private var dropping = false
+
 	/** The access unit in Annex B once its last packet, the one with the marker, arrives. */
 	fun push(
 		rtp: RtpPacket,
@@ -429,9 +436,21 @@ class H264Depacketizer {
 		val previous = lastSequence
 		lastSequence = rtp.sequence
 		if (previous != null && rtp.sequence != ((previous + 1) and 0xFFFF)) fragment = null
-		if (rtp.payloadLength > 0) unpack(data, rtp.payloadOffset, rtp.payloadLength)
+		frameBytes += rtp.payloadLength
+		if (frameBytes > MAX_FRAME_BYTES) {
+			// A frame larger than any camera sends: an intercom that lost the marker, or worse. The rest of it goes too.
+			units.clear()
+			fragment = null
+			dropping = true
+		}
+		if (!dropping && rtp.payloadLength > 0) unpack(data, rtp.payloadOffset, rtp.payloadLength)
 		if (!rtp.marker) return null
 		fragment = null
+		frameBytes = 0
+		if (dropping) {
+			dropping = false
+			return null
+		}
 		if (units.isEmpty()) return null
 		val out = ByteArrayOutputStream()
 		units.forEach {
@@ -482,6 +501,9 @@ class H264Depacketizer {
 
 	companion object {
 		private const val STAP_A = 24
+
+		// Far above a 1080p key frame, which is some hundreds of kB.
+		private const val MAX_FRAME_BYTES = 4 * 1024 * 1024
 		private const val FU_A = 28
 		val START_CODE = byteArrayOf(0, 0, 0, 1)
 

@@ -8,9 +8,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
 /** A value under the time: any entity, which turns to a warning when it crosses its limits. */
 @Serializable
@@ -64,7 +64,8 @@ object EntityReadings {
 		configs.mapNotNull { config ->
 			val entity = entity(event, config.entity) ?: return@mapNotNull null
 			val state = entity.state ?: return@mapNotNull null
-			val number = state.toDoubleOrNull()
+			// "NaN" and "Infinity" parse as numbers, but are not values to draw.
+			val number = state.toDoubleOrNull()?.takeIf { it.isFinite() }
 			val warning =
 				number != null &&
 					((config.warnBelow != null && number < config.warnBelow) || (config.warnAbove != null && number > config.warnAbove))
@@ -87,8 +88,8 @@ object EntityReadings {
 				.flatMap { (entity.attributes?.get(it) as? JsonArray).orEmpty() }
 				.mapNotNull { item ->
 					val hour = item as? JsonObject ?: return@mapNotNull null
-					val start = hour["start"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-					val value = hour["value"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+					val start = (hour["start"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+					val value = (hour["value"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
 					try {
 						HourValue(OffsetDateTime.parse(start).toInstant(), value)
 					} catch (_: DateTimeParseException) {
@@ -139,7 +140,8 @@ object EntityReadings {
 		val state: String?,
 		val attributes: JsonObject?,
 	) {
-		fun attribute(name: String): String? = attributes?.get(name)?.jsonPrimitive?.contentOrNull
+		/** Only a plain value: another entity's attributes can hold anything. */
+		fun attribute(name: String): String? = (attributes?.get(name) as? JsonPrimitive)?.contentOrNull
 	}
 
 	private fun entity(
@@ -151,7 +153,7 @@ object EntityReadings {
 				?.let { it["a"] as? JsonObject }
 				?.let { it[id] as? JsonObject }
 				?: return null
-		val state = entity["s"]?.jsonPrimitive?.contentOrNull?.takeUnless { it == "unavailable" || it == "unknown" }
+		val state = (entity["s"] as? JsonPrimitive)?.contentOrNull?.takeUnless { it == "unavailable" || it == "unknown" }
 		return Entity(state, entity["a"] as? JsonObject)
 	}
 

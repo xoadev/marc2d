@@ -67,6 +67,24 @@ class EntityReadingsTest {
 	}
 
 	@Test
+	fun `odd states and attributes are shown as they are, never thrown`() {
+		val odd =
+			HaProtocol.parse(
+				"""
+				{"event":{"a":{
+				  "sensor.odd":{"s":"NaN","a":{"unit_of_measurement":"%"}},
+				  "sensor.nested":{"s":"5","a":{"unit_of_measurement":{"not":"text"},
+				    "raw_today":[{"start":{"not":"text"},"value":1},{"start":"2026-11-16T00:00:00+01:00","value":[2]}]}}
+				}}}
+				""".trimIndent(),
+			)
+		val nan = EntityReadings.readings(listOf(ReadingConfig("sensor.odd", "Odd", warnBelow = 1.0)), odd).single()
+		assertEquals(Reading("Odd", "NaN", "%", warning = false), nan)
+		assertEquals(Reading("Nested", "5", null, warning = false), EntityReadings.readings(listOf(ReadingConfig("sensor.nested", "Nested")), odd).single())
+		assertNull(EntityReadings.chart(ChartConfig("sensor.nested", "Nested"), odd))
+	}
+
+	@Test
 	fun `numbers lose the decimals they do not need`() {
 		assertEquals("73", EntityReadings.format(73.0))
 		assertEquals("-105.6", EntityReadings.format(-105.6))
