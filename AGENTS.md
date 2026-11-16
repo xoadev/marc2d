@@ -173,15 +173,16 @@ Spec, change, checks, commit, PR. Nothing is finished until the checks of what y
 them all. Everything reaches `main` through a PR, from its own branch.
 
 ```sh
-make lint        # ktlint and Compose rules, ruff, markdownlint and the shared head of this file
+make lint        # ktlint and Compose rules, ruff, markdownlint, typos, shellcheck and the shared head of this file
 make test        # the app's tests and the integration's, with coverage
 make check       # lint, test and the APK: what CI runs
 make format      # fixes the formatting of all the code
 make help        # lists the rest, such as lint-app or test-integration
 ```
 
-The Makefile only wraps `./kotlin` and `uv`. The build uses Kotlin Toolchain: do not add Gradle. The integration's
-tests fail below 90% coverage. CI also runs hassfest, the HACS validation and actionlint.
+The Makefile only wraps `./kotlin`, `uv` and Docker. The build uses Kotlin Toolchain: do not add Gradle. The Python
+tools are pinned in `pyproject.toml` and `uv.lock`: after changing them, run `uv lock`. The integration's tests fail
+below 90% coverage. CI also runs hassfest, the HACS validation and actionlint.
 
 ## App and integration
 

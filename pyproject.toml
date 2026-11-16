@@ -1,4 +1,29 @@
-# Only tooling for the Home Assistant integration: the app is built with Kotlin Toolchain.
+# Only tooling: the Home Assistant integration's tests and the repository's linters. The app is built with Kotlin
+# Toolchain. uv.lock pins all of it with hashes; requires-python, the Python.
+[project]
+name = "marc2d-tooling"
+version = "0"
+requires-python = "==3.14.10"
+
+[dependency-groups]
+dev = [
+  "pytest-homeassistant-custom-component==0.13.375",
+  "pytest-cov==7.1.0",
+  "ruff==0.17.4",
+  # The camera and stream integrations in the manifest need these: Home Assistant installs them at runtime, not here.
+  "PyTurboJPEG==1.8.3",
+  "av==19.0.0",
+  "numpy==2.3.2",
+  "typos==1.52.0",
+  "shellcheck-py==0.11.0.1",
+]
+
+[tool.uv]
+package = false
+required-version = ">=0.13.7"
+# Only versions at least a week old, as AGENTS.md asks.
+exclude-newer = "7 days"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
@@ -17,3 +42,7 @@ select = ["E", "F", "W", "I", "UP", "B", "S", "ASYNC", "SIM", "RET", "PL", "RUF"
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
 known-first-party = ["homeassistant", "custom_components"]
+
+[tool.typos.default.extend-words]
+hass = "hass" # Home Assistant's name for its core object
+stap = "stap" # STAP-A, the RTP packet that aggregates H.264 NAL units (RFC 6184)

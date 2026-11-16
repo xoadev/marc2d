@@ -7,8 +7,8 @@ updates:
     # Only versions at least a week old, as AGENTS.md asks.
     cooldown:
       default-days: 7
-  - package-ecosystem: pip
-    directory: /tests
+  - package-ecosystem: uv
+    directory: /
     schedule:
       interval: monthly
     # Only versions at least a week old, as AGENTS.md asks.

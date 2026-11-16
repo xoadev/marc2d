@@ -4,3 +4,5 @@ config:
     line_length: 120
     code_blocks: false
     tables: false
+# What git ignores, such as .venv, is not ours to lint.
+gitignore: true
