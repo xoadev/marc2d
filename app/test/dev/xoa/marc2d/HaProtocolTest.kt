@@ -176,13 +176,14 @@ class HaProtocolTest {
 	}
 
 	@Test
-	fun `a malformed configuration does not reveal its content`() {
+	fun `a malformed configuration does not reveal its content and says what to update`() {
 		val message = event("""{"kind":"config","config":{"intercoms":[{"password":"s3"}]}}""")
 
 		val config = assertIs<HaProtocol.PanelEvent.Config>(HaProtocol.panelEvent(message))
 		val result = assertIs<HaProtocol.ConfigResult.Invalid>(config.result)
 
 		assertFalse("s3" in result.reason)
+		assertTrue("update the app and the marc2d integration" in result.reason)
 	}
 
 	@Test

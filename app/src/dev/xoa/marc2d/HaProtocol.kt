@@ -3,7 +3,6 @@ package dev.xoa.marc2d
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -367,14 +366,15 @@ object HaProtocol {
 	}
 
 	private fun config(event: JsonObject): ConfigResult {
-		val config = event["config"] ?: return ConfigResult.Invalid("empty configuration")
+		val config = event["config"] ?: return ConfigResult.Invalid(NOT_UNDERSTOOD)
 		return try {
 			ConfigResult.Ok(json.decodeFromJsonElement<PanelConfig>(config))
-		} catch (_: SerializationException) {
-			// The exception's message could include values from the configuration, such as passwords.
-			ConfigResult.Invalid("the configuration does not have the expected format")
 		} catch (_: IllegalArgumentException) {
-			ConfigResult.Invalid("the configuration does not have the expected format")
+			// Includes SerializationException. Its message could include values from the configuration, such as passwords.
+			ConfigResult.Invalid(NOT_UNDERSTOOD)
 		}
 	}
+
+	/** The app and the integration change together, so a configuration the app cannot read means one of them is behind. */
+	private const val NOT_UNDERSTOOD = "not understood, update the app and the marc2d integration in Home Assistant"
 }

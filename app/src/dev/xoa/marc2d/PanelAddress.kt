@@ -21,24 +21,39 @@ fun panelAddress(context: Context): Flow<String?> =
 				.Builder()
 				.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
 				.build()
+		val addresses = NetworkAddresses()
 		val callback =
 			object : ConnectivityManager.NetworkCallback() {
 				override fun onLinkPropertiesChanged(
 					network: Network,
 					properties: LinkProperties,
 				) {
-					trySend(
+					val address =
 						properties.linkAddresses
 							.map { it.address }
 							.firstOrNull { it is Inet4Address && !it.isLoopbackAddress && !it.isLinkLocalAddress }
-							?.hostAddress,
-					)
+							?.hostAddress
+					trySend(addresses.update(network.networkHandle, address))
 				}
 
 				override fun onLost(network: Network) {
-					trySend(null)
+					trySend(addresses.update(network.networkHandle, null))
 				}
 			}
 		manager.registerNetworkCallback(request, callback)
 		awaitClose { manager.unregisterNetworkCallback(callback) }
 	}.distinctUntilChanged()
+
+/** The address of each network that has one, by its handle. The panel's is the one that changed last and is still there. */
+internal class NetworkAddresses {
+	private val byNetwork = LinkedHashMap<Long, String>()
+
+	fun update(
+		network: Long,
+		address: String?,
+	): String? {
+		byNetwork.remove(network)
+		if (address != null) byNetwork[network] = address
+		return byNetwork.values.lastOrNull()
+	}
+}

@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PanelReadingsTest {
@@ -93,6 +94,26 @@ class PanelUpdaterTest {
 		assertTrue(isUpdateUrl("https://github.com/xoadev/marc2d/releases/download/v1.0.0/marc2d.apk"))
 		assertFalse(isUpdateUrl("http://192.0.2.1/marc2d.apk"))
 		assertFalse(isUpdateUrl("file:///sdcard/marc2d.apk"))
+	}
+}
+
+class WindowBrightnessTest {
+	@Test
+	fun `brightness from Home Assistant stays within what a window accepts`() {
+		assertEquals(0.4f, windowBrightness(40.0))
+		assertEquals(0f, windowBrightness(-10.0))
+		assertEquals(1f, windowBrightness(150.0))
+	}
+}
+
+class NetworkAddressesTest {
+	@Test
+	fun `losing one network reports the address of another that is still there`() {
+		val addresses = NetworkAddresses()
+		assertEquals("192.0.2.10", addresses.update(1, "192.0.2.10"))
+		assertEquals("192.0.2.20", addresses.update(2, "192.0.2.20"))
+		assertEquals("192.0.2.10", addresses.update(2, null))
+		assertNull(addresses.update(1, null))
 	}
 }
 

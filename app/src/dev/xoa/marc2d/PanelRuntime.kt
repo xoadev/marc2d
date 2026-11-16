@@ -28,6 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 
+/** A window takes 0 to 1: below 0 it would silently go back to the system's brightness. */
+internal fun windowBrightness(percent: Double): Float = (percent / 100).toFloat().coerceIn(0f, 1f)
+
 /** Connects the panel's pieces. It lives as long as the process; the service only keeps it running. */
 class PanelRuntime(
 	private val context: Context,
@@ -298,7 +301,7 @@ class PanelRuntime(
 
 			is HaProtocol.PanelEvent.Brightness -> {
 				presence.ignoreChanges(SystemClock.elapsedRealtime())
-				_brightness.value = (command.percent / 100).toFloat()
+				_brightness.value = windowBrightness(command.percent)
 			}
 
 			is HaProtocol.PanelEvent.Config -> {

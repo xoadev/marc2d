@@ -55,7 +55,7 @@ suspend fun enrollmentProblem(
 		// It is an IllegalStateException: without this, it would read as a wrong address.
 		throw e
 	} catch (_: EnrollmentRejectedException) {
-		"The code is not valid or has expired"
+		"The code is not valid or has expired: press Submit in Home Assistant for a new one"
 	} catch (e: IOException) {
 		"Cannot reach Home Assistant at ${invite.url} (${e::class.simpleName})"
 	} catch (_: IllegalArgumentException) {
