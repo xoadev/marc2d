@@ -30,16 +30,19 @@ internal fun nalStarts(annexB: ByteArray): Sequence<Int> =
 		}
 	}
 
-/** Splits Annex B data into NAL units, without their start codes. */
-fun nalUnits(annexB: ByteArray): List<ByteArray> {
+/** Where each NAL unit of Annex B data is, without its start code. */
+internal fun nalRanges(annexB: ByteArray): List<IntRange> {
 	val starts = nalStarts(annexB).toList()
 	return starts.mapIndexed { index, start ->
 		var end = if (index + 1 < starts.size) starts[index + 1] - 3 else annexB.size
 		// A four-byte start code leaves its first zero at the end of the previous unit.
 		while (end > start && annexB[end - 1] == ZERO) end--
-		annexB.copyOfRange(start, end)
+		start until end
 	}
 }
+
+/** Splits Annex B data into NAL units, without their start codes. */
+fun nalUnits(annexB: ByteArray): List<ByteArray> = nalRanges(annexB).map { annexB.copyOfRange(it.first, it.last + 1) }
 
 /** Finds the SPS and the PPS in what the encoder sends as its configuration. */
 fun h264Parameters(annexB: ByteArray): H264Parameters? {
@@ -66,15 +69,24 @@ internal class RtpWriter(
 	private var octets = 0
 	private var lastReportUs: Long? = null
 
+	/** The payload is [prefix] and then [payload] from [from] to [to], copied once into the packet. */
 	fun packet(
 		payload: ByteArray,
 		timestampUs: Long,
 		marker: Boolean,
+		from: Int = 0,
+		to: Int = payload.size,
+		prefix: ByteArray = NO_PREFIX,
 	): ByteArray {
-		val packet = rtpHeader(payloadType, sequence, rtpTime(timestampUs), ssrc, marker) + payload
+		val header = rtpHeader(payloadType, sequence, rtpTime(timestampUs), ssrc, marker)
+		val size = prefix.size + to - from
+		val packet = ByteArray(header.size + size)
+		header.copyInto(packet)
+		prefix.copyInto(packet, header.size)
+		payload.copyInto(packet, header.size + prefix.size, from, to)
 		sequence = (sequence + 1) and 0xFFFF
 		packets++
-		octets += payload.size
+		octets += size
 		return packet
 	}
 
@@ -112,14 +124,16 @@ class H264Packetizer(
 ) {
 	private val writer = RtpWriter(RTP_PAYLOAD_TYPE, VIDEO_CLOCK, ssrc)
 
+	/** Each packet is built once, straight from the frame: at 1080p a copy more per byte shows in the panel's CPU. */
 	fun packets(frame: H264Frame): List<ByteArray> {
-		val units = nalUnits(frame.data).filter { it.isNotEmpty() }
+		val data = frame.data
+		val units = nalRanges(data).filterNot { it.isEmpty() }
 		return units.flatMapIndexed { index, unit ->
 			val isLastUnit = index == units.lastIndex
-			if (unit.size + RTP_HEADER <= maxPacket) {
-				listOf(writer.packet(unit, frame.timestampUs, isLastUnit))
+			if (unit.last + 1 - unit.first + RTP_HEADER <= maxPacket) {
+				listOf(writer.packet(data, frame.timestampUs, isLastUnit, unit.first, unit.last + 1))
 			} else {
-				fragments(unit, frame.timestampUs, isLastUnit)
+				fragments(data, unit, frame.timestampUs, isLastUnit)
 			}
 		}
 	}
@@ -127,19 +141,20 @@ class H264Packetizer(
 	fun senderReportIfDue(timestampUs: Long): ByteArray? = writer.senderReportIfDue(timestampUs)
 
 	private fun fragments(
-		unit: ByteArray,
+		data: ByteArray,
+		unit: IntRange,
 		timestampUs: Long,
 		isLastUnit: Boolean,
 	): List<ByteArray> {
-		val indicator = ((unit[0].toInt() and 0xE0) or FU_A).toByte()
-		val type = unit[0].nalType
+		val indicator = ((data[unit.first].toInt() and 0xE0) or FU_A).toByte()
+		val type = data[unit.first].nalType
 		val room = maxPacket - RTP_HEADER - 2
-		val chunks = (1 until unit.size step room).toList()
+		val end = unit.last + 1
+		val chunks = (unit.first + 1 until end step room).toList()
 		return chunks.mapIndexed { index, start ->
-			val end = minOf(start + room, unit.size)
 			val isLast = index == chunks.lastIndex
 			val header = type or (if (index == 0) FU_START else 0) or (if (isLast) FU_END else 0)
-			writer.packet(byteArrayOf(indicator, header.toByte()) + unit.copyOfRange(start, end), timestampUs, isLast && isLastUnit)
+			writer.packet(data, timestampUs, isLast && isLastUnit, start, minOf(start + room, end), byteArrayOf(indicator, header.toByte()))
 		}
 	}
 }
@@ -167,7 +182,7 @@ class AacPacketizer(
 	fun packet(frame: AacFrame): ByteArray {
 		val size = frame.data.size shl AU_INDEX_BITS
 		val header = byteArrayOf(0, AU_HEADER_BITS, (size shr 8).toByte(), size.toByte())
-		return writer.packet(header + frame.data, frame.timestampUs, true)
+		return writer.packet(frame.data, frame.timestampUs, true, prefix = header)
 	}
 
 	fun senderReportIfDue(timestampUs: Long): ByteArray? = writer.senderReportIfDue(timestampUs)
@@ -177,6 +192,7 @@ const val RTP_PAYLOAD_TYPE = 96
 const val RTP_AUDIO_PAYLOAD_TYPE = 97
 private const val MAX_RTP_PACKET = 1400
 private const val RTP_HEADER = 12
+private val NO_PREFIX = ByteArray(0)
 
 /** The clock of H.264 over RTP, as RFC 6184 sets it. */
 internal const val VIDEO_CLOCK = 90_000

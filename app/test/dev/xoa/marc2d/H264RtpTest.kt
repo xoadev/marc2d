@@ -116,6 +116,27 @@ class H264RtpTest {
 		assertContentEquals(unit, rebuilt)
 	}
 
+	/** Packets are built straight from the frame, without copies: they have to be the very bytes of header, FU header and slice. */
+	@Test
+	fun `every packet is the RTP header and its slice of the frame, byte for byte`() {
+		val big = ByteArray(3000) { (it % 251).toByte() }.also { it[0] = 0x65 }
+		val data = frame(byteArrayOf(0x67, 1, 2), big, byteArrayOf(0x41, 9)).data
+		val packets = H264Packetizer(maxPacket = 1400, ssrc = 7).packets(H264Frame(data, 1_000_000, true))
+		val first = ((packets[0][2].toInt() and 0xFF) shl 8) or (packets[0][3].toInt() and 0xFF)
+		val header = { index: Int, marker: Boolean -> rtpHeader(96, (first + index) and 0xFFFF, 90_000, 7, marker) }
+		val fragment = { flags: Int, from: Int, to: Int -> byteArrayOf(0x7C, (flags or 5).toByte()) + big.copyOfRange(from, to) }
+		val expected =
+			listOf(
+				header(0, false) + byteArrayOf(0x67, 1, 2),
+				header(1, false) + fragment(0x80, 1, 1387),
+				header(2, false) + fragment(0, 1387, 2773),
+				header(3, false) + fragment(0x40, 2773, 3000),
+				header(4, true) + byteArrayOf(0x41, 9),
+			)
+		assertEquals(expected.size, packets.size)
+		expected.zip(packets).forEach { (want, got) -> assertContentEquals(want, got) }
+	}
+
 	@Test
 	fun `the sequence number has no gaps and wraps around`() {
 		val packets = H264Packetizer().packets(frame(*Array(70000) { byteArrayOf(0x41) }))

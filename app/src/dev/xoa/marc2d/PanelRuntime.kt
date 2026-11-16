@@ -170,10 +170,12 @@ class PanelRuntime(
 
 	/** Only one can hold the microphone: a call, or the wake phrase, which waits for the call to end. */
 	private suspend fun keepListening() {
-		combine(store.config.map { it.voice }, phone.call.map { it != null }) { voice, inCall -> voice.takeUnless { inCall } }
+		combine(store.config.map { it.voice }, phone.call.map { it != null }, ::Pair)
 			.distinctUntilChanged()
-			.collectLatest { config ->
-				if (config == null) return@collectLatest
+			.collectLatest { (config, inCall) ->
+				// A call only pauses it: the model stays loaded for when the call ends.
+				if (config == null) voice.close()
+				if (config == null || inCall) return@collectLatest
 				while (true) {
 					try {
 						voice.run(config.pipeline, config.phrase)

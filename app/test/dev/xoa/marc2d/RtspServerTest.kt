@@ -5,6 +5,7 @@ import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -204,6 +205,12 @@ class RtspServerTest {
 		val headers: Map<String, String>,
 		val body: String,
 	)
+
+	@Test
+	fun `an interleaved packet is a dollar, its channel, its length and the packet`() {
+		val packet = ByteArray(300) { it.toByte() }
+		assertContentEquals(byteArrayOf('$'.code.toByte(), 2, 1, 44) + packet, interleaved(2, packet))
+	}
 
 	@Test
 	fun `nothing turns the camera on before authenticating`() {

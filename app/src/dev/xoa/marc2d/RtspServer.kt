@@ -326,9 +326,9 @@ class RtspServer(
 				runInterruptible(Dispatchers.IO) {
 					try {
 						synchronized(output) {
-							outgoing.packets.forEach { output.write(interleaved(channel, it)) }
+							outgoing.packets.forEach { output.writeInterleaved(channel, it) }
 							// RTCP goes on the channel after its track's.
-							outgoing.report?.let { output.write(interleaved(channel + 1, it)) }
+							outgoing.report?.let { output.writeInterleaved(channel + 1, it) }
 							output.flush()
 						}
 					} catch (_: IOException) {
@@ -624,7 +624,19 @@ internal fun rtspHeaders(lines: List<String>): Map<String, String> =
 internal fun interleaved(
 	channel: Int,
 	packet: ByteArray,
-): ByteArray = byteArrayOf(INTERLEAVED.toByte(), channel.toByte(), (packet.size shr 8).toByte(), packet.size.toByte()) + packet
+): ByteArray = ByteArrayOutputStream(INTERLEAVED_PREFIX + packet.size).apply { writeInterleaved(channel, packet) }.toByteArray()
+
+/** The same, written as it goes: the packet is not copied to put the prefix before it, once for each viewer. */
+internal fun OutputStream.writeInterleaved(
+	channel: Int,
+	packet: ByteArray,
+) {
+	write(INTERLEAVED)
+	write(channel)
+	write(packet.size shr 8)
+	write(packet.size)
+	write(packet)
+}
 
 /** The channel and the packet of an interleaved frame, once its `$` has been read. Nothing if the stream ends, even halfway. */
 internal fun readInterleaved(input: InputStream): Pair<Int, ByteArray>? {
@@ -712,4 +724,5 @@ private const val RTSP_TRACK = "track0"
 private const val RTSP_SOUND_TRACK = "track1"
 private const val MAX_REQUEST = 16 * 1024
 internal const val INTERLEAVED = '$'.code
+private const val INTERLEAVED_PREFIX = 4
 private val INTERLEAVED_CHANNEL = Regex("interleaved=(\\d+)")

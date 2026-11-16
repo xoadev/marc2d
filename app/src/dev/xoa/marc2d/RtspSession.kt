@@ -383,8 +383,11 @@ internal class RtspRequests(
  * with a fragment lost is dropped, so the decoder never gets a broken one.
  */
 class H264Depacketizer {
-	private val units = mutableListOf<ByteArray>()
-	private var fragment: ByteArrayOutputStream? = null
+	/** The access unit being rebuilt, in Annex B: each payload is copied once, straight into it. */
+	private val frame = AccessUnit()
+
+	/** Where the unit being put together from fragments starts in [frame], to cut it off if a fragment is lost. */
+	private var fragmentStart: Int? = null
 	private var lastSequence: Int? = null
 
 	/** What the frame being rebuilt holds so far, to let go of one that never ends. */
@@ -398,30 +401,24 @@ class H264Depacketizer {
 	): ByteArray? {
 		val previous = lastSequence
 		lastSequence = rtp.sequence
-		if (previous != null && rtp.sequence != ((previous + 1) and 0xFFFF)) fragment = null
+		if (previous != null && rtp.sequence != ((previous + 1) and 0xFFFF)) dropFragment()
 		frameBytes += rtp.payloadLength
 		if (frameBytes > MAX_FRAME_BYTES) {
 			// A frame larger than any camera sends: an intercom that lost the marker, or worse. The rest of it goes too.
-			units.clear()
-			fragment = null
+			frame.reset()
+			fragmentStart = null
 			dropping = true
 		}
 		if (!dropping && rtp.payloadLength > 0) unpack(data, rtp.payloadOffset, rtp.payloadLength)
 		if (!rtp.marker) return null
-		fragment = null
+		dropFragment()
 		frameBytes = 0
 		if (dropping) {
 			dropping = false
 			return null
 		}
-		if (units.isEmpty()) return null
-		val out = ByteArrayOutputStream()
-		units.forEach {
-			out.write(START_CODE)
-			out.write(it)
-		}
-		units.clear()
-		return out.toByteArray()
+		if (frame.size() == 0) return null
+		return frame.toByteArray().also { frame.reset() }
 	}
 
 	private fun unpack(
@@ -432,7 +429,7 @@ class H264Depacketizer {
 		val header = data[offset].toInt() and 0xFF
 		when (data[offset].nalType) {
 			in 1..23 -> {
-				units += data.copyOfRange(offset, offset + length)
+				addUnit(data, offset, length)
 			}
 
 			STAP_A -> {
@@ -441,7 +438,7 @@ class H264Depacketizer {
 					val size = ((data[at].toInt() and 0xFF) shl 8) or (data[at + 1].toInt() and 0xFF)
 					at += 2
 					if (size == 0 || at + size > offset + length) break
-					units += data.copyOfRange(at, at + size)
+					addUnit(data, at, size)
 					at += size
 				}
 			}
@@ -450,15 +447,38 @@ class H264Depacketizer {
 				if (length < 2) return
 				val fu = data[offset + 1].toInt() and 0xFF
 				if (fu and FU_START != 0) {
-					fragment = ByteArrayOutputStream().apply { write((header and 0xE0) or data[offset + 1].nalType) }
+					dropFragment()
+					fragmentStart = frame.size()
+					frame.write(START_CODE)
+					frame.write((header and 0xE0) or data[offset + 1].nalType)
 				}
-				val building = fragment ?: return
-				building.write(data, offset + 2, length - 2)
-				if (fu and FU_END != 0) {
-					units += building.toByteArray()
-					fragment = null
-				}
+				if (fragmentStart == null) return
+				frame.write(data, offset + 2, length - 2)
+				if (fu and FU_END != 0) fragmentStart = null
 			}
+		}
+	}
+
+	private fun addUnit(
+		data: ByteArray,
+		offset: Int,
+		length: Int,
+	) {
+		// A whole unit in the middle of another's fragments: the stream is broken, and the fragmented one with it.
+		dropFragment()
+		frame.write(START_CODE)
+		frame.write(data, offset, length)
+	}
+
+	private fun dropFragment() {
+		fragmentStart?.let(frame::truncate)
+		fragmentStart = null
+	}
+
+	/** A buffer that can let go of its end, kept from frame to frame. */
+	private class AccessUnit : ByteArrayOutputStream() {
+		fun truncate(size: Int) {
+			count = size
 		}
 	}
 

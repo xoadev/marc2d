@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** A failed read does not recover by itself, as when the audio server restarts, and retrying at once would spin at full CPU. */
@@ -26,19 +28,24 @@ class VoiceListener(
 	private val onWake: (AssistRun) -> Unit,
 	private val onListening: (Boolean) -> Unit,
 ) {
-	/** Runs until cancelled: cancelling it releases the microphone, as a call needs. */
+	// The model is 40 MB and takes seconds to load: it outlives each run, which every call cancels, so the wake phrase is not
+	// deaf after each ring. The lock keeps close() from freeing it under a run.
+	private val lock = Mutex()
+	private var vosk: Model? = null
+	private var kept: Recognizer? = null
+	private var grammar: String? = null
+
+	/** Runs until cancelled: cancelling it releases the microphone, as a call needs, and keeps the model. */
 	suspend fun run(
 		pipeline: String?,
 		phrase: String,
 	) = withContext(Dispatchers.IO) {
-		model.ensure()
-		val buffer = ByteArray(BUFFER_BYTES)
-		val wakeWord = WakeWord(phrase)
-		val history = AudioHistory(HISTORY_BYTES)
-		Model(model.path.path).use { vosk ->
-			Recognizer(vosk, SAMPLE_RATE.toFloat(), wakeWord.grammar).use { recognizer ->
-				// Without the words, Vosk does not say how sure it is.
-				recognizer.setWords(true)
+		lock.withLock {
+			model.ensure()
+			val buffer = ByteArray(BUFFER_BYTES)
+			val wakeWord = WakeWord(phrase)
+			val history = AudioHistory(HISTORY_BYTES)
+			recognizer(wakeWord.grammar).let { recognizer ->
 				// Opened last, so that a model that fails to load does not leave it behind on each retry.
 				val record = monoMicrophone(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, BUFFER_BYTES * 4)
 				try {
@@ -65,6 +72,31 @@ class VoiceListener(
 					record.release()
 				}
 			}
+		}
+	}
+
+	/** Frees the model, for when the wake phrase is turned off. The next run loads it again. */
+	suspend fun close() =
+		lock.withLock {
+			kept?.close()
+			kept = null
+			grammar = null
+			vosk?.close()
+			vosk = null
+		}
+
+	/** The one the last run used while the phrase is the same, reset from wherever a cancelled run left it. */
+	private fun recognizer(grammar: String): Recognizer {
+		val last = kept
+		if (last != null && grammar == this.grammar) return last.apply { reset() }
+		last?.close()
+		kept = null
+		val loaded = vosk ?: Model(model.path.path).also { vosk = it }
+		return Recognizer(loaded, SAMPLE_RATE.toFloat(), grammar).also {
+			// Without the words, Vosk does not say how sure it is.
+			it.setWords(true)
+			kept = it
+			this.grammar = grammar
 		}
 	}
 

@@ -114,6 +114,21 @@ class RtspSessionTest {
 	}
 
 	@Test
+	fun `a lost fragment takes only its own unit out of the frame`() {
+		val depacketizer = H264Depacketizer()
+		val sps = byteArrayOf(0x67, 1, 2)
+		val first = byteArrayOf(0x7C, 0x85.toByte(), 10, 11)
+		val last = byteArrayOf(0x7C, 0x45, 12)
+		val single = byteArrayOf(0x41, 7)
+		assertNull(depacketizer.push(rtp(1, false, sps), rtpData(1, false, sps)))
+		assertNull(depacketizer.push(rtp(2, false, first), rtpData(2, false, first)))
+		assertNull(depacketizer.push(rtp(4, false, last), rtpData(4, false, last)))
+		val frame = assertNotNull(depacketizer.push(rtp(5, true, single), rtpData(5, true, single)))
+		val start = H264Depacketizer.START_CODE
+		assertContentEquals(start + sps + start + single, frame)
+	}
+
+	@Test
 	fun `the credentials are percent-decoded, and a plus stays a plus`() {
 		assertEquals("admin" to "p+s@ss", RtspSession.credentials("admin:p+s%40ss"))
 		assertEquals("admin" to "a:b", RtspSession.credentials("admin:a%3Ab"))
