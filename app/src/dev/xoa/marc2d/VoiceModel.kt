@@ -3,8 +3,6 @@ package dev.xoa.marc2d
 import java.io.File
 import java.io.InputStream
 import java.net.URI
-import java.security.DigestInputStream
-import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
 /** The wake phrase model is 40 MB and optional: it is downloaded when voice is turned on, not shipped in the APK. */
@@ -24,7 +22,7 @@ class VoiceModel(
 		root.mkdirs()
 		val zip = File(root, "model.zip")
 		download(MODEL_URL, zip)
-		val hash = zip.inputStream().use(::sha256)
+		val hash = zip.inputStream().use { sha256(it) }
 		check(hash == MODEL_SHA256) { "Unexpected voice model" }
 		zip.inputStream().use { unzip(it, root) }
 		zip.delete()
@@ -49,12 +47,6 @@ class VoiceModel(
 					readTimeout = timeoutMillis
 				}
 			connection.getInputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
-		}
-
-		fun sha256(input: InputStream): String {
-			val digest = MessageDigest.getInstance("SHA-256")
-			DigestInputStream(input, digest).use { it.copyTo(java.io.OutputStream.nullOutputStream()) }
-			return digest.digest().joinToString("") { "%02x".format(it) }
 		}
 
 		/** Refuses entries that would land outside [target]. */

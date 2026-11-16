@@ -67,9 +67,9 @@ class RtspSessionTest {
 
 	@Test
 	fun `the channel is the one the server chose`() {
-		assertEquals(10, RtspSession.interleavedChannel("RTP/AVP/TCP;unicast;interleaved=10-11;ssrc=00000000"))
-		assertNull(RtspSession.interleavedChannel("RTP/AVP;unicast;client_port=5000-5001"))
-		assertNull(RtspSession.interleavedChannel(null))
+		assertEquals(10, interleavedChannel("RTP/AVP/TCP;unicast;interleaved=10-11;ssrc=00000000"))
+		assertNull(interleavedChannel("RTP/AVP;unicast;client_port=5000-5001"))
+		assertNull(interleavedChannel(null))
 	}
 
 	@Test

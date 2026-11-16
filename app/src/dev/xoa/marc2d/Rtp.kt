@@ -71,11 +71,12 @@ internal fun rtpHeader(
 	sequence: Int,
 	timestamp: Long,
 	ssrc: Int,
+	marker: Boolean = false,
 ): ByteArray =
 	ByteBuffer
 		.allocate(12)
 		.put(0x80.toByte())
-		.put(payloadType.toByte())
+		.put((payloadType or (if (marker) 0x80 else 0)).toByte())
 		.putShort(sequence.toShort())
 		.putInt(timestamp.toInt())
 		.putInt(ssrc)

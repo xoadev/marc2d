@@ -272,7 +272,7 @@ internal fun recordMicrophone(
 	running: () -> Boolean,
 	send: (ShortArray) -> Unit,
 ) {
-	val frameSamples = sampleRate / MICROPHONE_FRAMES_PER_SECOND
+	val frameSamples = sampleRate / VOICE_FRAMES_PER_SECOND
 	val minimum = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 	// The communication source gets Android's processing for calls, with the echo of the speaker taken out where it can.
 	val microphone =
@@ -315,5 +315,4 @@ internal fun useSpeaker(context: Context) {
 		?.let(manager::setCommunicationDevice)
 }
 
-private const val MICROPHONE_FRAMES_PER_SECOND = 50
 private const val MICROPHONE_BUFFERED_FRAMES = 6

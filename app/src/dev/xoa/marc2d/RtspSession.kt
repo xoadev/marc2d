@@ -19,9 +19,8 @@ data class RtspAudioTrack(
 	val codec: String,
 	val sampleRate: Int,
 ) {
-	/** One packet of the voice: 20 ms. */
 	val frameSamples: Int
-		get() = sampleRate / FRAMES_PER_SECOND
+		get() = sampleRate / VOICE_FRAMES_PER_SECOND
 
 	fun encode(samples: ShortArray): ByteArray =
 		when (codec) {
@@ -40,11 +39,10 @@ data class RtspAudioTrack(
 			"PCMA" -> ShortArray(length) { alawToLinear(bytes[offset + it]) }
 			else -> ShortArray(length) { ulawToLinear(bytes[offset + it]) }
 		}
-
-	private companion object {
-		const val FRAMES_PER_SECOND = 50
-	}
 }
+
+/** The voice goes in packets of 20 ms, both from the microphone and to the intercom. */
+internal const val VOICE_FRAMES_PER_SECOND = 50
 
 /** The H.264 video of the offer, with the parameters it announces, if it does. */
 class RtspVideoTrack(
@@ -168,8 +166,7 @@ class RtspSession private constructor(
 		while (pending.size >= size) {
 			val payload = track.encode(pending.copyOfRange(0, size))
 			pending = pending.copyOfRange(size, pending.size)
-			val rtp = rtpHeader(track.payloadType, sequence, timestamp, ssrc) + payload
-			requests.write(byteArrayOf('$'.code.toByte(), channel.toByte(), (rtp.size shr 8).toByte(), rtp.size.toByte()) + rtp)
+			requests.write(interleaved(channel, rtpHeader(track.payloadType, sequence, timestamp, ssrc) + payload))
 			sequence = (sequence + 1) and 0xFFFF
 			timestamp = (timestamp + size) and 0xFFFFFFFFL
 		}
@@ -228,7 +225,7 @@ class RtspSession private constructor(
 						requests.session = setup.headers["session"]?.substringBefore(";")?.trim() ?: throw IOException("No session")
 					}
 					// The server may choose its own channel: a Dahua VTO answers 10-11 whatever is asked, and drops the rest.
-					val channel = interleavedChannel(setup.headers["transport"]) ?: next
+					val channel = interleavedChannel(setup.headers["transport"])?.takeIf { it in 0..255 } ?: next
 					if (media == null) voiceChannel = channel else channels[channel] = media
 					next += 2
 				}
@@ -248,17 +245,6 @@ class RtspSession private constructor(
 			val parts = rawUserInfo.split(":", limit = 2).map { URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8) }
 			return parts[0] to parts.getOrElse(1) { "" }
 		}
-
-		/** The first channel of the reply's `interleaved=`, if it says one. */
-		fun interleavedChannel(transport: String?): Int? =
-			transport
-				?.let {
-					Regex("interleaved=(\\d+)")
-						.find(it)
-						?.groupValues
-						?.get(1)
-						?.toIntOrNull()
-				}?.takeIf { it in 0..255 }
 
 		/** As RFC 2326 and the cameras do it: an absolute control stays, a relative one goes after the base. */
 		fun controlUri(
@@ -342,7 +328,7 @@ internal class RtspRequests(
 	fun nextPacket(): Pair<Int, ByteArray>? {
 		val first = input.read()
 		if (first < 0) throw IOException("Connection closed")
-		if (first != '$'.code) {
+		if (first != INTERLEAVED) {
 			reply(first)
 			return null
 		}
@@ -372,7 +358,7 @@ internal class RtspRequests(
 		while (true) {
 			val first = input.read()
 			if (first < 0) throw IOException("Connection closed")
-			if (first == '$'.code) {
+			if (first == INTERLEAVED) {
 				input.read()
 				val length = (input.read() shl 8) or input.read()
 				input.skipNBytes(length.toLong())
@@ -383,31 +369,15 @@ internal class RtspRequests(
 	}
 
 	private fun reply(first: Int): RtspResponse {
-		val statusLine = (first.toChar() + (line() ?: throw IOException("Connection closed"))).trim()
+		val statusLine = (first.toChar() + line()).trim()
 		val status = statusLine.split(" ").getOrNull(1)?.toIntOrNull() ?: throw IOException("Bad reply")
-		val headers = mutableMapOf<String, String>()
-		while (true) {
-			val header = line() ?: throw IOException("Connection closed")
-			if (header.isEmpty()) break
-			val colon = header.indexOf(':')
-			if (colon > 0) headers[header.take(colon).trim().lowercase()] = header.substring(colon + 1).trim()
-		}
+		val headers = rtspHeaders(generateSequence(::line).takeWhile { it.isNotEmpty() }.toList())
 		val length = headers["content-length"]?.toIntOrNull() ?: 0
 		if (length !in 0..MAX_BODY) throw IOException("Body too long")
 		return RtspResponse(status, headers, String(input.readNBytes(length), Charsets.UTF_8))
 	}
 
-	private fun line(): String? {
-		val line = ByteArrayOutputStream()
-		while (true) {
-			val byte = input.read()
-			if (byte < 0) return null
-			if (byte == '\n'.code) break
-			if (line.size() >= MAX_BODY) throw IOException("Line too long")
-			if (byte != '\r'.code) line.write(byte)
-		}
-		return line.toString(Charsets.UTF_8)
-	}
+	private fun line(): String = readRtspLine(input, MAX_BODY) ?: throw IOException("Connection closed")
 
 	private companion object {
 		const val UNAUTHORIZED = 401

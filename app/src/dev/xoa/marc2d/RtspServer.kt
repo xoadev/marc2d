@@ -327,9 +327,9 @@ class RtspServer(
 				runInterruptible(Dispatchers.IO) {
 					try {
 						synchronized(output) {
-							outgoing.packets.forEach { writeInterleaved(channel, it) }
+							outgoing.packets.forEach { output.write(interleaved(channel, it)) }
 							// RTCP goes on the channel after its track's.
-							outgoing.report?.let { writeInterleaved(channel + 1, it) }
+							outgoing.report?.let { output.write(interleaved(channel + 1, it)) }
 							output.flush()
 						}
 					} catch (_: IOException) {
@@ -337,17 +337,6 @@ class RtspServer(
 					}
 				}
 			}
-		}
-
-		private fun writeInterleaved(
-			channel: Int,
-			packet: ByteArray,
-		) {
-			output.write(INTERLEAVED)
-			output.write(channel)
-			output.write(packet.size shr 8)
-			output.write(packet.size and 0xFF)
-			output.write(packet)
 		}
 
 		/** The next request, skipping the RTCP that clients send over the same connection. */
@@ -468,13 +457,8 @@ class RtspServer(
 				respond(NOT_FOUND, cseq)
 				return true
 			}
-			val channel =
-				Regex("interleaved=(\\d+)")
-					.find(transport)
-					?.groupValues
-					?.get(1)
-					?.toIntOrNull()
-					?.takeIf { it in 0..254 } ?: if (isSound) DEFAULT_SOUND_CHANNEL else 0
+			// Up to 254: RTCP goes on the channel after it.
+			val channel = interleavedChannel(transport)?.takeIf { it in 0..254 } ?: if (isSound) DEFAULT_SOUND_CHANNEL else 0
 			if (isSound) soundChannel = channel else videoChannel = channel
 			respond(OK, cseq, listOf("Transport" to "RTP/AVP/TCP;unicast;interleaved=$channel-${channel + 1}", sessionHeader()))
 			return true
@@ -542,7 +526,7 @@ class RtspServer(
 	private fun randomHex(): String {
 		val bytes = ByteArray(16)
 		random.nextBytes(bytes)
-		return bytes.joinToString("") { "%02x".format(it) }
+		return bytes.toHex()
 	}
 
 	private fun logDisconnect(e: Exception) {
@@ -555,7 +539,6 @@ class RtspServer(
 	companion object {
 		const val RTSP_USER = "marc2d"
 		private const val REALM = "marc2d"
-		private const val INTERLEAVED = '$'.code
 		private const val OK = "200 OK"
 		private const val BAD_REQUEST = "400 Bad Request"
 		private const val UNAUTHORIZED = "401 Unauthorized"
@@ -603,7 +586,7 @@ internal fun parseRequest(input: InputStream): RtspRequest? {
 	val lines = mutableListOf<String>()
 	var total = 0
 	while (true) {
-		val line = readLine(input) ?: return null
+		val line = readRtspLine(input, MAX_REQUEST) ?: return null
 		if (line.isEmpty()) break
 		total += line.length
 		if (total > MAX_REQUEST) throw IOException("Request too long")
@@ -611,30 +594,50 @@ internal fun parseRequest(input: InputStream): RtspRequest? {
 	}
 	val parts = lines.firstOrNull()?.split(" ") ?: throw IOException("Empty request")
 	if (parts.size != 3) throw IOException("Bad request line")
-	val headers =
-		lines
-			.drop(1)
-			.mapNotNull { line ->
-				val colon = line.indexOf(':')
-				if (colon < 0) null else line.take(colon).trim().lowercase() to line.substring(colon + 1).trim()
-			}.toMap()
+	val headers = rtspHeaders(lines.drop(1))
 	val length = headers["content-length"]?.toLongOrNull() ?: 0
 	if (length !in 0..MAX_REQUEST) throw IOException("Body too long")
 	input.skipNBytes(length)
 	return RtspRequest(parts[0], parts[1], headers)
 }
 
-private fun readLine(input: InputStream): String? {
+/** A line without its CRLF, or nothing if the connection ends. [limit] bounds it: the other side may be anyone. */
+internal fun readRtspLine(
+	input: InputStream,
+	limit: Int,
+): String? {
 	val line = ByteArrayOutputStream()
 	while (true) {
 		val byte = input.read()
 		if (byte < 0) return null
 		if (byte == '\n'.code) break
-		if (line.size() >= MAX_REQUEST) throw IOException("Line too long")
+		if (line.size() >= limit) throw IOException("Line too long")
 		if (byte != '\r'.code) line.write(byte)
 	}
 	return line.toString(Charsets.UTF_8)
 }
+
+/** `Name: value` lines, by lowercase name. */
+internal fun rtspHeaders(lines: List<String>): Map<String, String> =
+	lines
+		.mapNotNull { line ->
+			val colon = line.indexOf(':')
+			if (colon > 0) line.take(colon).trim().lowercase() to line.substring(colon + 1).trim() else null
+		}.toMap()
+
+/** An RTP or RTCP packet as it goes over the RTSP connection (RFC 2326, 10.12). */
+internal fun interleaved(
+	channel: Int,
+	packet: ByteArray,
+): ByteArray = byteArrayOf(INTERLEAVED.toByte(), channel.toByte(), (packet.size shr 8).toByte(), packet.size.toByte()) + packet
+
+/** The first channel of a Transport header's `interleaved=`, if it says one. */
+internal fun interleavedChannel(transport: String?): Int? =
+	transport
+		?.let { INTERLEAVED_CHANNEL.find(it) }
+		?.groupValues
+		?.get(1)
+		?.toIntOrNull()
 
 internal fun digestFields(header: String): Map<String, String>? {
 	if (!header.startsWith("Digest ", ignoreCase = true)) return null
@@ -647,7 +650,7 @@ internal fun md5(text: String): String =
 	MessageDigest
 		.getInstance("MD5")
 		.digest(text.toByteArray())
-		.joinToString("") { "%02x".format(it) }
+		.toHex()
 
 internal fun sdp(
 	parameters: H264Parameters,
@@ -658,7 +661,8 @@ internal fun sdp(
 		parameters.sps
 			.drop(1)
 			.take(3)
-			.joinToString("") { "%02x".format(it) }
+			.toByteArray()
+			.toHex()
 	val sets = "${encoder.encodeToString(parameters.sps)},${encoder.encodeToString(parameters.pps)}"
 	val video =
 		listOf(
@@ -676,11 +680,10 @@ internal fun sdp(
 	val sound =
 		audio
 			?.let {
-				val config = it.config.joinToString("") { byte -> "%02x".format(byte) }
 				listOf(
 					"m=audio 0 RTP/AVP $RTP_AUDIO_PAYLOAD_TYPE",
 					"a=rtpmap:$RTP_AUDIO_PAYLOAD_TYPE mpeg4-generic/${it.sampleRate}/${it.channels}",
-					"a=fmtp:$RTP_AUDIO_PAYLOAD_TYPE streamtype=5;profile-level-id=1;mode=AAC-hbr;sizelength=13;indexlength=3;indexdeltalength=3;config=$config",
+					"a=fmtp:$RTP_AUDIO_PAYLOAD_TYPE streamtype=5;profile-level-id=1;mode=AAC-hbr;sizelength=13;indexlength=3;indexdeltalength=3;config=${it.config.toHex()}",
 					"a=control:$RTSP_SOUND_TRACK",
 				)
 			}.orEmpty()
@@ -692,3 +695,5 @@ const val RTSP_PATH = "/camera"
 private const val RTSP_TRACK = "track0"
 private const val RTSP_SOUND_TRACK = "track1"
 private const val MAX_REQUEST = 16 * 1024
+internal const val INTERLEAVED = '$'.code
+private val INTERLEAVED_CHANNEL = Regex("interleaved=(\\d+)")

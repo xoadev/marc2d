@@ -11,6 +11,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.DigestInputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,18 +21,19 @@ internal fun copyVerifying(
 	input: InputStream,
 	output: OutputStream,
 	sha256: String,
-): Boolean {
+): Boolean = MessageDigest.isEqual(sha256(input, output).toByteArray(), sha256.lowercase().toByteArray())
+
+/** The SHA-256 of everything [input] has, in hex, copied on the way to [output]. */
+internal fun sha256(
+	input: InputStream,
+	output: OutputStream = OutputStream.nullOutputStream(),
+): String {
 	val digest = MessageDigest.getInstance("SHA-256")
-	val buffer = ByteArray(COPY_BUFFER)
-	while (true) {
-		val read = input.read(buffer)
-		if (read < 0) break
-		digest.update(buffer, 0, read)
-		output.write(buffer, 0, read)
-	}
-	val actual = digest.digest().joinToString("") { "%02x".format(it) }
-	return MessageDigest.isEqual(actual.toByteArray(), sha256.lowercase().toByteArray())
+	DigestInputStream(input, digest).copyTo(output, COPY_BUFFER)
+	return digest.digest().toHex()
 }
+
+internal fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
 /**
  * HTTPS only. The hash comes from the same release as the APK, so it only catches a file corrupted or changed on the way:

@@ -63,17 +63,11 @@ internal class RtpWriter(
 		timestampUs: Long,
 		marker: Boolean,
 	): ByteArray {
-		val packet = ByteBuffer.allocate(RTP_HEADER + payload.size)
-		packet.put(RTP_VERSION_2)
-		packet.put((payloadType or (if (marker) RTP_MARKER else 0)).toByte())
-		packet.putShort(sequence.toShort())
-		packet.putInt(rtpTime(timestampUs))
-		packet.putInt(ssrc)
-		packet.put(payload)
+		val packet = rtpHeader(payloadType, sequence, rtpTime(timestampUs), ssrc, marker) + payload
 		sequence = (sequence + 1) and 0xFFFF
 		packets++
 		octets += payload.size
-		return packet.array()
+		return packet
 	}
 
 	/**
@@ -94,13 +88,13 @@ internal class RtpWriter(
 			.putInt(ssrc)
 			.putInt(seconds.toInt())
 			.putInt(fraction.toInt())
-			.putInt(rtpTime(timestampUs))
+			.putInt(rtpTime(timestampUs).toInt())
 			.putInt(packets)
 			.putInt(octets)
 			.array()
 	}
 
-	private fun rtpTime(timestampUs: Long): Int = (timestampUs * clockRate / MICROS).toInt()
+	private fun rtpTime(timestampUs: Long): Long = timestampUs * clockRate / MICROS
 }
 
 /** RFC 6184, with single NAL units and FU-A: every client of the panel understands both. */
@@ -177,7 +171,6 @@ private const val MAX_RTP_PACKET = 1400
 private const val RTP_HEADER = 12
 private const val RTP_CLOCK = 90_000
 private const val RTP_VERSION_2: Byte = 0x80.toByte()
-private const val RTP_MARKER = 0x80
 private const val RTCP_SENDER_REPORT: Byte = 200.toByte()
 private const val SENDER_REPORT_BYTES = 28
 private const val REPORT_INTERVAL_US = 5_000_000L
