@@ -6,6 +6,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.marc2d.enrollment import DOMAIN
+from custom_components.marc2d.panel_hub import PanelHub
 from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
@@ -75,6 +76,33 @@ async def test_readings_become_entities(hass, panel) -> None:
     assert hass.states.get(LIGHT).state == "12"
     assert hass.states.get("sensor.kitchen_battery").state == "80"
     assert hass.states.get("binary_sensor.kitchen_charging").state == "on"
+
+
+async def test_values_of_the_wrong_type_are_ignored(hass, panel) -> None:
+    await panel.send_json({"id": 2, "type": "marc2d/state", "values": {"light": 12, "battery": 80}})
+    assert (await panel.receive_json())["success"] is True
+    # A bool is not a number, a number is not a bool, and a list is nothing.
+    await panel.send_json(
+        {
+            "id": 3,
+            "type": "marc2d/state",
+            "values": {"light": True, "battery": "full", "charging": 1, "presence": [1]},
+        }
+    )
+    assert (await panel.receive_json())["success"] is True
+    await hass.async_block_till_done()
+    assert hass.states.get(LIGHT).state == "12"
+    assert hass.states.get("sensor.kitchen_battery").state == "80"
+    assert hass.states.get("binary_sensor.kitchen_charging").state != "on"
+
+
+def test_a_send_that_disconnects_does_not_skip_the_next_connection() -> None:
+    hub = PanelHub()
+    received: list[str] = []
+    disconnect_first = hub.connect(lambda event: (received.append("first"), disconnect_first()))
+    hub.connect(lambda event: received.append("second"))
+    hub.send({"kind": "ping"})
+    assert received == ["first", "second"]
 
 
 async def test_presence_follows_the_panel(hass, panel) -> None:

@@ -24,16 +24,24 @@ KEY_WIFI_SIGNAL = "wifi_signal"
 KEY_APP_VERSION = "app_version"
 KEY_UPDATING = "updating"
 SENSOR_KEYS = ("light", "battery", KEY_TEMPERATURE, "charging", KEY_PRESENCE, KEY_WIFI_SIGNAL)
-REPORTED_KEYS = (
-    *SENSOR_KEYS,
-    KEY_SIREN,
-    KEY_PLAYING,
-    KEY_VOLUME,
-    KEY_ADDRESS,
-    KEY_CAMERA_ON,
-    KEY_APP_VERSION,
-    KEY_UPDATING,
-)
+
+# What each value must be: the panel has its own user, but these reach entities as they come.
+NUMBER = (int, float)
+REPORTED_TYPES: dict[str, tuple[type, ...]] = {
+    "light": NUMBER,
+    "battery": NUMBER,
+    KEY_TEMPERATURE: NUMBER,
+    "charging": (bool,),
+    KEY_PRESENCE: (bool,),
+    KEY_WIFI_SIGNAL: NUMBER,
+    KEY_SIREN: (bool,),
+    KEY_PLAYING: (bool,),
+    KEY_VOLUME: NUMBER,
+    KEY_ADDRESS: (str,),
+    KEY_CAMERA_ON: (bool,),
+    KEY_APP_VERSION: (str,),
+    KEY_UPDATING: (bool,),
+}
 
 DEFAULT_BRIGHTNESS = 100
 
@@ -77,13 +85,14 @@ class PanelHub:
     @callback
     def send(self, event: dict[str, Any]) -> None:
         """Send an event to the panel."""
-        for send in self._connections:
+        # A copy: a send that ends a connection would otherwise skip the next one.
+        for send in list(self._connections):
             send(event)
 
     @callback
     def report(self, values: dict[str, Any]) -> None:
         """Keep what the panel reports."""
-        self.values.update({key: value for key, value in values.items() if key in REPORTED_KEYS})
+        self.values.update({key: value for key, value in values.items() if is_valid(key, value)})
         self._notify()
 
     @callback
@@ -116,3 +125,16 @@ def doorbell_to_all(hass: HomeAssistant, intercom: str, payload: str) -> None:
     event = {"kind": "doorbell", "intercom": intercom, "payload": payload}
     for hub in hass.data.get(DATA_HUBS, {}).values():
         hub.send(event)
+
+
+def is_valid(key: str, value: Any) -> bool:
+    """A key the panel reports, with a value of its type.
+
+    A bool is not a number here, though Python says it is.
+    """
+    types = REPORTED_TYPES.get(key)
+    if types is None:
+        return False
+    if isinstance(value, bool):
+        return bool in types
+    return isinstance(value, types)
