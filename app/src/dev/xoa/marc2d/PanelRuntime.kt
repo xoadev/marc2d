@@ -318,13 +318,13 @@ class PanelRuntime(
 		val signals = SignalReports()
 		while (true) {
 			readings.wifiSignal()?.let { signal ->
-				if (signals.shouldReport(signal, config.sensors)) reportReading("wifi_signal", JsonPrimitive(signal))
+				if (signals.shouldReport(signal, config.sensors)) reportReading(PanelLink.WIFI_SIGNAL, JsonPrimitive(signal))
 			}
 			val battery = readings.battery()
 			if (battery != null) {
-				reportReading("battery", JsonPrimitive(battery.level))
-				reportReading("temperature", JsonPrimitive(battery.temperature))
-				reportReading("charging", JsonPrimitive(battery.charging))
+				reportReading(PanelLink.BATTERY, JsonPrimitive(battery.level))
+				reportReading(PanelLink.TEMPERATURE, JsonPrimitive(battery.temperature))
+				reportReading(PanelLink.CHARGING, JsonPrimitive(battery.charging))
 			}
 			delay(BATTERY_INTERVAL)
 		}
@@ -335,14 +335,14 @@ class PanelRuntime(
 		// Latest: a new reading replaces the wait, which the new reading works out again.
 		readings.light().collectLatest { lux ->
 			_dark.value = lux < DARK_LUX
-			if (reports.shouldReport(lux, config.sensors)) reportReading("light", JsonPrimitive(lux.roundToInt()))
+			if (reports.shouldReport(lux, config.sensors)) reportReading(PanelLink.LIGHT, JsonPrimitive(lux.roundToInt()))
 			val now = SystemClock.elapsedRealtime()
 			presence.update(lux, now)
 			val remaining = presence.remaining(now)
-			reportReading("presence", JsonPrimitive(remaining > 0))
+			reportReading(PanelLink.PRESENCE, JsonPrimitive(remaining > 0))
 			if (remaining > 0) {
 				delay(remaining)
-				reportReading("presence", JsonPrimitive(false))
+				reportReading(PanelLink.PRESENCE, JsonPrimitive(false))
 			}
 		}
 	}

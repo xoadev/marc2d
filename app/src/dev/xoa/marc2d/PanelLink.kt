@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.JsonPrimitive
@@ -36,7 +37,10 @@ class PanelLink {
 	}
 
 	private val _assist = MutableSharedFlow<AssistRun>(extraBufferCapacity = 1)
-	val assist: MutableSharedFlow<AssistRun> get() = _assist
+	val assist: SharedFlow<AssistRun> = _assist.asSharedFlow()
+
+	/** A request made while no connection to Home Assistant collects [assist] is dropped: tests wait on this. */
+	internal val assistListeners: StateFlow<Int> = _assist.subscriptionCount
 
 	fun requestAssist(run: AssistRun) {
 		_assist.tryEmit(run)
@@ -55,6 +59,12 @@ class PanelLink {
 		const val CAMERA_ON = "camera_on"
 		const val APP_VERSION = "app_version"
 		const val UPDATING = "updating"
-		val SENSORS = listOf("light", "battery", "temperature", "charging", "presence", "wifi_signal")
+		const val LIGHT = "light"
+		const val BATTERY = "battery"
+		const val TEMPERATURE = "temperature"
+		const val CHARGING = "charging"
+		const val PRESENCE = "presence"
+		const val WIFI_SIGNAL = "wifi_signal"
+		val SENSORS = listOf(LIGHT, BATTERY, TEMPERATURE, CHARGING, PRESENCE, WIFI_SIGNAL)
 	}
 }

@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -28,74 +27,16 @@ private val TileWarning = Color(0xFFF0C020)
 
 /** The icons a reading can have, chosen in its configuration: the battery fills with its value. */
 enum class ReadingIcon(
-	val rows: List<String>?,
+	private val icon: PixelIcon?,
 ) {
 	Battery(null),
-	Car(
-		listOf(
-			"............",
-			"............",
-			"...######...",
-			"..#......#..",
-			".#........#.",
-			"############",
-			"############",
-			"############",
-			".##......##.",
-			".##......##.",
-			"............",
-			"............",
-		),
-	),
-	Thermometer(
-		listOf(
-			".....##.....",
-			"....#..#....",
-			"....#..#....",
-			"....#..#....",
-			"....#..#....",
-			"....#..#....",
-			"....####....",
-			"...######...",
-			"..########..",
-			"..########..",
-			"...######...",
-			"....####....",
-		),
-	),
-	Power(
-		listOf(
-			".......###..",
-			"......###...",
-			".....###....",
-			"....###.....",
-			"...#######..",
-			"......###...",
-			".....###....",
-			"....###.....",
-			"...###......",
-			"..###.......",
-			"............",
-			"............",
-		),
-	),
-	Water(
-		listOf(
-			".....##.....",
-			".....##.....",
-			"....####....",
-			"....####....",
-			"...######...",
-			"..########..",
-			"..########..",
-			"..########..",
-			"..########..",
-			"...######...",
-			"....####....",
-			"............",
-		),
-	),
+	Car(PixelIcon.Car),
+	Thermometer(PixelIcon.Thermometer),
+	Power(PixelIcon.Power),
+	Water(PixelIcon.Water),
 	;
+
+	fun rows(level: Float?): List<String> = icon?.rows ?: batteryRows(level ?: 0f)
 
 	companion object {
 		fun parse(value: String?): ReadingIcon? = entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
@@ -149,13 +90,7 @@ private fun PixelIconImage(
 	color: Color,
 	size: Dp,
 ) {
-	Canvas(Modifier.size(size)) {
-		val pixel = floor(this.size.width / GRID).coerceAtLeast(1f)
-		val rows = icon.rows ?: batteryRows(level ?: 0f)
-		rows.forEachIndexed { y, row ->
-			row.forEachIndexed { x, cell -> if (cell == '#') cell(color, x, y, pixel) }
-		}
-	}
+	Canvas(Modifier.size(size)) { drawPixels(icon.rows(level), color, wholePixel(GRID)) }
 }
 
 /** Ten cells, in whole pixels as the droid, filled with the level. */
@@ -179,15 +114,6 @@ private fun LevelBar(
 private val EmptyCell = Color(0xFF303030)
 private const val GRID = 12
 private const val LEVEL_CELLS = 10
-
-private fun DrawScope.cell(
-	color: Color,
-	x: Int,
-	y: Int,
-	pixel: Float,
-) {
-	drawRect(color, Offset(x * pixel, y * pixel), Size(pixel, pixel))
-}
 
 /** A battery drawn with its level: the outline, its cap and as many columns filled as it has charge. */
 internal fun batteryRows(level: Float): List<String> {

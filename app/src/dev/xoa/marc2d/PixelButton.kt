@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -145,6 +146,87 @@ enum class PixelIcon(
 			".....##.....",
 		),
 	),
+	Car(
+		listOf(
+			"............",
+			"............",
+			"...######...",
+			"..#......#..",
+			".#........#.",
+			"############",
+			"############",
+			"############",
+			".##......##.",
+			".##......##.",
+			"............",
+			"............",
+		),
+	),
+	Thermometer(
+		listOf(
+			".....##.....",
+			"....#..#....",
+			"....#..#....",
+			"....#..#....",
+			"....#..#....",
+			"....#..#....",
+			"....####....",
+			"...######...",
+			"..########..",
+			"..########..",
+			"...######...",
+			"....####....",
+		),
+	),
+	Power(
+		listOf(
+			".......###..",
+			"......###...",
+			".....###....",
+			"....###.....",
+			"...#######..",
+			"......###...",
+			".....###....",
+			"....###.....",
+			"...###......",
+			"..###.......",
+			"............",
+			"............",
+		),
+	),
+	Water(
+		listOf(
+			".....##.....",
+			".....##.....",
+			"....####....",
+			"....####....",
+			"...######...",
+			"..########..",
+			"..########..",
+			"..########..",
+			"..########..",
+			"...######...",
+			"....####....",
+			"............",
+		),
+	),
+}
+
+/** The side of one cell when [cells] fill the width. Whole-number: with decimals, lines appear between the pixels. */
+fun DrawScope.wholePixel(cells: Int): Float = floor(size.width / cells).coerceAtLeast(1f)
+
+/** Draws each '#' of [rows] as a square of [pixel], the first row's first cell at [origin]. */
+fun DrawScope.drawPixels(
+	rows: List<String>,
+	color: Color,
+	pixel: Float,
+	origin: Offset = Offset.Zero,
+) {
+	rows.forEachIndexed { y, row ->
+		row.forEachIndexed { x, cell ->
+			if (cell == '#') drawRect(color, origin + Offset(x * pixel, y * pixel), Size(pixel, pixel))
+		}
+	}
 }
 
 /** For what an icon would not explain well, with the same shape as the other buttons. */
@@ -195,14 +277,9 @@ fun PixelButton(
 				.padding(size / 5)
 				.size(size * 3 / 5),
 		) {
-			// Whole-number size: with decimals, lines appear between the pixels.
-			val pixel = floor(this.size.width / icon.rows.size).coerceAtLeast(1f)
+			val pixel = wholePixel(icon.rows.size)
 			val start = (this.size.width - pixel * icon.rows.size) / 2
-			icon.rows.forEachIndexed { y, row ->
-				row.forEachIndexed { x, cell ->
-					if (cell == '#') drawRect(color, Offset(start + x * pixel, start + y * pixel), Size(pixel, pixel))
-				}
-			}
+			drawPixels(icon.rows, color, pixel, Offset(start, start))
 		}
 	}
 }

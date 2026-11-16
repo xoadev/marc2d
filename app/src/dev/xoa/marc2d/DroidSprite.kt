@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
-import kotlin.math.floor
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -48,21 +47,23 @@ private val HEAD =
 	listOf(
 		"",
 		"",
-		".....wwwwww",
-		"...wwwwwwwwww",
-		"..wwwwwwwwwwww",
-		"..wwwwwwwwwwww",
-		"..wwwwwwwwwwww",
-		"..wwwwwwwwwwww",
-		"..wwwwwwwwwwww",
-		"..wwwwwwwwwwww",
+		".....######",
+		"...##########",
+		"..############",
+		"..############",
+		"..############",
+		"..############",
+		"..############",
+		"..############",
 		"",
 	)
+
+/** Under the head: still, and the two steps of walking. */
 private val BASES =
 	listOf(
-		listOf(".....gggggg", "...gggggggggg", "...g.gg..gg.g"),
-		listOf(".....gggggg", "...gggggggggg", "...gg.gg..gg.g"),
-		listOf(".....gggggg", "...gggggggggg", "..g.gg..gg.gg"),
+		listOf(".....######", "...##########", "...#.##..##.#"),
+		listOf(".....######", "...##########", "...##.##..##.#"),
+		listOf(".....######", "...##########", "..#.##..##.##"),
 	)
 
 /**
@@ -154,14 +155,9 @@ fun BoxWithConstraintsScope.DroidSprite(
 				.offset(x = track * position)
 				.size(size),
 	) {
-		// Whole-number size: with decimals, lines appear between the pixels.
-		val pixel = floor(this.size.width / SPRITE_PIXELS).coerceAtLeast(1f)
-		val base = if (moving) BASES[1 + frame % 2] else BASES[0]
-		(HEAD + base).forEachIndexed { y, row ->
-			row.forEachIndexed { x, cell ->
-				if (cell != '.') dot(pixel, x, y, if (cell == 'w') Head else Base)
-			}
-		}
+		val pixel = wholePixel(SPRITE_PIXELS)
+		drawPixels(HEAD, Head, pixel)
+		drawPixels(if (moving) BASES[1 + frame % 2] else BASES[0], Base, pixel, Offset(0f, HEAD.size * pixel))
 		eye(pixel, mood, direction, moving, blink, phase)
 	}
 }

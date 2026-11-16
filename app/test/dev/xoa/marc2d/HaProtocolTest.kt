@@ -127,6 +127,9 @@ class HaProtocolTest {
 		assertEquals(null, wake.confidence("""{"text":"jarvis"}"""))
 		assertEquals(null, wake.confidence("""{"result":[],"text":"jarvis ya voy"}"""))
 		assertEquals(null, wake.confidence("not json"))
+		assertEquals(null, wake.confidence("""{"result":[],"text":"jarvis"}"""))
+		assertEquals(null, wake.confidence("""{"result":[{"word":"jarvis"}],"text":"jarvis"}"""))
+		assertEquals(null, wake.end("""{"result":[],"text":"jarvis"}"""))
 	}
 
 	@Test

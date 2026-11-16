@@ -193,7 +193,7 @@ class HaClientTest {
 			val stopped = CompletableDeferred<Unit>()
 			val job = launch { HaClient().run(connection, link, {}, {}, {}, {}) }
 			withTimeout(5.seconds) {
-				link.assist.subscriptionCount.first { it > 0 }
+				link.assistListeners.first { it > 0 }
 				link.requestAssist(AssistRun(null, Channel(Channel.UNLIMITED)) { stopped.complete(Unit) })
 				stopped.await()
 			}
@@ -228,7 +228,7 @@ class HaClientTest {
 			audio.trySend(byteArrayOf(1, 2))
 			audio.close()
 			withTimeout(5.seconds) {
-				link.assist.subscriptionCount.first { it > 0 }
+				link.assistListeners.first { it > 0 }
 				link.requestAssist(AssistRun(null, audio) {})
 				assertEquals(listOf(3, 7, 1), received.await())
 				assertEquals(HaProtocol.PanelEvent.Play("/api/a.mp3"), reply.await())

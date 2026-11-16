@@ -1,13 +1,12 @@
 package dev.xoa.marc2d
 
 import java.util.Locale
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.double
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 
 /**
  * Decides if someone said the wake phrase. Vosk can only hear what its grammar lists, so with just the phrase it fits
@@ -30,34 +29,25 @@ class WakeWord(
 	 * How sure Vosk is of its least clear word, or nothing if it heard something else. The phrase has to be all that it heard:
 	 * inside a longer sentence it is someone talking, not someone calling the panel.
 	 */
-	fun confidence(result: String): Double? =
-		runCatching {
-			val json = Json.parseToJsonElement(result).jsonObject
-			if (json["text"]?.jsonPrimitive?.content != phrase) return null
-			json
-				.getValue("result")
-				.jsonArray
-				.minOf {
-					it.jsonObject
-						.getValue("conf")
-						.jsonPrimitive.double
-				}
-		}.getOrNull()
+	fun confidence(result: String): Double? = phraseWords(result)?.map { it.number("conf") ?: return null }?.min()
 
 	/** When the phrase ended, in seconds since the recognizer started: what comes after it is the request. */
-	fun end(result: String): Double? =
-		runCatching {
-			val json = Json.parseToJsonElement(result).jsonObject
-			if (json["text"]?.jsonPrimitive?.content != phrase) return null
-			json
-				.getValue("result")
-				.jsonArray
-				.last()
-				.jsonObject
-				.getValue("end")
-				.jsonPrimitive
-				.double
-		}.getOrNull()
+	fun end(result: String): Double? = phraseWords(result)?.last()?.number("end")
+
+	/** The words of a Vosk result, only if the phrase is all that it heard. */
+	private fun phraseWords(result: String): List<JsonObject>? {
+		val json =
+			try {
+				Json.parseToJsonElement(result) as? JsonObject
+			} catch (_: SerializationException) {
+				// Vosk writes the result itself, so a malformed one is a glitch of the recognizer: it heard nothing usable.
+				null
+			} ?: return null
+		if ((json["text"] as? JsonPrimitive)?.content != phrase) return null
+		return (json["result"] as? JsonArray)?.map { it as? JsonObject ?: return null }?.ifEmpty { null }
+	}
+
+	private fun JsonObject.number(key: String): Double? = (this[key] as? JsonPrimitive)?.doubleOrNull
 
 	companion object {
 		private const val MIN_CONFIDENCE = 0.9
