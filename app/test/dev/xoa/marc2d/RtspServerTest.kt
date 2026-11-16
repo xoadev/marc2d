@@ -293,7 +293,8 @@ class RtspServerTest {
 				assertEquals(200, setup.status)
 				assertTrue("interleaved=0-1" in setup.headers.getValue("transport"))
 				assertEquals(200, client.request("PLAY", nonce = nonce).status)
-				assertTrue(source.keyFrameRequests > 0)
+				// The server asks for it right after answering PLAY, so the reply can arrive first.
+				waitFor { source.keyFrameRequests > 0 }
 
 				val packet = client.readPacket()
 				assertEquals(0x80, packet[0].toInt() and 0xFF)
