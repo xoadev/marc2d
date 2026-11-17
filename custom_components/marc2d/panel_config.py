@@ -23,6 +23,9 @@ CONF_READINGS = "readings"
 CONF_CHARTS = "charts"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_DOORBELL = "doorbell"
+CONF_ANSWERED_BUTTON = "answered_button"
+# What only Home Assistant uses: the panel does not get it.
+HA_ONLY_INTERCOM_KEYS = {CONF_DOORBELL, CONF_ANSWERED_BUTTON}
 CONF_INTERCOM_RTSP = "rtsp"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
@@ -56,7 +59,7 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
                     key: value
                     for key, value in intercom.items()
                     # An empty RTSP URL is all over SIP: the panel just does not get it.
-                    if key != CONF_DOORBELL and (key != CONF_INTERCOM_RTSP or value)
+                    if key not in HA_ONLY_INTERCOM_KEYS and (key != CONF_INTERCOM_RTSP or value)
                 },
                 "number": intercom.get("number") or DEFAULT_INTERCOM_NUMBER,
             }
@@ -118,6 +121,18 @@ def intercoms(options: Mapping[str, Any]) -> list[dict[str, Any]]:
 def intercom_names(options: Mapping[str, Any]) -> set[str]:
     """The names of the intercoms this panel has."""
     return {intercom["name"] for intercom in intercoms(options)}
+
+
+def answered_button(options: Mapping[str, Any], name: str) -> str | None:
+    """The button that stops the intercom's other calls once a panel answers, if it has one."""
+    return next(
+        (
+            intercom.get(CONF_ANSWERED_BUTTON)
+            for intercom in intercoms(options)
+            if intercom["name"] == name
+        ),
+        None,
+    )
 
 
 def doorbell_buttons(options: Mapping[str, Any]) -> dict[str, str]:

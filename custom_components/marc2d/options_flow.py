@@ -88,6 +88,12 @@ INTERCOM_FIELDS = {
         {"entity": {"domain": ["binary_sensor", "event"]}},
         required=False,
     ),
+    # A VTO that is still calling DMSS answers the panel busy: its Cancel Call button stops that.
+    "answered_button": _field(
+        "Button to press when a panel answers",
+        {"entity": {"domain": ["button"]}},
+        required=False,
+    ),
 }
 
 

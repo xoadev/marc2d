@@ -64,8 +64,11 @@ def test_entity_toggles_only_change_home_assistant(feature) -> None:
 
 
 def test_the_doorbell_button_stays_in_home_assistant() -> None:
-    config = build_panel_config({"intercoms": [{**INTERCOM, "doorbell": "binary_sensor.x"}]})
+    config = build_panel_config(
+        {"intercoms": [{**INTERCOM, "doorbell": "binary_sensor.x", "answered_button": "button.x"}]}
+    )
     assert "doorbell" not in config["intercoms"][0]
+    assert "answered_button" not in config["intercoms"][0]
 
 
 async def open_page(hass, entry, page):

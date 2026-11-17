@@ -4,13 +4,12 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMockResponse
 
 from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
 from custom_components.marc2d.update import LATEST_RELEASE, RELEASE_DOWNLOADS, async_latest_release
-from custom_components.marc2d.websocket import EVENT_DOORBELL_ANSWERED
 from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
@@ -25,6 +24,7 @@ INTERCOM = {
     "extension": "9901#1",
     "password": "s3cr3t",
     "doorbell": "binary_sensor.button",
+    "answered_button": "button.cancel_call",
 }
 LIGHT = "sensor.kitchen_light"
 SIREN = "siren.kitchen_siren"
@@ -146,7 +146,7 @@ async def test_mood_reaches_the_panel(hass, panel) -> None:
     assert hass.states.get(MOOD).state == "Alarm"
 
 
-async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
+async def test_doorbell_rings_and_answer_reaches_all_and_stops_the_intercom(hass, panel) -> None:
     hass.states.async_set("binary_sensor.button", "on")
     await hass.async_block_till_done()
     assert (await panel.receive_json())["event"] == {
@@ -154,7 +154,7 @@ async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
         "intercom": "Parking",
         "payload": "RING",
     }
-    answered = async_capture_events(hass, EVENT_DOORBELL_ANSWERED)
+    presses = async_mock_service(hass, "button", "press")
     await panel.send_json({"id": 2, "type": "marc2d/doorbell/answered", "intercom": "Parking"})
     first = await panel.receive_json()
     second = await panel.receive_json()
@@ -162,7 +162,8 @@ async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
         first.get("event"),
         second.get("event"),
     )
-    assert [event.data["intercom"] for event in answered] == ["Parking"]
+    await hass.async_block_till_done()
+    assert [press.data["entity_id"] for press in presses] == ["button.cancel_call"]
 
 
 async def test_a_panel_cannot_silence_an_intercom_it_does_not_have(hass, panel) -> None:

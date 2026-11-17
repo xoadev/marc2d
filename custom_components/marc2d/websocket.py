@@ -11,11 +11,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
 from .enrollment import DOMAIN
-from .panel_config import build_panel_config, intercom_names
+from .panel_config import answered_button, build_panel_config, intercom_names
 from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
 
 CONF_USER_ID = "user_id"
-EVENT_DOORBELL_ANSWERED = "marc2d_doorbell_answered"
 
 
 @callback
@@ -90,7 +89,7 @@ def ws_doorbell_answered(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Make the other panels stop ringing, only for an intercom this panel has."""
+    """Stop the other panels and the intercom's other calls ringing, for its own intercom only."""
     entry = _own_entry(hass, connection, msg)
     if entry is None:
         return
@@ -98,8 +97,6 @@ def ws_doorbell_answered(
         connection.send_error(msg["id"], "not_found", "This panel has no intercom by that name")
         return
     doorbell_to_all(hass, msg["intercom"], DOORBELL_ANSWERED)
-    # An intercom may still be calling others (a VTO calling DMSS answers busy): HA can stop it.
-    hass.bus.async_fire(
-        EVENT_DOORBELL_ANSWERED, {"intercom": msg["intercom"], "panel": entry.title}
-    )
+    if button := answered_button(entry.options, msg["intercom"]):
+        hass.async_create_task(hass.services.async_call("button", "press", {"entity_id": button}))
     connection.send_result(msg["id"])
