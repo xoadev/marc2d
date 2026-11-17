@@ -462,8 +462,11 @@ private class RtspCallMedia(
 	override fun answer() = call.answer()
 
 	override fun configure(params: CallParams) {
-		params.isVideoEnabled = false
-		// The VTO answers a call without active audio, and Linphone drops it as incompatible.
+		// Without received audio and video the VTO answers with no stream in common ("negotiated SDP is empty") and Linphone
+		// drops the call, so the VTO never learns someone answered. Both stay out of sight: the video has no window and the
+		// audio is muted once connected.
+		params.isVideoEnabled = true
+		params.videoDirection = MediaDirection.RecvOnly
 		params.audioDirection = MediaDirection.RecvOnly
 	}
 

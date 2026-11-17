@@ -9,8 +9,6 @@ import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.media.MediaRecorder
-import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import android.view.Surface
 import java.io.IOException
@@ -253,15 +251,10 @@ internal fun recordMicrophone(
 	send: (ShortArray) -> Unit,
 ) {
 	val frameSamples = track.frameSamples
-	// The communication source gets Android's processing for calls, with the echo of the speaker taken out where it can.
+	// The communication source already gets Android's echo cancelling and noise suppression for calls. Adding them again
+	// by hand crashed the Pixel 3a's audio service (add_remove_audio_effect), leaving the panel without sound.
 	val microphone =
 		monoMicrophone(MediaRecorder.AudioSource.VOICE_COMMUNICATION, track.sampleRate, frameSamples * 2 * MICROPHONE_BUFFERED_FRAMES)
-	val effects =
-		listOfNotNull(
-			if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(microphone.audioSessionId) else null,
-			if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(microphone.audioSessionId) else null,
-		)
-	effects.forEach { it.enabled = true }
 	try {
 		microphone.startRecording()
 		val frame = ShortArray(frameSamples)
@@ -275,7 +268,6 @@ internal fun recordMicrophone(
 			if (running()) send(frame)
 		}
 	} finally {
-		effects.forEach { it.release() }
 		microphone.release()
 	}
 }
