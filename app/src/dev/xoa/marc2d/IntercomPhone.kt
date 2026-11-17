@@ -6,6 +6,7 @@ import android.media.RingtoneManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import org.linphone.core.Account
@@ -15,6 +16,7 @@ import org.linphone.core.CallParams
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
 import org.linphone.core.Factory
+import org.linphone.core.LogLevel
 import org.linphone.core.MediaDirection
 import org.linphone.core.Reason
 import org.linphone.core.RegistrationState
@@ -78,23 +80,30 @@ class IntercomPhone(
 	var onDoorbellAnswered: (String) -> Unit = {}
 
 	private val core: Core =
-		Factory.instance().createCore(null, null, context).apply {
-			// The panel has no Google services, and the intercoms do not send push.
-			isPushNotificationEnabled = false
-			// The panel rings by itself, with the phone's ringtone, however the call arrives. Native ringing keeps Linphone's own
-			// out of the core, and this keeps its Android helper from ringing again on top.
-			isNativeRingingEnabled = true
-			config.setInt("sound", "disable_ringing", 1)
-			isVideoCaptureEnabled = false
-			isVideoDisplayEnabled = true
-			videoActivationPolicy =
-				Factory.instance().createVideoActivationPolicy().apply {
-					automaticallyAccept = true
-					automaticallyInitiate = false
-				}
-			addListener(listener())
-			start()
-		}
+		Factory
+			.instance()
+			.run {
+				// Linphone's own warnings and errors reach logcat: without them a failed call says nothing.
+				enableLogcatLogs(true)
+				loggingService.setLogLevel(LogLevel.Warning)
+				createCore(null, null, context)
+			}.apply {
+				// The panel has no Google services, and the intercoms do not send push.
+				isPushNotificationEnabled = false
+				// The panel rings by itself, with the phone's ringtone, however the call arrives. Native ringing keeps Linphone's own
+				// out of the core, and this keeps its Android helper from ringing again on top.
+				isNativeRingingEnabled = true
+				config.setInt("sound", "disable_ringing", 1)
+				isVideoCaptureEnabled = false
+				isVideoDisplayEnabled = true
+				videoActivationPolicy =
+					Factory.instance().createVideoActivationPolicy().apply {
+						automaticallyAccept = true
+						automaticallyInitiate = false
+					}
+				addListener(listener())
+				start()
+			}
 
 	fun apply(config: PanelConfig) {
 		// Other configuration changes, such as the weather, must not interrupt registration or a call.
@@ -312,6 +321,7 @@ class IntercomPhone(
 				state: Call.State?,
 				message: String,
 			) {
+				Log.i(TAG, "Intercom SIP call $state: $message (${call.reason}, ${call.errorInfo.protocolCode})")
 				when (state) {
 					Call.State.IncomingReceived, Call.State.IncomingEarlyMedia -> {
 						silence()
@@ -345,6 +355,7 @@ class IntercomPhone(
 		}
 
 	private companion object {
+		const val TAG = "marc2d"
 		const val RING = "RING"
 
 		const val ANSWERED = "ANSWERED"
