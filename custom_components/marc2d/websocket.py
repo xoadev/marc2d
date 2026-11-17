@@ -15,6 +15,7 @@ from .panel_config import build_panel_config, intercom_names
 from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
 
 CONF_USER_ID = "user_id"
+EVENT_DOORBELL_ANSWERED = "marc2d_doorbell_answered"
 
 
 @callback
@@ -97,4 +98,8 @@ def ws_doorbell_answered(
         connection.send_error(msg["id"], "not_found", "This panel has no intercom by that name")
         return
     doorbell_to_all(hass, msg["intercom"], DOORBELL_ANSWERED)
+    # An intercom may still be calling others (a VTO calling DMSS answers busy): HA can stop it.
+    hass.bus.async_fire(
+        EVENT_DOORBELL_ANSWERED, {"intercom": msg["intercom"], "panel": entry.title}
+    )
     connection.send_result(msg["id"])

@@ -338,6 +338,8 @@ class IntercomPhone(
 						dialing = null
 						connected = true
 						routeToSpeaker(call)
+						// Its sound comes over RTSP: the SIP audio is only received so that the intercom accepts the call.
+						call.speakerMuted = media?.live == true
 						show(callName(call), answered = true)
 					}
 
@@ -461,7 +463,8 @@ private class RtspCallMedia(
 
 	override fun configure(params: CallParams) {
 		params.isVideoEnabled = false
-		params.audioDirection = MediaDirection.Inactive
+		// The VTO answers a call without active audio, and Linphone drops it as incompatible.
+		params.audioDirection = MediaDirection.RecvOnly
 	}
 
 	override fun show(view: TextureView?) {

@@ -4,12 +4,13 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMockResponse
 
 from custom_components.marc2d.enrollment import DOMAIN
 from custom_components.marc2d.panel_hub import PanelHub
 from custom_components.marc2d.update import LATEST_RELEASE, RELEASE_DOWNLOADS, async_latest_release
+from custom_components.marc2d.websocket import EVENT_DOORBELL_ANSWERED
 from homeassistant.components.camera import async_get_image, async_get_stream_source
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
@@ -153,6 +154,7 @@ async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
         "intercom": "Parking",
         "payload": "RING",
     }
+    answered = async_capture_events(hass, EVENT_DOORBELL_ANSWERED)
     await panel.send_json({"id": 2, "type": "marc2d/doorbell/answered", "intercom": "Parking"})
     first = await panel.receive_json()
     second = await panel.receive_json()
@@ -160,6 +162,7 @@ async def test_doorbell_rings_and_answer_reaches_all(hass, panel) -> None:
         first.get("event"),
         second.get("event"),
     )
+    assert [event.data["intercom"] for event in answered] == ["Parking"]
 
 
 async def test_a_panel_cannot_silence_an_intercom_it_does_not_have(hass, panel) -> None:

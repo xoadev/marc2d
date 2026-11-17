@@ -84,7 +84,10 @@ whatever alarm was active.
 - **Over RTSP:** each intercom can take an RTSP URL, with its user and password. Then the panel opens it as soon as it
   rings, to show who is at the door without waiting, and on answering the street's sound and the panel's voice, through
   the ONVIF backchannel, go over the same connection. SIP only tells the intercom someone answered or hung up, with a
-  call without media; Talk does without SIP. A Dahua VTO plays the voice of a SIP call with a regular click, whatever its
+  call that only receives audio, muted: the VTO answers one without active audio and Linphone drops it as incompatible.
+  Talk does without SIP. While the VTO is still calling, as DMSS, it answers 486 Busy: the panel retries every 2 s, and
+  HA gets the `marc2d_doorbell_answered` event (`intercom`, `panel`), so that an automation can stop that call, as the
+  VTO's Cancel Call button does. A Dahua VTO plays the voice of a SIP call with a regular click, whatever its
   format, pace or content, even digital silence; through the backchannel, as DMSS does, it is clean. The panel's own RTSP
   client asks for the tracks with `Require: www.onvif.org/ver20/backchannel`, authenticates with Digest or Basic, takes
   the interleaved channels the server chooses (the VTO answers 10-11 whatever is asked), decodes H.264 with the
