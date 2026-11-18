@@ -40,10 +40,20 @@ fun amplify(
 ): ByteArray {
 	val out = ByteArray(audio.size)
 	for (i in 0 until audio.size - 1 step 2) {
-		val sample = ((audio[i + 1].toInt() shl 8) or (audio[i].toInt() and 0xFF)) * gain
-		val clamped = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-		out[i] = clamped.toByte()
-		out[i + 1] = (clamped shr 8).toByte()
+		val sample = louder((audio[i + 1].toInt() shl 8) or (audio[i].toInt() and 0xFF), gain)
+		out[i] = sample.toByte()
+		out[i + 1] = (sample shr 8).toByte()
 	}
 	return out
 }
+
+/** Raises 16-bit samples by [gain], without wrapping around at the top. */
+fun amplify(
+	samples: ShortArray,
+	gain: Int,
+): ShortArray = ShortArray(samples.size) { louder(samples[it].toInt(), gain).toShort() }
+
+private fun louder(
+	sample: Int,
+	gain: Int,
+): Int = (sample * gain).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())

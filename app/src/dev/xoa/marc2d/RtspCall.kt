@@ -107,7 +107,8 @@ class RtspCall(
 	) {
 		val out = speaker ?: createSpeaker(track.sampleRate).also { speaker = it }
 		// Never blocking: the video comes on the same thread.
-		out.write(samples, 0, samples.size, AudioTrack.WRITE_NON_BLOCKING)
+		val louder = amplify(samples, STREET_GAIN)
+		out.write(louder, 0, louder.size, AudioTrack.WRITE_NON_BLOCKING)
 	}
 
 	private fun createSpeaker(sampleRate: Int): AudioTrack {
@@ -279,5 +280,12 @@ internal fun useSpeaker(context: Context) {
 		.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
 		?.let(manager::setCommunicationDevice)
 }
+
+/**
+ * The VTO's street sound arrives at about -20 dBFS on average, but the Pixel 3a plays calls through the speaker far quieter
+ * than media, even at the call volume's top. ponytail: a fixed gain, where loud peaks clip; a limiter, or a volume set
+ * from Home Assistant, if one gain does not suit every intercom.
+ */
+private const val STREET_GAIN = 3
 
 private const val MICROPHONE_BUFFERED_FRAMES = 6

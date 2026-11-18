@@ -317,4 +317,9 @@ class AmplifyTest {
 		val loud = byteArrayOf(0x00, 0x40, 0x00, 0xC0.toByte())
 		assertContentEquals(byteArrayOf(0xFF.toByte(), 0x7F, 0x00, 0x80.toByte()), amplify(loud, 4))
 	}
+
+	@Test
+	fun `raises samples and holds the loud ones at the top`() {
+		assertContentEquals(shortArrayOf(-39, 300, Short.MAX_VALUE, Short.MIN_VALUE), amplify(shortArrayOf(-13, 100, 20_000, -20_000), 3))
+	}
 }
