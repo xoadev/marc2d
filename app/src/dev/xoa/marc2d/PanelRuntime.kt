@@ -37,6 +37,7 @@ class PanelRuntime(
 ) {
 	val store = PanelStore(context)
 	val phone by lazy { IntercomPhone(context) }
+	val line = PhoneLine()
 
 	private val _haStatus = MutableStateFlow<HaStatus>(HaStatus.NotConfigured)
 	val haStatus: StateFlow<HaStatus> = _haStatus.asStateFlow()
@@ -159,9 +160,10 @@ class PanelRuntime(
 		}
 	}
 
-	/** Only one can hold the microphone: a call, or the wake phrase, which waits for the call to end. */
+	/** Only one can hold the microphone: a call, from the intercom or the phone line, or the wake phrase, which waits for it to end. */
 	private suspend fun keepListening() {
-		combine(store.config.map { it.voice }, phone.call.map { it != null }, ::Pair)
+		val inCall = combine(phone.call, line.call) { intercom, phoneCall -> intercom != null || phoneCall != null }
+		combine(store.config.map { it.voice }, inCall, ::Pair)
 			.distinctUntilChanged()
 			.collectLatest { (config, inCall) ->
 				// A call only pauses it: the model stays loaded for when the call ends.

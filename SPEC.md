@@ -9,6 +9,7 @@ connects to them and exposes their functions:
 
 - To Home Assistant, through its WebSocket API: it shows its data and handles its events.
 - To the intercoms, over SIP: it handles their calls.
+- To the phone line, if it has a SIM: it shows its calls.
 - Optionally, it offers its camera to Frigate or a similar system.
 
 The architecture diagram is in the [README](README.md#architecture).
@@ -118,6 +119,20 @@ Verified against a VTO2202F-P-S3 (UDP 5060), which is Asterisk inside:
   seconds, for up to 45.
 - A device that reaches the VTO through the Tailscale subnet route (`--accept-routes`) leaves with SNAT
   and the result is not valid: test from the direct LAN.
+
+## Phone line
+
+A panel with a SIM shows its calls on the intercom's call screen, named by the number, or by the name the network gives,
+and without video: **Answer** takes it, **Hang up** turns it down or ends it, and it always talks on the speaker.
+
+- The panel is the default dialer, which the Device Owner sets when it enters the kiosk: Telecom then hands it the calls
+  instead of showing its own screen, which the kiosk would hide. It is the dialer only to show calls: it has no keypad,
+  and dialing just opens the panel.
+- The ringtone is Telecom's, the phone's own: the panel does not ring them itself.
+- One call at a time: a second one while there is a call is turned down.
+- The intercom comes first: if it rings during a phone call, its screen covers the phone's, and the phone call goes on
+  behind it until the intercom's ends.
+- The log only says that a call rang, was answered or ended: never the number.
 
 ## Entities
 
@@ -343,6 +358,8 @@ a broker or writing YAML. It requires HA 2026.10.
 - Audio and screen with the Android APIs, without libraries.
 - The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.
+- Phone calls through Telecom, as the default dialer, with an `InCallService`: the Android API, without libraries, and
+  the system keeps the call itself.
 - A foreground service keeps the SIP registration and the connection to HA, because the intercom
   does not send push.
 - Only stable versions of libraries with recent releases are used. The versions are in

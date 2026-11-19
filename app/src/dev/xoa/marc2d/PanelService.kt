@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -34,8 +35,8 @@ class PanelService : Service() {
 			NotificationChannel(CHANNEL_RUNNING, "Panel running", NotificationManager.IMPORTANCE_MIN),
 		)
 		manager.createNotificationChannel(
-			NotificationChannel(CHANNEL_CALL, "Intercom calls", NotificationManager.IMPORTANCE_HIGH).apply {
-				// Linphone provides the ringtone.
+			NotificationChannel(CHANNEL_CALL, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
+				// Linphone provides the intercom's ringtone, and Telecom the phone line's.
 				setSound(null, null)
 			},
 		)
@@ -45,11 +46,13 @@ class PanelService : Service() {
 		val runtime = (application as Marc2dApp).runtime
 		runtime.start()
 		scope.launch {
-			runtime.phone.call.collect { call ->
-				if (call == null || call.answered) {
+			combine(runtime.phone.call, runtime.line.call) { intercom, phoneCall ->
+				intercom?.takeUnless { it.answered }?.name ?: phoneCall?.takeUnless { it.answered }?.name
+			}.collect { caller ->
+				if (caller == null) {
 					manager.cancel(NOTIFICATION_CALL)
 				} else {
-					manager.notify(NOTIFICATION_CALL, callNotification(call))
+					manager.notify(NOTIFICATION_CALL, callNotification(caller))
 				}
 			}
 		}
@@ -101,11 +104,11 @@ class PanelService : Service() {
 			.build()
 
 	/** If the panel is not in front, the full-screen intent brings it. */
-	private fun callNotification(call: IntercomCall): Notification =
+	private fun callNotification(caller: String): Notification =
 		Notification
 			.Builder(this, CHANNEL_CALL)
 			.setSmallIcon(R.drawable.ic_launcher)
-			.setContentTitle("Call from ${call.name}")
+			.setContentTitle("Call from $caller")
 			.setCategory(Notification.CATEGORY_CALL)
 			.setFullScreenIntent(openPanel(), true)
 			.setOngoing(true)

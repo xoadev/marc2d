@@ -8,6 +8,8 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.telecom.TelecomManager
+import android.util.Log
 
 class PanelAdminReceiver : DeviceAdminReceiver()
 
@@ -45,8 +47,20 @@ class Kiosk(
 			policies.setPermissionGrantState(admin, activity.packageName, it, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
 		}
 
+		becomeDialer()
+
 		val manager = activity.getSystemService(ActivityManager::class.java)
 		if (manager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) activity.startLockTask()
+	}
+
+	/** Telecom then hands the SIM's calls to [PanelInCallService] instead of its own screen, which the kiosk would hide. */
+	private fun becomeDialer() {
+		if (activity.getSystemService(TelecomManager::class.java).defaultDialerPackage == activity.packageName) return
+		try {
+			policies.setDefaultDialerApplication(activity.packageName)
+		} catch (e: IllegalArgumentException) {
+			Log.w(TAG, "Not the default dialer, phone calls will not show: ${e.message}")
+		}
 	}
 
 	/** Releases the app until the panel returns to the foreground, to open the Android settings. */
@@ -64,5 +78,9 @@ class Kiosk(
 		policies.setLockTaskPackages(admin, emptyArray())
 		policies.clearPackagePersistentPreferredActivities(admin, activity.packageName)
 		policies.clearDeviceOwnerApp(activity.packageName)
+	}
+
+	private companion object {
+		const val TAG = "marc2d"
 	}
 }

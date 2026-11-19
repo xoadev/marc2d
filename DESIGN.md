@@ -69,8 +69,9 @@ or add a word. They are white, and red is reserved for **Hang up**.
 - **Chart:** full screen, the bars in whole pixels with a gap between them, as the droid. The lowest values in white
   and the rest in gray: no colour, which is kept for warnings. In the menu its button has the name under it, as its icon
   alone does not say which chart it is. Exit with the X, by tapping, or automatically after 2 minutes.
-- **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
-  opposite **Answer**, so that a double tap does not end the call.
+- **Call:** the video fills the whole screen; a phone call has none, only its number on black.
+  **Hang up** never moves and sits in the corner opposite **Answer**, so that a double tap does not
+  end the call.
 - **Orientation:** always landscape.
 - **Camera on:** on the main screen the droid says it. The others, where it does not appear, show a red square at the top.
 

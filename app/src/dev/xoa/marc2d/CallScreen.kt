@@ -20,15 +20,18 @@ fun ringingCamera(
 	cameras: List<CameraConfig>,
 ): CameraConfig? = if (call.answered || call.live) null else cameras.firstOrNull { it.intercom == call.name }
 
+/**
+ * A call that rings or is under way, from an intercom or the phone line: [video] fills the screen behind its name, and a
+ * phone call has none.
+ */
 @Composable
 fun CallScreen(
-	call: IntercomCall,
-	camera: CameraConfig?,
-	connection: HaConnection?,
-	onVideoView: (TextureView?) -> Unit,
+	name: String,
+	answered: Boolean,
 	onAnswer: () -> Unit,
 	onHangUp: () -> Unit,
 	modifier: Modifier = Modifier,
+	video: @Composable () -> Unit = {},
 ) {
 	Box(
 		modifier =
@@ -36,15 +39,9 @@ fun CallScreen(
 				.fillMaxSize()
 				.background(Color.Black),
 	) {
-		// The intercom's video, whichever way it comes: the phone hands the view to the call's media.
-		AndroidView(
-			factory = { context -> TextureView(context).also(onVideoView) },
-			onRelease = { onVideoView(null) },
-			modifier = Modifier.fillMaxSize(),
-		)
-		if (camera != null && connection != null) CameraView(camera, connection, active = true)
+		video()
 		Text(
-			text = if (call.answered) call.name else "Call from ${call.name}",
+			text = if (answered) name else "Call from $name",
 			color = Color.White,
 			fontSize = 28.sp,
 			modifier =
@@ -52,7 +49,7 @@ fun CallScreen(
 					.align(Alignment.TopCenter)
 					.padding(32.dp),
 		)
-		if (!call.answered) {
+		if (!answered) {
 			PixelButton(
 				icon = PixelIcon.Talk,
 				description = "Answer",
@@ -74,5 +71,23 @@ fun CallScreen(
 					.align(Alignment.BottomEnd)
 					.padding(32.dp),
 		)
+	}
+}
+
+/** The intercom's video, whichever way it comes: the phone hands the view to the call's media. */
+@Composable
+fun IntercomVideo(
+	camera: CameraConfig?,
+	connection: HaConnection?,
+	onVideoView: (TextureView?) -> Unit,
+	modifier: Modifier = Modifier,
+) {
+	Box(modifier.fillMaxSize()) {
+		AndroidView(
+			factory = { context -> TextureView(context).also(onVideoView) },
+			onRelease = { onVideoView(null) },
+			modifier = Modifier.fillMaxSize(),
+		)
+		if (camera != null && connection != null) CameraView(camera, connection, active = true)
 	}
 }

@@ -16,6 +16,7 @@ It's a half-joking personal project, shared in case it's useful to someone.
 - **Clock and weather** on a black screen, designed for OLED panels that stay on all day.
 - **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
   with an RTSP backchannel, over RTSP from the moment it rings. Tested with a Dahua VTO2202F.
+- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
 - **Sensors and siren** in Home Assistant: light, battery, temperature, presence, Wi-Fi, whether the camera is on, and
   a siren on the alarm channel.
@@ -51,6 +52,7 @@ flowchart LR
             rtsp["RTSP server<br/>optional"]
             voice["Vosk<br/>wake phrase"]
             sys["Android<br/>audio, screen, camera"]
+            tel["Android Telecom<br/>SIM calls"]
         end
         vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
@@ -63,6 +65,7 @@ flowchart LR
     svc --> rtsp
     svc --> voice
     svc --> sys
+    tel -- "InCallService<br/>phone calls" --> ui
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
     svc <-- "RTSP, optional<br/>video and sound; the panel's voice" --> vto

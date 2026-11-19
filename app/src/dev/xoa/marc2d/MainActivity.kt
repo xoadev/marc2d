@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
 					val haStatus by runtime.haStatus.collectAsState()
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
+					val phoneCall by runtime.line.call.collectAsState()
 					val weather by runtime.weather.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
@@ -92,15 +93,17 @@ class MainActivity : ComponentActivity() {
 					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
 
 					// The screen does not turn off during a call.
-					LocalView.current.keepScreenOn = call != null || camerasOpen || scanOpen
+					LocalView.current.keepScreenOn = call != null || phoneCall != null || camerasOpen || scanOpen
 
 					val needsSetup = haStatus == HaStatus.NotConfigured
 					val activeCall = call
+					val activePhoneCall = phoneCall
 					val openChart = chartOpen
 					val cameraConnection = connection
 					val screen =
 						when {
 							activeCall != null -> Screen.Call(activeCall)
+							activePhoneCall != null -> Screen.Phone(activePhoneCall)
 							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
 							scanOpen -> Screen.Scan
 							settingsOpen || needsSetup -> Screen.Settings
@@ -111,12 +114,25 @@ class MainActivity : ComponentActivity() {
 					when (screen) {
 						is Screen.Call -> {
 							CallScreen(
-								call = screen.call,
-								camera = ringingCamera(screen.call, cameras),
-								connection = connection,
-								onVideoView = runtime.phone::setVideoView,
+								name = screen.call.name,
+								answered = screen.call.answered,
 								onAnswer = runtime.phone::answer,
 								onHangUp = runtime.phone::hangUp,
+							) {
+								IntercomVideo(
+									camera = ringingCamera(screen.call, cameras),
+									connection = connection,
+									onVideoView = runtime.phone::setVideoView,
+								)
+							}
+						}
+
+						is Screen.Phone -> {
+							CallScreen(
+								name = screen.call.name,
+								answered = screen.call.answered,
+								onAnswer = runtime.line::answer,
+								onHangUp = runtime.line::hangUp,
 							)
 						}
 
@@ -272,10 +288,17 @@ class MainActivity : ComponentActivity() {
 	}
 }
 
-/** What fills the screen: the first that applies, in this order. */
+/**
+ * What fills the screen: the first that applies, in this order. The intercom comes before the phone line: the door does
+ * not wait, and the phone call goes on behind it.
+ */
 private sealed interface Screen {
 	data class Call(
 		val call: IntercomCall,
+	) : Screen
+
+	data class Phone(
+		val call: PhoneCall,
 	) : Screen
 
 	data class Cameras(
