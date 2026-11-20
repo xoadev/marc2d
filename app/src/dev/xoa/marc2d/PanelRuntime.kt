@@ -321,9 +321,7 @@ class PanelRuntime(
 				_brightness.value = windowBrightness(command.percent)
 			}
 
-			is HaProtocol.PanelEvent.Config -> {
-				Unit
-			}
+			is HaProtocol.PanelEvent.Config -> {}
 		}
 	}
 

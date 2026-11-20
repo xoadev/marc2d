@@ -27,6 +27,7 @@ settings:
   compose: enabled
   kotlin:
     serialization: json
+    allWarningsAsErrors: true
 
 test-dependencies:
   - $libs.ktor.server.cio

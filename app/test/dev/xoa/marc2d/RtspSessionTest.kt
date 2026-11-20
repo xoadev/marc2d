@@ -1,7 +1,6 @@
 package dev.xoa.marc2d
 
 import java.io.BufferedInputStream
-import java.io.DataInputStream
 import java.io.IOException
 import java.net.ServerSocket
 import java.util.concurrent.LinkedBlockingQueue
@@ -154,7 +153,7 @@ class RtspSessionTest {
 		val vto =
 			Thread {
 				server.accept().use { client ->
-					val input = DataInputStream(BufferedInputStream(client.getInputStream()))
+					val input = BufferedInputStream(client.getInputStream())
 					val output = client.getOutputStream()
 
 					fun reply(
@@ -179,8 +178,8 @@ class RtspSessionTest {
 							voice += readInterleaved(input) ?: return@Thread
 							continue
 						}
-						val lines = mutableListOf(first.toChar() + input.readLine())
-						while (true) lines += input.readLine().takeIf { it.isNotEmpty() } ?: break
+						val lines = mutableListOf(first.toChar() + (readRtspLine(input, LINE_LIMIT) ?: return@Thread))
+						while (true) lines += readRtspLine(input, LINE_LIMIT)?.takeIf { it.isNotEmpty() } ?: break
 						val request = lines.joinToString("\n")
 						requests += request
 						val cseq = lines.first { it.startsWith("CSeq:") }.substringAfter(":").trim()
@@ -291,3 +290,5 @@ class RtspSessionTest {
 		type: Int = 96,
 	): ByteArray = rtpHeader(type, sequence, 0, ssrc = 1, marker = marker) + payload
 }
+
+private const val LINE_LIMIT = 1024
