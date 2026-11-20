@@ -36,6 +36,7 @@ from .panel_config import (
     CONF_PHOTOS_FOLDER,
     CONF_PHOTOS_IDLE_MINUTES,
     CONF_PHOTOS_KEEP_SCREEN_ON,
+    CONF_PHOTOS_MATCH_ORIENTATION,
     CONF_PHOTOS_ORDER,
     CONF_PHOTOS_SECONDS,
     CONF_PHOTOS_SUBFOLDERS,
@@ -89,6 +90,7 @@ PHOTO_SETTINGS = (
     CONF_PHOTOS_SECONDS,
     CONF_PHOTOS_ORDER,
     CONF_PHOTOS_FIT,
+    CONF_PHOTOS_MATCH_ORIENTATION,
     CONF_PHOTOS_CLOCK,
     CONF_PHOTOS_KEEP_SCREEN_ON,
 )
@@ -377,6 +379,10 @@ class Marc2dOptionsFlow(OptionsFlow):
                 probatio.Optional(CONF_PHOTOS_FIT): _choice(
                     CONF_PHOTOS_FIT, PHOTOS_FIT_WHOLE, PHOTOS_FIT_FILL
                 ),
+                probatio.Required(
+                    CONF_PHOTOS_MATCH_ORIENTATION,
+                    default=PHOTOS_DEFAULTS[CONF_PHOTOS_MATCH_ORIENTATION],
+                ): BooleanSelector(),
                 probatio.Required(
                     CONF_PHOTOS_CLOCK, default=PHOTOS_DEFAULTS[CONF_PHOTOS_CLOCK]
                 ): BooleanSelector(),

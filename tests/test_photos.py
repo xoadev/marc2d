@@ -42,6 +42,7 @@ def test_the_panel_gets_photos_only_with_a_folder() -> None:
         "order": "shuffle",
         "fit": "fit",
         "clock": True,
+        "match_orientation": True,
         "keep_screen_on": False,
     }
 

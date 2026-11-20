@@ -59,6 +59,9 @@ class PanelRuntime(
 	/** Here and not in the screen: it remembers where the pass was when someone touched the panel. */
 	val photoPlaylist = PhotoPlaylist()
 
+	/** Here too, so each photo is downloaded only once to learn its shape. */
+	val photoShapes = PhotoShapes()
+
 	private val _haMood = MutableStateFlow(HaMood.Normal)
 	val haMood: StateFlow<HaMood> = _haMood.asStateFlow()
 

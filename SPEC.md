@@ -57,6 +57,10 @@ the media browser shows. The panel needs no other credentials, and nothing is co
 - **Photos:** one every `seconds`, with a crossfade, shuffled again on each pass or by name, whole with black bars or
   cropped to fill the screen. With `clock`, the time and date go small in a corner. The pass goes on where it was the
   next time the screensaver starts.
+- **Orientation:** with `match_orientation`, on by default, only photos shaped like the screen show: landscape ones with
+  the panel in landscape, portrait ones in portrait, and nearly square ones either way. HA cannot tell a photo's shape
+  without opening it, so the panel learns it the first time it downloads each one, after turning it upright, and from
+  then on skips the others without downloading them. If no photo fits, they all show.
 - **Where they come from:** the folder, and whether to walk its subfolders, stay in HA. The panel asks for the photos
   with `marc2d/photos`, on connecting and on each refresh, every 10 minutes. HA lists the images, resolves each one and
   signs its address for the panel's own user, for a day, so the panel downloads them without its token and never sends
@@ -299,7 +303,8 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
     { "entity": "sensor.electricity_price", "name": "Electricity" }
   ],
   "photos": {
-    "idle_minutes": 1, "seconds": 30, "order": "shuffle", "fit": "fit", "clock": true, "keep_screen_on": false
+    "idle_minutes": 1, "seconds": 30, "order": "shuffle", "fit": "fit", "match_orientation": true, "clock": true,
+    "keep_screen_on": false
   }
 }
 ```

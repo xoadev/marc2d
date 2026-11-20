@@ -60,8 +60,11 @@ class PanelConfigTest {
 		val photos =
 			PanelConfig
 				.fromStored(
-					"""{"photos":{"idle_minutes":5,"seconds":10,"order":"name","fit":"fill","clock":false,"keep_screen_on":true}}""",
+					"""{"photos":{"idle_minutes":5,"seconds":10,"order":"name","fit":"fill","match_orientation":false,"clock":false,"keep_screen_on":true}}""",
 				)?.photos
-		assertEquals(PhotosConfig(5, 10, PhotoOrder.Name, PhotoFit.Fill, clock = false, keepScreenOn = true), photos)
+		assertEquals(
+			PhotosConfig(5, 10, PhotoOrder.Name, PhotoFit.Fill, matchOrientation = false, clock = false, keepScreenOn = true),
+			photos,
+		)
 	}
 }

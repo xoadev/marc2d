@@ -53,6 +53,8 @@ data class PhotosConfig(
 	val seconds: Int = 30,
 	val order: PhotoOrder = PhotoOrder.Shuffle,
 	val fit: PhotoFit = PhotoFit.Whole,
+	/** Only photos shaped like the screen: landscape ones with the panel in landscape, portrait ones in portrait. */
+	@SerialName("match_orientation") val matchOrientation: Boolean = true,
 	/** The time and date, small, over the photos. */
 	val clock: Boolean = true,
 	/** Whether the photos keep the screen on, instead of leaving it to Android's screen timeout. */

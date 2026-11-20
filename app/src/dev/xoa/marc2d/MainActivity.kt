@@ -261,6 +261,7 @@ class MainActivity : ComponentActivity() {
 								haUrl = connection?.url.orEmpty(),
 								config = photosConfig ?: PhotosConfig(),
 								playlist = runtime.photoPlaylist,
+								shapes = runtime.photoShapes,
 							)
 						}
 

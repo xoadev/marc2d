@@ -120,6 +120,7 @@
           "photos_seconds": "Seconds per photo",
           "photos_order": "Order",
           "photos_fit": "Fit",
+          "photos_match_orientation": "Only photos shaped like the screen",
           "photos_clock": "Show the time",
           "photos_keep_screen_on": "Keep the screen on"
         },
@@ -130,6 +131,7 @@
           "photos_seconds": "How long each photo stays.",
           "photos_order": "Shuffled again on each pass, or by name.",
           "photos_fit": "Whole photo, with black bars where it does not fill the screen, or cropped to fill it.",
+          "photos_match_orientation": "With the panel in landscape, only landscape photos, and in portrait only portrait ones; square photos show either way. The panel learns each photo's shape the first time it downloads it, and from then on skips the others without downloading them. If none matches, it shows them all.",
           "photos_clock": "The time and the date, small, in a corner of the photos.",
           "photos_keep_screen_on": "While the photos show, Android does not turn the screen off: it stays on until the room goes dark or someone touches it. It uses more power and wears the OLED screen sooner."
         }

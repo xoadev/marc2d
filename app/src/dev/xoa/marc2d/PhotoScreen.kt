@@ -43,6 +43,7 @@ import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import java.nio.ByteBuffer
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
@@ -61,6 +62,9 @@ private const val CROSSFADE_MILLIS = 1_000
 
 // With no photo that loads, it tries again after this instead of asking HA in a tight loop.
 private val NOTHING_LOADED_RETRY = 30.seconds
+
+// Photos this close to square suit either orientation.
+private const val SQUARE_TOLERANCE = 0.05f
 private val CLOCK_SHADOW = Shadow(Color.Black, Offset(0f, 2f), blurRadius = 8f)
 
 /**
@@ -97,6 +101,66 @@ class PhotoPlaylist(
 	}
 }
 
+enum class PhotoShape {
+	Landscape,
+	Portrait,
+	Square,
+	;
+
+	fun fits(landscapeScreen: Boolean): Boolean = this == Square || (this == Landscape) == landscapeScreen
+
+	companion object {
+		/** From the decoded photo, already turned upright: the file's own size may be sideways. */
+		fun of(
+			width: Int,
+			height: Int,
+		): PhotoShape =
+			when {
+				abs(width - height) <= maxOf(width, height) * SQUARE_TOLERANCE -> Square
+				width > height -> Landscape
+				else -> Portrait
+			}
+	}
+}
+
+/**
+ * The shape of each photo, learnt the first time it downloads, to show only those shaped like the screen. HA cannot say
+ * it without opening every file, and some sources, such as Immich, only through their own servers.
+ *
+ * A photo of unknown shape may still fit, so it is downloaded. When no photo can fit, they all show: a black screen
+ * would be worse than a photo with bars.
+ */
+class PhotoShapes {
+	private val shapes = mutableMapOf<String, PhotoShape>()
+
+	/** Whether to skip this photo without downloading it. [landscape] is null when the orientation does not matter. */
+	fun skip(
+		url: String,
+		photos: List<String>,
+		landscape: Boolean?,
+	): Boolean = landscape != null && shapes[path(url)]?.fits(landscape) == false && anyMayFit(photos, landscape)
+
+	/** Learns the shape of a downloaded photo, and says whether to show it. */
+	fun accept(
+		url: String,
+		width: Int,
+		height: Int,
+		photos: List<String>,
+		landscape: Boolean?,
+	): Boolean {
+		val shape = PhotoShape.of(width, height)
+		shapes[path(url)] = shape
+		return landscape == null || shape.fits(landscape) || !anyMayFit(photos, landscape)
+	}
+
+	private fun anyMayFit(
+		photos: List<String>,
+		landscape: Boolean,
+	): Boolean = photos.any { shapes[path(it)]?.fits(landscape) ?: true }
+
+	private fun path(url: String) = url.substringBefore('?')
+}
+
 /**
  * The screensaver: the photos from HA, full screen, one every [PhotosConfig.seconds], with the time over them if
  * configured. The next one downloads while the current one shows. It only works while the panel's screen is on: with
@@ -108,6 +172,7 @@ fun PhotoScreen(
 	haUrl: String,
 	config: PhotosConfig,
 	playlist: PhotoPlaylist,
+	shapes: PhotoShapes,
 	modifier: Modifier = Modifier,
 ) {
 	var shown by remember { mutableStateOf<Bitmap?>(null) }
@@ -118,12 +183,16 @@ fun PhotoScreen(
 		val screen = with(LocalDensity.current) { ScreenSize(maxWidth.roundToPx(), maxHeight.roundToPx()) }
 		LaunchedEffect(haUrl, screen) {
 			lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-				showPhotos(
-					nextPhoto = { playlist.next(currentPhotos, currentConfig.order) },
-					load = { url -> loadPhoto(HaProtocol.mediaUrl(url, haUrl), screen) },
-					seconds = { currentConfig.seconds },
-					show = { shown = it },
-				)
+				val pick =
+					PhotoPick(
+						nextPhoto = { playlist.next(currentPhotos, currentConfig.order) },
+						load = { url -> loadPhoto(HaProtocol.mediaUrl(url, haUrl), screen) },
+						skip = { url -> shapes.skip(url, currentPhotos, screen.wantedLandscape(currentConfig)) },
+						accept = { url, bitmap ->
+							shapes.accept(url, bitmap.width, bitmap.height, currentPhotos, screen.wantedLandscape(currentConfig))
+						},
+					)
+				showPhotos(pick, seconds = { currentConfig.seconds }, show = { shown = it })
 			}
 		}
 		Crossfade(targetState = shown, animationSpec = tween(CROSSFADE_MILLIS), label = "photo") { bitmap ->
@@ -145,42 +214,52 @@ fun PhotoScreen(
 private data class ScreenSize(
 	val width: Int,
 	val height: Int,
+) {
+	/** The orientation the photos must have, or nothing if any will do. */
+	fun wantedLandscape(config: PhotosConfig): Boolean? = if (config.matchOrientation) width > height else null
+}
+
+/** How the screensaver chooses its next photo: the order, the download, and which to leave out by their shape. */
+private class PhotoPick(
+	val nextPhoto: () -> String?,
+	val load: suspend (String) -> Bitmap?,
+	val skip: (String) -> Boolean,
+	val accept: (String, Bitmap) -> Boolean,
 )
 
 /** Shows a photo, waits while the next one downloads, and so on, for as long as it is on screen. */
 private suspend fun showPhotos(
-	nextPhoto: () -> String?,
-	load: suspend (String) -> Bitmap?,
+	pick: PhotoPick,
 	seconds: () -> Int,
 	show: (Bitmap) -> Unit,
 ) {
 	coroutineScope {
-		var next = loadNext(nextPhoto, load)
+		var next = loadNext(pick)
 		while (true) {
 			val current = next
 			if (current == null) {
 				delay(NOTHING_LOADED_RETRY)
-				next = loadNext(nextPhoto, load)
+				next = loadNext(pick)
 				continue
 			}
 			show(current)
-			val following = async { loadNext(nextPhoto, load) }
+			val following = async { loadNext(pick) }
 			delay(seconds().seconds)
 			next = following.await()
 		}
 	}
 }
 
-/** The next photo that loads, trying each one of a pass at most once: those that fail are skipped. */
-private suspend fun loadNext(
-	nextPhoto: () -> String?,
-	load: suspend (String) -> Bitmap?,
-): Bitmap? {
+/** The next photo that loads and is wanted, trying each one of a pass at most once: those that fail are skipped. */
+private suspend fun loadNext(pick: PhotoPick): Bitmap? {
 	val tried = mutableSetOf<String>()
 	while (true) {
-		val url = nextPhoto() ?: return null
+		val url = pick.nextPhoto() ?: return null
 		if (!tried.add(url.substringBefore('?'))) return null
-		load(url)?.let { return it }
+		if (pick.skip(url)) continue
+		val bitmap = pick.load(url) ?: continue
+		if (pick.accept(url, bitmap)) return bitmap
+		bitmap.recycle()
 	}
 }
 

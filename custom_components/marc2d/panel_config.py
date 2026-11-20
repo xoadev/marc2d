@@ -43,6 +43,7 @@ CONF_PHOTOS_SECONDS = "photos_seconds"
 CONF_PHOTOS_ORDER = "photos_order"
 CONF_PHOTOS_FIT = "photos_fit"
 CONF_PHOTOS_CLOCK = "photos_clock"
+CONF_PHOTOS_MATCH_ORIENTATION = "photos_match_orientation"
 CONF_PHOTOS_KEEP_SCREEN_ON = "photos_keep_screen_on"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
@@ -60,6 +61,7 @@ PHOTOS_DEFAULTS: dict[str, Any] = {
     CONF_PHOTOS_ORDER: PHOTOS_ORDER_SHUFFLE,
     CONF_PHOTOS_FIT: PHOTOS_FIT_WHOLE,
     CONF_PHOTOS_CLOCK: True,
+    CONF_PHOTOS_MATCH_ORIENTATION: True,
     CONF_PHOTOS_KEEP_SCREEN_ON: False,
 }
 
@@ -134,6 +136,7 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             "order": photos_option(options, CONF_PHOTOS_ORDER),
             "fit": photos_option(options, CONF_PHOTOS_FIT),
             "clock": photos_option(options, CONF_PHOTOS_CLOCK),
+            "match_orientation": photos_option(options, CONF_PHOTOS_MATCH_ORIENTATION),
             "keep_screen_on": photos_option(options, CONF_PHOTOS_KEEP_SCREEN_ON),
         }
     return config
