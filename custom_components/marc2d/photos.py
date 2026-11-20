@@ -5,18 +5,11 @@ from __future__ import annotations
 from collections import deque
 import logging
 
-from homeassistant.components.media_player import (
-    BrowseError,
-    BrowseMedia,
-    MediaClass,
-    async_process_play_media_url,
-)
-from homeassistant.components.media_source import (
-    Unresolvable,
-    async_browse_media,
-    async_resolve_media,
-)
+from homeassistant.components.media_player import BrowseMedia, MediaClass
+from homeassistant.components.media_source import async_browse_media, async_resolve_media
 from homeassistant.core import HomeAssistant
+
+from .media_player import panel_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +39,8 @@ async def find_photos(hass: HomeAssistant, folder: str, subfolders: bool) -> lis
         walked += 1
         try:
             listing = await async_browse_media(hass, current)
-        except BrowseError as err:
+        # Any error: other sources, such as Immich, also fail with their own client's errors.
+        except Exception as err:
             if current == folder:
                 raise PhotosUnavailable(
                     f"Cannot open the photos folder {folder}: {err}. Check it in the panel's "
@@ -83,9 +77,10 @@ async def photo_urls(hass: HomeAssistant, folder: str, subfolders: bool) -> list
     for photo in await find_photos(hass, folder, subfolders):
         try:
             media = await async_resolve_media(hass, photo.media_content_id, None)
-        except Unresolvable as err:
+        # Any error: one photo a source cannot resolve must not cost the panel all the others.
+        except Exception as err:
             _LOGGER.warning("Skipping the photo %s: %s", photo.media_content_id, err)
             continue
-        urls.append(async_process_play_media_url(hass, media.url, allow_relative_url=True))
+        urls.append(panel_url(hass, media.url))
     _LOGGER.debug("Found %s photos in %s", len(urls), folder)
     return urls

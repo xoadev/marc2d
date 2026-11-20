@@ -353,7 +353,12 @@ class Marc2dOptionsFlow(OptionsFlow):
         """The screensaver: a folder is needed only while it is on, and it must have photos."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            candidate = {**self._options, **user_input, SECTION_FEATURES: {FEATURE_PHOTOS: True}}
+            # Only what was submitted: a cleared field is left out of user_input, and the saved
+            # folder must not pass the check in its place.
+            candidate = {
+                **{key: user_input.get(key) for key in PHOTO_SETTINGS},
+                SECTION_FEATURES: {FEATURE_PHOTOS: True},
+            }
             if user_input[CONF_ENABLED]:
                 errors = await self._photos_errors(candidate)
             if not errors:

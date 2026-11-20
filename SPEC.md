@@ -55,7 +55,8 @@ the media browser shows. The panel needs no other credentials, and nothing is co
   `keep_screen_on` the photos keep it on until someone touches it or the room goes dark. With the screen off nothing is
   downloaded.
 - **Photos:** one every `seconds`, with a crossfade, shuffled again on each pass or by name, whole with black bars or
-  cropped to fill the screen. With `clock`, the time and date go small in a corner. The pass goes on where it was the
+  cropped to fill the screen. With `clock`, the time and date go small in a corner,
+  shifting a few pixels now and then like the main clock. The pass goes on where it was the
   next time the screensaver starts.
 - **Orientation:** with `match_orientation`, on by default, only photos shaped like the screen show: landscape ones with
   the panel in landscape, portrait ones in portrait, and nearly square ones either way. HA cannot tell a photo's shape

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,10 +38,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.request.get
-import io.ktor.client.statement.readRawBytes
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readAvailable
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.math.abs
@@ -59,6 +63,7 @@ private val photoClient by lazy { HttpClient(OkHttp) }
 // A phone photo is a few MB: anything far bigger is not one, and would not fit in the panel's memory decoded.
 private const val MAX_PHOTO_BYTES = 40L * 1024 * 1024
 private const val CROSSFADE_MILLIS = 1_000
+private const val READ_BUFFER_BYTES = 64 * 1024
 
 // With no photo that loads, it tries again after this instead of asking HA in a tight loop.
 private val NOTHING_LOADED_RETRY = 30.seconds
@@ -271,23 +276,27 @@ private suspend fun loadPhoto(
 	// The signature is in the query: the log only gets the path.
 	val path = url.substringBefore('?')
 	return try {
+		// Streamed: a plain get would hold the whole body in memory before its size could be checked.
 		val bytes =
 			withContext(Dispatchers.IO) {
-				val response = photoClient.get(url)
-				val length = response.contentLength()
-				when {
-					!response.status.isSuccess() -> {
-						Log.w(TAG, "Photo $path: HTTP ${response.status.value}. If it is 401 or 403, its signature expired or HA cannot reach the file")
-						null
-					}
+				photoClient.prepareGet(url).execute { response ->
+					val length = response.contentLength()
+					when {
+						!response.status.isSuccess() -> {
+							Log.w(TAG, "Photo $path: HTTP ${response.status.value}. If it is 401 or 403, its signature expired or HA cannot reach the file")
+							null
+						}
 
-					length != null && length > MAX_PHOTO_BYTES -> {
-						Log.w(TAG, "Photo $path: skipped, $length bytes is larger than the $MAX_PHOTO_BYTES the panel accepts")
-						null
-					}
+						length != null && length > MAX_PHOTO_BYTES -> {
+							Log.w(TAG, "Photo $path: skipped, $length bytes is larger than the $MAX_PHOTO_BYTES the panel accepts")
+							null
+						}
 
-					else -> {
-						response.readRawBytes()
+						else -> {
+							readAtMost(response.bodyAsChannel(), MAX_PHOTO_BYTES).also { photo ->
+								if (photo == null) Log.w(TAG, "Photo $path: skipped, it is larger than the $MAX_PHOTO_BYTES bytes the panel accepts")
+							}
+						}
 					}
 				}
 			} ?: return null
@@ -297,6 +306,21 @@ private suspend fun loadPhoto(
 	} catch (e: Exception) {
 		Log.w(TAG, "Photo $path: could not download or decode it (${e::class.simpleName}: ${e.message})")
 		null
+	}
+}
+
+/** Everything [channel] has, or nothing once it passes [limit]: a server need not say the size before sending it. */
+internal suspend fun readAtMost(
+	channel: ByteReadChannel,
+	limit: Long,
+): ByteArray? {
+	val bytes = ByteArrayOutputStream()
+	val buffer = ByteArray(READ_BUFFER_BYTES)
+	while (true) {
+		val read = channel.readAvailable(buffer)
+		if (read < 0) return bytes.toByteArray()
+		bytes.write(buffer, 0, read)
+		if (bytes.size() > limit) return null
 	}
 }
 
@@ -318,7 +342,9 @@ private fun PhotoClock(modifier: Modifier = Modifier) {
 	val now = rememberNow()
 	val locale = Locale.getDefault()
 	val style = TextStyle(color = Color.White, shadow = CLOCK_SHADOW)
-	Column(modifier) {
+	// It moves as the main clock does: the photos change behind it, but it would stay on the same pixels for hours.
+	val (offsetX, offsetY) = ClockFormat.burnInOffset(now)
+	Column(modifier.offset(offsetX.dp, offsetY.dp)) {
 		Text(ClockFormat.time(now), style = style.copy(fontSize = 56.sp, fontWeight = FontWeight.Light))
 		Text(ClockFormat.date(now, locale, DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")), style = style.copy(fontSize = 20.sp))
 	}

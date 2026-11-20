@@ -56,6 +56,10 @@ class PanelRuntime(
 	private val _photos = MutableStateFlow<List<String>>(emptyList())
 	val photos: StateFlow<List<String>> = _photos.asStateFlow()
 
+	/** When someone last touched the screen. Here and not in the activity: turning the panel recreates that, and the wait
+	 * for the photos goes on. */
+	val lastTouch = MutableStateFlow(SystemClock.elapsedRealtime())
+
 	/** Here and not in the screen: it remembers where the pass was when someone touched the panel. */
 	val photoPlaylist = PhotoPlaylist()
 

@@ -83,27 +83,29 @@ class PanelSpeaker(
 		}
 	}
 
+	/** Kept before preparing it: if that fails, [release] still finds it and frees it. */
 	private fun start() {
-		player =
-			MediaPlayer().apply {
-				setAudioAttributes(
-					AudioAttributes
-						.Builder()
-						.setUsage(AudioAttributes.USAGE_MEDIA)
-						.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-						.build(),
-				)
-				// The speaker's stop, not the player's: only that one releases it and tells HA that it has ended.
-				setOnCompletionListener { this@PanelSpeaker.stop() }
-				setOnErrorListener { _, what, extra ->
-					Log.w(TAG, "Could not play the audio: $what, $extra")
-					this@PanelSpeaker.stop()
-					true
-				}
-				setDataSource(file.path)
-				prepare()
-				start()
+		val created = MediaPlayer()
+		player = created
+		created.apply {
+			setAudioAttributes(
+				AudioAttributes
+					.Builder()
+					.setUsage(AudioAttributes.USAGE_MEDIA)
+					.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+					.build(),
+			)
+			// The speaker's stop, not the player's: only that one releases it and tells HA that it has ended.
+			setOnCompletionListener { this@PanelSpeaker.stop() }
+			setOnErrorListener { _, what, extra ->
+				Log.w(TAG, "Could not play the audio: $what, $extra")
+				this@PanelSpeaker.stop()
+				true
 			}
+			setDataSource(file.path)
+			prepare()
+			start()
+		}
 		onPlaying(true)
 	}
 

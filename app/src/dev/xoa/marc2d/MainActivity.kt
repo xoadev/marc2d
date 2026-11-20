@@ -27,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -48,11 +48,9 @@ class MainActivity : ComponentActivity() {
 	private val micGranted get() = Manifest.permission.RECORD_AUDIO !in missingPermissions
 	private var askedByTap = false
 
-	/** When someone last touched the screen, anywhere: the screensaver waits from here. */
-	private var lastTouch by mutableLongStateOf(SystemClock.elapsedRealtime())
-
+	/** Each touch, anywhere, starts the screensaver's wait again. Only its start: a swipe would otherwise redraw everything. */
 	override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-		lastTouch = SystemClock.elapsedRealtime()
+		if (event.actionMasked == MotionEvent.ACTION_DOWN) (application as Marc2dApp).runtime.lastTouch.value = SystemClock.elapsedRealtime()
 		return super.dispatchTouchEvent(event)
 	}
 
@@ -106,12 +104,13 @@ class MainActivity : ComponentActivity() {
 					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
 					val photosConfig by remember { runtime.store.config.map { it.photos } }.collectAsState(initial = null)
 					val photos by runtime.photos.collectAsState()
+					val lastTouch by runtime.lastTouch.collectAsState()
 					// Any touch starts the wait again, and hides the photos if they were showing.
 					var idle by remember { mutableStateOf(false) }
 					LaunchedEffect(lastTouch, photosConfig) {
 						idle = false
 						val config = photosConfig ?: return@LaunchedEffect
-						delay(config.idleMinutes.minutes)
+						delay(config.idleMinutes.minutes - (SystemClock.elapsedRealtime() - lastTouch).milliseconds)
 						idle = true
 					}
 

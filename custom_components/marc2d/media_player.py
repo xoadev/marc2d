@@ -27,6 +27,16 @@ from .panel_hub import KEY_PLAYING, KEY_VOLUME, get_hub
 STOP = {"kind": "stop"}
 
 
+def panel_url(hass: HomeAssistant, url: str) -> str:
+    """A URL the panel can download by itself: signed, and HA's own as a path.
+
+    HA may name itself with an address the panel cannot resolve, such as a .local name or the
+    external URL: the panel joins the path to the address it knows for HA.
+    """
+    url = async_process_play_media_url(hass, url, allow_relative_url=True)
+    return URL(url).raw_path_qs if is_hass_url(hass, url) else url
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, add_entities: AddEntitiesCallback
 ) -> None:
@@ -70,11 +80,7 @@ class PanelSpeaker(PanelEntity, MediaPlayerEntity):
         if media_source.is_media_source_id(media_id):
             media = await media_source.async_resolve_media(self.hass, media_id, self.entity_id)
             media_id = media.url
-        url = async_process_play_media_url(self.hass, media_id, allow_relative_url=True)
-        if is_hass_url(self.hass, url):
-            # HA may use a name the panel cannot resolve: the panel knows its own address for it.
-            url = URL(url).raw_path_qs
-        self._hub.send({"kind": "play", "url": url})
+        self._hub.send({"kind": "play", "url": panel_url(self.hass, media_id)})
 
     async def async_media_stop(self) -> None:
         """Stop the audio."""

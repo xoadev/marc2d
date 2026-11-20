@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.marc2d.media_player import panel_url
 from custom_components.marc2d.panel_config import build_panel_config, photos_folder
+from homeassistant.core_config import async_process_ha_core_config
 
 from .conftest import connect_panel
 from .test_panel_config import open_page
@@ -158,3 +160,31 @@ async def test_the_page_shows_the_defaults(hass, entry) -> None:
     keys = {str(key): key.description for key in form["data_schema"].schema}
     assert keys["photos_seconds"] == {"suggested_value": 30}
     assert keys["photos_order"] == {"suggested_value": "shuffle"}
+
+
+async def test_clearing_the_folder_while_on_is_refused(hass, photos, entry) -> None:
+    hass.config_entries.async_update_entry(entry, options={"photos_folder": "photos"})
+    form = await open_page(hass, entry, "photos")
+    # A cleared field does not reach the flow: the saved folder must not pass in its place.
+    done = await hass.config_entries.options.async_configure(form["flow_id"], {"enabled": True})
+    assert done["errors"] == {"photos_folder": "required"}
+
+
+async def test_any_error_of_a_source_says_what_to_check(
+    hass, photos, entry, hass_ws_client, monkeypatch
+) -> None:
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("Immich is down")
+
+    monkeypatch.setattr("custom_components.marc2d.photos.async_browse_media", broken)
+    hass.config_entries.async_update_entry(entry, options={"photos_folder": "photos"})
+    answer = await ask_for_photos(hass, entry, hass_ws_client)
+    assert answer["error"]["code"] == "photos_unavailable"
+    assert "Immich is down" in answer["error"]["message"]
+
+
+async def test_home_assistant_addresses_reach_the_panel_as_paths(hass, entry) -> None:
+    await async_process_ha_core_config(hass, {"internal_url": "http://ha.local:8123"})
+    url = panel_url(hass, "http://ha.local:8123/media/local/photos/a.jpg")
+    assert url.startswith("/media/local/photos/a.jpg?authSig=")
+    assert panel_url(hass, "https://example.com/a.jpg") == "https://example.com/a.jpg"
