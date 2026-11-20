@@ -19,7 +19,7 @@ class HaProtocolTest {
 	fun `converts the Home Assistant URL into the WebSocket one`() {
 		assertEquals("ws://ha.local:8123/api/websocket", HaProtocol.webSocketUrl("http://ha.local:8123/"))
 		assertEquals("wss://ha.example/api/websocket", HaProtocol.webSocketUrl(" https://ha.example "))
-		assertEquals("ws://192.168.1.2:8123/api/websocket", HaProtocol.webSocketUrl("192.168.1.2:8123"))
+		assertEquals("ws://192.0.2.2:8123/api/websocket", HaProtocol.webSocketUrl("192.0.2.2:8123"))
 	}
 
 	private fun event(body: String) = HaProtocol.parse("""{"id":1,"type":"event","event":$body}""")

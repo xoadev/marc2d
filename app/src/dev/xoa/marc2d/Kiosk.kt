@@ -77,6 +77,7 @@ class Kiosk(
 		policies.setKeyguardDisabled(admin, false)
 		policies.setLockTaskPackages(admin, emptyArray())
 		policies.clearPackagePersistentPreferredActivities(admin, activity.packageName)
+		@Suppress("DEPRECATION") // No replacement: only a factory reset otherwise takes the device owner away, and Exit kiosk mode must not wipe the phone.
 		policies.clearDeviceOwnerApp(activity.packageName)
 	}
 
