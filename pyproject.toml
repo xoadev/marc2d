@@ -9,7 +9,7 @@ requires-python = "==3.14.10"
 dev = [
   "pytest-homeassistant-custom-component==0.13.375",
   "pytest-cov==7.1.0",
-  "ruff==0.17.4",
+  "ruff==0.17.5",
   # The camera and stream integrations in the manifest need these: Home Assistant installs them at runtime, not here.
   "PyTurboJPEG==1.8.3",
   "av==19.0.0",
