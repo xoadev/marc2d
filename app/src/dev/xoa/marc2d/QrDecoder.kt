@@ -2,9 +2,12 @@ package dev.xoa.marc2d
 
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.ChecksumException
 import com.google.zxing.DecodeHintType
+import com.google.zxing.FormatException
 import com.google.zxing.NotFoundException
 import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 
@@ -24,14 +27,18 @@ object QrDecoder {
 		height: Int,
 	): String? {
 		val source = PlanarYUVLuminanceSource(luminance, rowStride, height, 0, 0, width, height, false)
-		return try {
-			QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), HINTS).text
+		// The global binarizer sometimes reads the blurred image of a fixed-focus camera that the hybrid one misses.
+		return read(BinaryBitmap(HybridBinarizer(source))) ?: read(BinaryBitmap(GlobalHistogramBinarizer(source)))
+	}
+
+	private fun read(bitmap: BinaryBitmap): String? =
+		try {
+			QRCodeReader().decode(bitmap, HINTS).text
 		} catch (_: NotFoundException) {
 			null
-		} catch (_: com.google.zxing.ChecksumException) {
+		} catch (_: ChecksumException) {
 			null
-		} catch (_: com.google.zxing.FormatException) {
+		} catch (_: FormatException) {
 			null
 		}
-	}
 }

@@ -35,11 +35,12 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 // Black background and dimmed white: the screens are OLED and stay on for many hours.
-private val ClockColor = Color(0xFFD8D8D8)
-private val DateColor = Color(0xFFA0A0A0)
 private val WarningColor = Color(0xFFE0A030)
 private const val MAX_CLOCK_HEIGHT = 0.5f
 private val WEATHER_LIST_WIDTH = 160.dp
+
+// The readings' column, on the left as the weather is on the right, so that the droid never covers them.
+private val READINGS_WIDTH = 200.dp
 private const val DROID_WIDTH = 0.1f
 
 @Composable
@@ -47,18 +48,14 @@ fun ClockScreen(
 	warning: String?,
 	weather: WeatherReport?,
 	droid: DroidMood,
+	readings: List<Reading>,
 	onOpenMenu: () -> Unit,
+	onFixPermissions: (() -> Unit)?,
 	modifier: Modifier = Modifier,
 ) {
 	// The order of day and month depends on the language: the device decides it.
 	val locale = Locale.getDefault()
-	var now by remember { mutableStateOf(LocalDateTime.now()) }
-	LaunchedEffect(Unit) {
-		while (true) {
-			delay(ClockFormat.millisToNextMinute(LocalDateTime.now()))
-			now = LocalDateTime.now()
-		}
-	}
+	val now = rememberNow()
 	val (offsetX, offsetY) = ClockFormat.burnInOffset(now)
 
 	BoxWithConstraints(
@@ -79,7 +76,10 @@ fun ClockScreen(
 					.fillMaxWidth()
 					.offset(offsetX.dp, offsetY.dp)
 					// In landscape the forecast goes in a list to the right of the time.
-					.padding(start = 24.dp, end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp),
+					.padding(
+						start = if (landscape && readings.isNotEmpty()) READINGS_WIDTH else 24.dp,
+						end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp,
+					),
 			horizontalAlignment = Alignment.CenterHorizontally,
 			verticalArrangement = Arrangement.spacedBy(8.dp),
 		) {
@@ -91,7 +91,7 @@ fun ClockScreen(
 				modifier = Modifier.heightIn(max = clockMaxHeight),
 				style =
 					TextStyle(
-						color = ClockColor,
+						color = PixelWhite,
 						fontWeight = FontWeight.Light,
 						// Fixed-width digits: the time does not jump around when the minute changes.
 						fontFeatureSettings = "tnum",
@@ -100,7 +100,7 @@ fun ClockScreen(
 			)
 			Text(
 				text = ClockFormat.date(now, locale, DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")),
-				color = DateColor,
+				color = PixelGray,
 				fontSize = 28.sp,
 				textAlign = TextAlign.Center,
 			)
@@ -117,11 +117,34 @@ fun ClockScreen(
 						.padding(16.dp),
 			)
 		}
+		if (readings.isNotEmpty()) {
+			ReadingTiles(
+				readings = readings,
+				modifier =
+					Modifier
+						.align(Alignment.TopStart)
+						.offset(offsetX.dp, offsetY.dp)
+						// Below the permissions icon, when it is there.
+						.padding(start = 24.dp, top = if (onFixPermissions != null) CLOSE_BUTTON + 32.dp else 24.dp),
+			)
+		}
 		DroidSprite(
 			mood = droid,
 			size = maxWidth * DROID_WIDTH,
 			modifier = Modifier.offset(offsetX.dp, offsetY.dp),
 		)
+		if (onFixPermissions != null) {
+			PixelButton(
+				icon = PixelIcon.Warning,
+				description = "Grant the missing permissions",
+				onClick = onFixPermissions,
+				size = CLOSE_BUTTON,
+				modifier =
+					Modifier
+						.align(Alignment.TopStart)
+						.padding(16.dp),
+			)
+		}
 		if (warning != null) {
 			Text(
 				text = warning,
@@ -135,4 +158,17 @@ fun ClockScreen(
 			)
 		}
 	}
+}
+
+/** The current time, updated as each minute starts. */
+@Composable
+internal fun rememberNow(): LocalDateTime {
+	var now by remember { mutableStateOf(LocalDateTime.now()) }
+	LaunchedEffect(Unit) {
+		while (true) {
+			delay(ClockFormat.millisToNextMinute(LocalDateTime.now()))
+			now = LocalDateTime.now()
+		}
+	}
+	return now
 }

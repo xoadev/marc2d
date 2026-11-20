@@ -7,9 +7,11 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +23,67 @@ data class BatteryReading(
 	val temperature: Int,
 	val charging: Boolean,
 )
+
+/** Which readings go to Home Assistant: only a [significant] change, as the sensors move all the time and would fill its history. */
+class ChangeFilter<T : Any>(
+	private val significant: (last: T, value: T) -> Boolean,
+) {
+	private var last: T? = null
+
+	fun shouldReport(value: T): Boolean {
+		val previous = last
+		if (previous != null && !significant(previous, value)) return false
+		last = value
+		return true
+	}
+}
+
+/**
+ * Guesses that someone is there from sudden changes of light: a shadow, or a lamp turned on. Slow changes, such as the
+ * sun moving, are followed without noticing them. It cannot see anything in the dark, or someone who stays still.
+ */
+class LightPresence {
+	private var baseline: Float? = null
+	private var lastReading = 0L
+	private var presentUntil = 0L
+	private var ignoredUntil = 0L
+
+	/** The panel's own screen also lights its sensor: without this, an automation that follows presence would feed itself. */
+	fun ignoreChanges(now: Long) {
+		ignoredUntil = now + IGNORE_MS
+	}
+
+	fun update(
+		lux: Float,
+		now: Long,
+	) {
+		val last = baseline
+		when {
+			last == null || now < ignoredUntil -> {
+				baseline = lux
+			}
+
+			PanelReadings.isSignificant(last, lux) -> {
+				presentUntil = now + HOLD_MS
+				baseline = lux
+			}
+
+			else -> {
+				baseline = last + (lux - last) * min(1f, (now - lastReading) / FOLLOW_MS)
+			}
+		}
+		lastReading = now
+	}
+
+	/** How long it will still say that someone is there, in milliseconds. */
+	fun remaining(now: Long): Long = max(0, presentUntil - now)
+
+	private companion object {
+		const val HOLD_MS = 60_000L
+		const val IGNORE_MS = 5_000L
+		const val FOLLOW_MS = 60_000f
+	}
+}
 
 /** Reads the phone's sensors that the panel publishes to Home Assistant. */
 class PanelReadings(
@@ -39,6 +102,17 @@ class PanelReadings(
 			charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
 		)
 	}
+
+	/** In dBm, or nothing without Wi-Fi: a panel on Ethernet has none. The replacement needs a network callback for one number. */
+	@Suppress("DEPRECATION")
+	fun wifiSignal(): Int? =
+		context
+			.getSystemService(WifiManager::class.java)
+			?.connectionInfo
+			?.rssi
+			?.takeIf { it in MIN_WIFI_DBM..MAX_WIFI_DBM }
+
+	fun appVersion(): String? = context.packageManager.getPackageInfo(context.packageName, 0).versionName
 
 	fun light(): Flow<Float> {
 		val manager = context.getSystemService(SensorManager::class.java)
@@ -62,9 +136,17 @@ class PanelReadings(
 
 	companion object {
 		private const val PERCENT = 100
+		private const val MIN_WIFI_DBM = -126
+		private const val MAX_WIFI_DBM = -1
 		private const val TENTHS = 10f
 		private const val MIN_LUX_CHANGE = 2f
 		private const val MIN_RELATIVE_CHANGE = 0.2f
+		private const val MIN_SIGNAL_CHANGE_DB = 5
+
+		fun lightReports(): ChangeFilter<Float> = ChangeFilter(::isSignificant)
+
+		/** Wi-Fi moves a few dB all the time. */
+		fun signalReports(): ChangeFilter<Int> = ChangeFilter { last, dbm -> abs(dbm - last) >= MIN_SIGNAL_CHANGE_DB }
 
 		/** A small change is not published: the sensor fluctuates a lot and would fill HA's history. */
 		fun isSignificant(

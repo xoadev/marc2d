@@ -1,4 +1,4 @@
-"""Hand each panel its own configuration, and any later change right away."""
+"""The panel's connection: its configuration and commands go down, its readings come up."""
 
 from __future__ import annotations
 
@@ -7,63 +7,127 @@ from typing import Any
 import probatio
 
 from homeassistant.components import websocket_api
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import (
-    async_dispatcher_connect,
-    async_dispatcher_send,
-)
 
 from .enrollment import DOMAIN
-from .panel_config import build_panel_config
+from .panel_config import (
+    CONF_PHOTOS_SUBFOLDERS,
+    answered_button,
+    build_panel_config,
+    intercom_names,
+    photos_folder,
+    photos_option,
+)
+from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
+from .photos import PhotosUnavailable, photo_urls
 
 CONF_USER_ID = "user_id"
-
-
-def signal_updated(entry_id: str) -> str:
-    """Name the signal of a panel's changes."""
-    return f"{DOMAIN}_updated_{entry_id}"
-
-
-@callback
-def async_notify_updated(hass: HomeAssistant, entry_id: str) -> None:
-    """Tell the panel's open connections that its options changed."""
-    async_dispatcher_send(hass, signal_updated(entry_id))
 
 
 @callback
 def async_register(hass: HomeAssistant) -> None:
     """Register the panel's commands."""
-    websocket_api.async_register_command(hass, ws_subscribe_config)
+    websocket_api.async_register_command(hass, ws_subscribe)
+    websocket_api.async_register_command(hass, ws_state)
+    websocket_api.async_register_command(hass, ws_doorbell_answered)
+    websocket_api.async_register_command(hass, ws_photos)
+
+
+def config_event(entry: ConfigEntry) -> dict[str, Any]:
+    """Wrap the panel's configuration as an event."""
+    return {"kind": "config", "config": build_panel_config(entry.options)}
+
+
+def _own_entry(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> ConfigEntry | None:
+    """Identify the panel by its user: it can only reach its own data and secrets."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get(CONF_USER_ID) == connection.user.id:
+            return entry
+    connection.send_error(msg["id"], "not_found", "This user is not a marc2d panel")
+    return None
 
 
 @callback
-@websocket_api.websocket_command({probatio.Required("type"): "marc2d/config/subscribe"})
-def ws_subscribe_config(
+@websocket_api.websocket_command({probatio.Required("type"): "marc2d/subscribe"})
+def ws_subscribe(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Identify the panel by its user: it can only read its own secrets."""
-    entry = next(
-        (
-            entry
-            for entry in hass.config_entries.async_entries(DOMAIN)
-            if entry.data.get(CONF_USER_ID) == connection.user.id
-        ),
-        None,
-    )
-    if entry is None:
-        connection.send_error(msg["id"], "not_found", "This user is not a marc2d panel")
+    """Connect the panel: closing this connection is what makes it unavailable."""
+    if (entry := _own_entry(hass, connection, msg)) is None:
         return
+    hub = get_hub(hass, entry.entry_id)
 
     @callback
-    def send_config() -> None:
-        connection.send_message(
-            websocket_api.event_message(msg["id"], build_panel_config(entry.options))
-        )
+    def send(event: dict[str, Any]) -> None:
+        connection.send_message(websocket_api.event_message(msg["id"], event))
 
-    connection.subscriptions[msg["id"]] = async_dispatcher_connect(
-        hass, signal_updated(entry.entry_id), send_config
-    )
+    connection.subscriptions[msg["id"]] = hub.connect(send)
     connection.send_result(msg["id"])
-    send_config()
+    send(config_event(entry))
+    send({"kind": "mood", "value": hub.mood})
+    send({"kind": "brightness", "level": hub.brightness})
+
+
+@callback
+@websocket_api.websocket_command(
+    {probatio.Required("type"): "marc2d/state", probatio.Required("values"): dict}
+)
+def ws_state(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Keep what the panel reports."""
+    if (entry := _own_entry(hass, connection, msg)) is None:
+        return
+    get_hub(hass, entry.entry_id).report(msg["values"])
+    connection.send_result(msg["id"])
+
+
+@callback
+@websocket_api.websocket_command(
+    {probatio.Required("type"): "marc2d/doorbell/answered", probatio.Required("intercom"): str}
+)
+def ws_doorbell_answered(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Stop the other panels and the intercom's other calls ringing, for its own intercom only."""
+    entry = _own_entry(hass, connection, msg)
+    if entry is None:
+        return
+    if msg["intercom"] not in intercom_names(entry.options):
+        connection.send_error(msg["id"], "not_found", "This panel has no intercom by that name")
+        return
+    doorbell_to_all(hass, msg["intercom"], DOORBELL_ANSWERED)
+    if button := answered_button(entry.options, msg["intercom"]):
+        hass.async_create_task(hass.services.async_call("button", "press", {"entity_id": button}))
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({probatio.Required("type"): "marc2d/photos"})
+@websocket_api.async_response
+async def ws_photos(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """The addresses of the screensaver's photos, signed for this panel: none while it is off."""
+    if (entry := _own_entry(hass, connection, msg)) is None:
+        return
+    if (folder := photos_folder(entry.options)) is None:
+        connection.send_result(msg["id"], {"urls": []})
+        return
+    subfolders = photos_option(entry.options, CONF_PHOTOS_SUBFOLDERS)
+    try:
+        urls = await photo_urls(hass, folder, subfolders)
+    except PhotosUnavailable as err:
+        connection.send_error(msg["id"], "photos_unavailable", str(err))
+        return
+    connection.send_result(msg["id"], {"urls": urls})

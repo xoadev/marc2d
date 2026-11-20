@@ -46,6 +46,9 @@ The states and what triggers them are in [SPEC.md](SPEC.md#droid).
 | Alarm     | yellow                                      | blinks           |
 | Intruder  | red band                                    | blinks           |
 | Recording | lens with a red center                      | blinks           |
+| Sound     | large lens with a wide red center           | blinks           |
+| Listening | large, with a glint                         | blinks           |
+| Thinking  | large, with a glint going round its corners | still            |
 
 ## Buttons
 
@@ -55,17 +58,24 @@ or add a word. They are white, and red is reserved for **Hang up**.
 
 ## Screens
 
-- **Main:** time, date, weather and droid, with no buttons. Tapping anywhere opens the menu.
+- **Main:** time, date, weather, readings and droid, with no buttons. The readings are a column of tiles on the left,
+  each with a 12×12 pixel icon (battery, car, thermometer, power or water) and its value in gray; a percentage gets a bar
+  of ten pixel cells, and the battery icon fills instead. Only a warning turns one yellow. Tapping anywhere opens the menu.
 - **Menu:** large buttons on black. It closes with the X, by tapping outside, and on its own after 10 seconds.
 - **Settings:** black background, straight-edged fields and text buttons with the same shape as the rest. It
   closes with the X.
 - **Cameras:** full screen, swiping from one to the next. If one can be called, it shows
   **Talk**. Exit with the X, by tapping the image, or automatically after 2 minutes.
-- **Call:** the video fills the whole screen. **Hang up** never moves and sits in the corner
-  opposite **Answer**, so that a double tap does not end the call.
+- **Chart:** full screen, the bars in whole pixels with a gap between them, as the droid. The lowest values in white
+  and the rest in gray: no colour, which is kept for warnings. In the menu its button has the name under it, as its icon
+  alone does not say which chart it is. Exit with the X, by tapping, or automatically after 2 minutes.
+- **Call:** the video fills the whole screen; a phone call has none, only its number on black.
+  **Hang up** never moves and sits in the corner opposite **Answer**, so that a double tap does not
+  end the call.
 - **Orientation:** always landscape.
+- **Camera on:** on the main screen the droid says it. The others, where it does not appear, show a red square at the top.
 
 ## Text
 
-In English, with short sentences and no technical jargon on screen: "No connection to MQTT" is the limit. Technical
+In English, with short sentences and no technical jargon on screen: "No connection to Home Assistant" is the limit. Technical
 detail goes in the settings, not on the main screen.

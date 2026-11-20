@@ -4,42 +4,69 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
+import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-	private var micGranted by mutableStateOf(false)
 	private var kioskActive by mutableStateOf(false)
 	private val kiosk by lazy { Kiosk(this) }
+
+	private var missingPermissions by mutableStateOf(emptyList<String>())
+	private val micGranted get() = Manifest.permission.RECORD_AUDIO !in missingPermissions
+	private var askedByTap = false
+
+	/** Each touch, anywhere, starts the screensaver's wait again. Only its start: a swipe would otherwise redraw everything. */
+	override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+		if (event.actionMasked == MotionEvent.ACTION_DOWN) (application as Marc2dApp).runtime.lastTouch.value = SystemClock.elapsedRealtime()
+		return super.dispatchTouchEvent(event)
+	}
 
 	private val permissions =
 		registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
 			refreshPermissions()
 			startPanel()
+			// Android stops showing the dialog after two refusals: only its settings can grant them then.
+			if (askedByTap && missingPermissions.isNotEmpty()) openAppSettings()
+			askedByTap = false
 		}
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
-		// In code because `screenOrientation` in the manifest had no effect on the 3a.
-		requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+		// In code because `screenOrientation` in the manifest had no effect on the 3a. Follows the phone and its rotation lock.
+		requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
 		val runtime = (application as Marc2dApp).runtime
 
 		setContent {
@@ -47,66 +74,127 @@ class MainActivity : ComponentActivity() {
 				Surface {
 					val connection by runtime.store.connection.collectAsState(initial = null)
 					val haStatus by runtime.haStatus.collectAsState()
-					val mqttStatus by runtime.mqtt.status.collectAsState()
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
+					val phoneCall by runtime.line.call.collectAsState()
 					val weather by runtime.weather.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
-					val scope = rememberCoroutineScope()
+					val listening by runtime.listening.collectAsState()
+					val thinking by runtime.thinking.collectAsState()
+					val cameraOn by runtime.cameraOn.collectAsState()
+					val cameraSound by runtime.cameraSound.collectAsState()
+					val brightness by runtime.brightness.collectAsState()
+					LaunchedEffect(brightness) {
+						brightness?.let { level ->
+							window.attributes = window.attributes.apply { screenBrightness = level }
+						}
+					}
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
+					var chartOpen by rememberSaveable { mutableStateOf<String?>(null) }
+					val shownReadings by runtime.shownReadings.collectAsState()
+					val charts by runtime.charts.collectAsState()
+					// The menu offers the charts that are configured, even before their values arrive.
+					val chartNames by remember { runtime.store.config.map { config -> config.charts.map { it.name } } }.collectAsState(initial = emptyList())
 					var scanOpen by rememberSaveable { mutableStateOf(false) }
-					var enrollmentMessage by rememberSaveable { mutableStateOf<String?>(null) }
-					val enroll = { invite: EnrollmentInvite ->
-						scope.launch {
-							enrollmentMessage = "Connecting…"
-							enrollmentMessage = runtime.enroll(invite)
-						}
-						Unit
+					val enrollmentMessage by runtime.enrollmentMessage.collectAsState()
+					// Remembered: a new flow on each recomposition would restart the collection every time.
+					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
+					val photosConfig by remember { runtime.store.config.map { it.photos } }.collectAsState(initial = null)
+					val photos by runtime.photos.collectAsState()
+					val lastTouch by runtime.lastTouch.collectAsState()
+					// Any touch starts the wait again, and hides the photos if they were showing.
+					var idle by remember { mutableStateOf(false) }
+					LaunchedEffect(lastTouch, photosConfig) {
+						idle = false
+						val config = photosConfig ?: return@LaunchedEffect
+						delay(config.idleMinutes.minutes - (SystemClock.elapsedRealtime() - lastTouch).milliseconds)
+						idle = true
 					}
-					val cameras by runtime.store.config
-						.map { it.cameras }
-						.collectAsState(initial = emptyList())
 
-					// The screen does not turn off during a call.
-					LocalView.current.keepScreenOn = call != null || camerasOpen || scanOpen
-
-					val activeCall = call
+					val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
+					val droid =
+						DroidMoods.resolve(
+							haMood,
+							hasProblem = warning != null,
+							dark = dark,
+							listening = listening,
+							cameraOn = cameraOn,
+							cameraSound = cameraSound,
+							thinking = thinking,
+						)
+					// Only while the droid has nothing to say: an alarm, the camera, a voice command, a warning or a dark room keep
+					// the clock, which shows it.
+					val screensaver = idle && photos.isNotEmpty() && droid == DroidMood.Walking && photosConfig != null
 					val needsSetup = haStatus == HaStatus.NotConfigured
-					when {
-						activeCall != null -> {
+					val activeCall = call
+					val activePhoneCall = phoneCall
+					val openChart = chartOpen
+					val cameraConnection = connection
+					val screen =
+						when {
+							activeCall != null -> Screen.Call(activeCall)
+							activePhoneCall != null -> Screen.Phone(activePhoneCall)
+							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
+							scanOpen -> Screen.Scan
+							settingsOpen || needsSetup -> Screen.Settings
+							openChart != null -> Screen.Chart(openChart)
+							menuOpen -> Screen.Menu
+							screensaver -> Screen.Photos
+							else -> Screen.Main
+						}
+					// The screen does not turn off during a call, nor over the photos if HA asks for it.
+					LocalView.current.keepScreenOn = call != null || phoneCall != null || camerasOpen || scanOpen ||
+						(screen == Screen.Photos && photosConfig?.keepScreenOn == true)
+					when (screen) {
+						is Screen.Call -> {
 							CallScreen(
-								call = activeCall,
-								onVideoView = runtime.phone::setVideoView,
+								name = screen.call.name,
+								answered = screen.call.answered,
 								onAnswer = runtime.phone::answer,
 								onHangUp = runtime.phone::hangUp,
+							) {
+								IntercomVideo(
+									camera = ringingCamera(screen.call, cameras),
+									connection = connection,
+									onVideoView = runtime.phone::setVideoView,
+								)
+							}
+						}
+
+						is Screen.Phone -> {
+							CallScreen(
+								name = screen.call.name,
+								answered = screen.call.answered,
+								onAnswer = runtime.line::answer,
+								onHangUp = runtime.line::hangUp,
 							)
 						}
 
-						camerasOpen && connection != null && cameras.isNotEmpty() -> {
+						is Screen.Cameras -> {
 							BackHandler { camerasOpen = false }
 							CameraScreen(
 								cameras = cameras,
-								connection = connection!!,
+								connection = screen.connection,
 								onTalk = runtime.phone::callIntercom,
 								onClose = { camerasOpen = false },
 							)
 						}
 
-						scanOpen -> {
+						Screen.Scan -> {
 							BackHandler { scanOpen = false }
 							QrScanScreen(
 								onInvite = { invite ->
 									scanOpen = false
-									enroll(invite)
+									runtime.enroll(invite)
 								},
 								onClose = { scanOpen = false },
 							)
 						}
 
-						settingsOpen || needsSetup -> {
+						Screen.Settings -> {
 							BackHandler(enabled = settingsOpen) { settingsOpen = false }
 							SettingsScreen(
 								initial = connection,
@@ -114,7 +202,7 @@ class MainActivity : ComponentActivity() {
 								intercoms = intercoms,
 								enrollmentMessage = enrollmentMessage,
 								onScan = { scanOpen = true },
-								onEnroll = enroll,
+								onEnroll = runtime::enroll,
 								onOpenAndroidSettings = {
 									kiosk.pause()
 									startActivity(Intent(Settings.ACTION_SETTINGS))
@@ -132,7 +220,16 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						menuOpen -> {
+						is Screen.Chart -> {
+							BackHandler { chartOpen = null }
+							ChartScreen(
+								chart = charts.firstOrNull { it.name == screen.name },
+								name = screen.name,
+								onClose = { chartOpen = null },
+							)
+						}
+
+						Screen.Menu -> {
 							BackHandler { menuOpen = false }
 							PanelMenu(
 								onCameras =
@@ -144,6 +241,11 @@ class MainActivity : ComponentActivity() {
 											camerasOpen = true
 										}
 									},
+								charts = chartNames,
+								onChart = { name ->
+									menuOpen = false
+									chartOpen = name
+								},
 								onSettings = {
 									menuOpen = false
 									settingsOpen = true
@@ -152,16 +254,29 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						else -> {
-							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted, mqttStatus)
+						Screen.Photos -> {
+							PhotoScreen(
+								photos = photos,
+								haUrl = connection?.url.orEmpty(),
+								config = photosConfig ?: PhotosConfig(),
+								playlist = runtime.photoPlaylist,
+								shapes = runtime.photoShapes,
+							)
+						}
+
+						Screen.Main -> {
 							ClockScreen(
 								warning = warning,
-								droid = DroidMoods.resolve(haMood, hasProblem = warning != null, dark = dark),
+								droid = droid,
 								weather = weather,
+								readings = shownReadings,
 								onOpenMenu = { menuOpen = true },
+								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
 						}
 					}
+					// The droid says it on the main screen: nothing fixed there, as the OLED would keep it.
+					if (cameraOn && screen != Screen.Main) RecordingMark()
 				}
 			}
 		}
@@ -171,10 +286,7 @@ class MainActivity : ComponentActivity() {
 		super.onStart()
 		refreshPermissions()
 		hideSystemBars()
-		val missing =
-			listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
-				.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-		if (missing.isEmpty()) startPanel() else permissions.launch(missing.toTypedArray())
+		if (missingPermissions.isEmpty()) startPanel() else permissions.launch(missingPermissions.toTypedArray())
 	}
 
 	/** In `onStart` Android does not yet allow pinning the app: the activity does not have focus yet. */
@@ -185,7 +297,19 @@ class MainActivity : ComponentActivity() {
 	}
 
 	private fun refreshPermissions() {
-		micGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+		missingPermissions =
+			listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+				.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+	}
+
+	private fun askForPermissions() {
+		askedByTap = true
+		permissions.launch(missingPermissions.toTypedArray())
+	}
+
+	private fun openAppSettings() {
+		kiosk.pause()
+		startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
 	}
 
 	/** The service is of type `microphone`: without the permission, Android does not let it start. */
@@ -198,5 +322,52 @@ class MainActivity : ComponentActivity() {
 			hide(WindowInsets.Type.systemBars())
 			systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 		}
+	}
+}
+
+/**
+ * What fills the screen: the first that applies, in this order. The intercom comes before the phone line: the door does
+ * not wait, and the phone call goes on behind it.
+ */
+private sealed interface Screen {
+	data class Call(
+		val call: IntercomCall,
+	) : Screen
+
+	data class Phone(
+		val call: PhoneCall,
+	) : Screen
+
+	data class Cameras(
+		val connection: HaConnection,
+	) : Screen
+
+	data object Scan : Screen
+
+	data object Settings : Screen
+
+	data class Chart(
+		val name: String,
+	) : Screen
+
+	data object Menu : Screen
+
+	/** The screensaver, in place of the main screen when nobody touches it. */
+	data object Photos : Screen
+
+	data object Main : Screen
+}
+
+/** The camera is on, on the screens where the droid is not. */
+@Composable
+private fun RecordingMark() {
+	Box(Modifier.fillMaxSize()) {
+		Box(
+			Modifier
+				.align(Alignment.TopCenter)
+				.padding(top = 8.dp)
+				.size(16.dp)
+				.background(PixelRed),
+		)
 	}
 }

@@ -1,6 +1,7 @@
 package dev.xoa.marc2d
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -42,7 +43,12 @@ class PanelStore(
 		context.dataStore.data
 			.map { prefs -> prefs[CONFIG] }
 			.distinctUntilChanged()
-			.map { json -> json?.let { Json.decodeFromString<PanelConfig>(it) } ?: PanelConfig() }
+			.map { json ->
+				json?.let { stored ->
+					// Not the exception: its message could include passwords.
+					PanelConfig.fromStored(stored) ?: PanelConfig().also { Log.w("marc2d", "Ignoring a stored configuration that cannot be read") }
+				} ?: PanelConfig()
+			}
 
 	suspend fun saveConnection(connection: HaConnection) {
 		context.dataStore.edit { prefs ->

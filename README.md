@@ -14,17 +14,26 @@ It's a half-joking personal project, shared in case it's useful to someone.
 ## What it does
 
 - **Clock and weather** on a black screen, designed for OLED panels that stay on all day.
-- **Intercom:** it rings, you answer with audio and video, and you can call it yourself. Tested with a
-  Dahua VTO2202F.
+- **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
+  with an RTSP backchannel, over RTSP from the moment it rings. Tested with a Dahua VTO2202F.
+- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
-- **Sensors and siren** in Home Assistant: light, battery and a siren on the alarm channel.
+- **Sensors and siren** in Home Assistant: light, battery, temperature, presence, Wi-Fi, whether the camera is on, and
+  a siren on the alarm channel.
+- **Photos** as a screensaver, from any Home Assistant media source, such as a folder or an Immich album, when nobody
+  touches the panel.
+- **Readings and charts** of any entity: tiles on the main screen, such as the car's battery, and hourly charts in the
+  menu, such as the electricity price.
+- **Updates** from Home Assistant, installed by the panel itself.
+- **A speaker** for `tts.speak` and any other audio from Home Assistant.
+- **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what
+  follows to Assist.
 - **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of
   its eye.
 
 ## Status
 
-In testing, with a single panel and no releases. Things still break freely. Next up is a Home
-Assistant integration to add panels with a QR code.
+In testing, with a single panel. Releases are published by hand from `main`. Things still break freely.
 
 ## What you need
 
@@ -42,36 +51,42 @@ flowchart LR
             svc["Foreground service"]
             sip["Linphone SDK"]
             hac["HA client<br/>Ktor"]
-            mq["MQTT client"]
             rtsp["RTSP server<br/>optional"]
-            sys["Android<br/>TTS, audio, screen, camera"]
+            voice["Vosk<br/>wake phrase"]
+            sys["Android<br/>audio, screen, camera"]
+            tel["Android Telecom<br/>SIM calls"]
         end
         vto["Dahua VTO intercoms<br/>SIP server"]
         ha["Home Assistant"]
-        broker["Mosquitto"]
         frigate["Frigate or similar"]
     end
 
     ui <--> svc
     svc --> sip
     svc --> hac
-    svc --> mq
     svc --> rtsp
+    svc --> voice
     svc --> sys
+    tel -- "InCallService<br/>phone calls" --> ui
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
-    hac <-- "WebSocket<br/>entities, events, Assist" --> ha
-    mq <-- "MQTT<br/>sensors, siren" --> broker
-    broker <--> ha
+    svc <-- "RTSP, optional<br/>video and sound; the panel's voice" --> vto
+    hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
+    ui -- "HTTP(S)<br/>photos, signed" --> ha
+    ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
+    ha -- "HTTPS<br/>latest version" --> github["GitHub releases"]
+    svc -- "HTTPS<br/>signed APK" --> github
 ```
 
-| Connection  | Who starts it | What for                                                 |
-| ----------- | ------------- | -------------------------------------------------------- |
-| SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
-| WebSocket   | the panel     | configuration, `weather.*`, `binary_sensor.*`, Assist    |
-| MQTT        | the panel     | entity creation, sensors, siren and availability         |
-| RTSP        | Frigate       | reading the video from the panel's camera                |
+| Connection  | Who starts it | What for                                                   |
+| ----------- | ------------- | ---------------------------------------------------------- |
+| SIP and RTP | both          | the panel registers; the intercom calls; audio and video   |
+| WebSocket   | the panel     | configuration, entities, doorbell, weather, photos, Assist |
+| RTSP        | HA or Frigate | reading the video; the camera is only on during it         |
+| RTSP        | the panel     | the intercom's video and sound, and its voice, if set      |
+| HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK     |
+| HTTP(S)     | the panel     | the screensaver's photos, from HA with a signed address    |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
 intercom from reaching the panel.
@@ -79,21 +94,23 @@ intercom from reaching the panel.
 ## Stack
 
 Kotlin and Jetpack Compose on Kotlin Toolchain, Linphone SDK, Ktor Client, kotlinx.serialization,
-DataStore, RootEncoder and RTSP-Server. The reasons are in [SPEC.md](SPEC.md#decisions).
+DataStore, Vosk, CameraX and ZXing, with our own small RTSP server for the camera. The reasons are in
+[SPEC.md](SPEC.md#decisions).
 
 ## Development
 
-The `./kotlin` script downloads what it needs, with nothing to install first.
+Everything runs through `make`, and the `./kotlin` script it uses downloads what it needs, with nothing to install
+first.
 
 ```sh
-./kotlin build -m app        # builds the APK
-./kotlin check               # ktlint, Compose rules and tests
-./kotlin do ktlintFormat     # fixes the formatting
+make check       # lint, tests and the APK, as CI does
+make format      # fixes the formatting
+make help        # lists the rest
 
 adb -s <serial> install -r build/tasks/_app_buildAndroidDebug/gradle-project-debug.apk
 ```
 
-CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS.md).
+CI also runs hassfest, the HACS validation and actionlint. The working rules are in [AGENTS.md](AGENTS.md).
 
 ## Setting up a panel
 
@@ -111,8 +128,8 @@ CI runs the same, plus markdownlint. The working rules are in [AGENTS.md](AGENTS
 4. In Home Assistant, add the marc2d integration, name the panel, scan its QR code from the app and set the
    panel up in the integration's options.
 
-While the app is the device owner, Android will not let you uninstall it. To undo this: long-press the
-clock and choose **Exit kiosk mode**.
+While the app is the device owner, Android will not let you uninstall it. To undo this: tap the
+clock, open **Settings** and choose **Exit kiosk mode**.
 
 ## License
 

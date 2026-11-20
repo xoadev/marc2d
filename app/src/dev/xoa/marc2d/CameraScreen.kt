@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -21,7 +19,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +33,6 @@ import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readAvailable
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +41,6 @@ import kotlinx.coroutines.withContext
 
 private val cameraClient by lazy { HttpClient(OkHttp) }
 private val RETRY = 3.seconds
-private val AUTO_CLOSE = 2.minutes
 private const val BUFFER_BYTES = 16 * 1024
 
 /** The cameras from the configuration, full screen: swipe to go from one to the next. */
@@ -58,18 +53,7 @@ fun CameraScreen(
 	modifier: Modifier = Modifier,
 ) {
 	val pager = rememberPagerState { cameras.size }
-	val close by rememberUpdatedState(onClose)
-	LaunchedEffect(Unit) {
-		delay(AUTO_CLOSE)
-		close()
-	}
-	Box(
-		modifier =
-			modifier
-				.fillMaxSize()
-				.background(Color.Black)
-				.clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClose),
-	) {
+	AutoClosingOverlay(onClose, modifier, closeDescription = "Exit") {
 		HorizontalPager(state = pager, beyondViewportPageCount = 0, modifier = Modifier.fillMaxSize()) { page ->
 			CameraView(cameras[page], connection, active = pager.currentPage == page)
 		}
@@ -94,16 +78,6 @@ fun CameraScreen(
 						.padding(24.dp),
 			)
 		}
-		PixelButton(
-			icon = PixelIcon.Close,
-			size = CLOSE_BUTTON,
-			description = "Exit",
-			onClick = onClose,
-			modifier =
-				Modifier
-					.align(Alignment.TopEnd)
-					.padding(24.dp),
-		)
 		if (cameras.size > 1) {
 			Row(
 				horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -125,7 +99,7 @@ fun CameraScreen(
 }
 
 @Composable
-private fun CameraView(
+internal fun CameraView(
 	camera: CameraConfig,
 	connection: HaConnection,
 	active: Boolean,

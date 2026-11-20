@@ -1,24 +1,16 @@
 package dev.xoa.marc2d
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
 
 private val AUTO_CLOSE = 10.seconds
 private val MENU_BUTTON = 160.dp
@@ -27,35 +19,22 @@ private val MENU_BUTTON = 160.dp
 @Composable
 fun PanelMenu(
 	onCameras: (() -> Unit)?,
+	charts: List<String>,
+	onChart: (String) -> Unit,
 	onSettings: () -> Unit,
 	onClose: () -> Unit,
 	modifier: Modifier = Modifier,
 ) {
-	val close by rememberUpdatedState(onClose)
-	LaunchedEffect(Unit) {
-		delay(AUTO_CLOSE)
-		close()
-	}
-	Box(
-		modifier =
-			modifier
-				.fillMaxSize()
-				.background(Color.Black)
-				.clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClose),
-		contentAlignment = Alignment.Center,
-	) {
-		PixelButton(
-			icon = PixelIcon.Close,
-			size = CLOSE_BUTTON,
-			description = "Close",
-			onClick = onClose,
-			modifier =
-				Modifier
-					.align(Alignment.TopEnd)
-					.padding(24.dp),
-		)
+	AutoClosingOverlay(onClose, modifier, timeout = AUTO_CLOSE, contentAlignment = Alignment.Center) {
 		Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
 			if (onCameras != null) PixelButton(PixelIcon.Camera, "Cameras", onCameras, size = MENU_BUTTON)
+			// A chart is not clear from its icon alone: its name goes under it.
+			charts.forEach { name ->
+				Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+					PixelButton(PixelIcon.Chart, name, { onChart(name) }, size = MENU_BUTTON)
+					Text(name, color = PixelGray, fontSize = 20.sp)
+				}
+			}
 			PixelButton(PixelIcon.Settings, "Settings", onSettings, size = MENU_BUTTON)
 		}
 	}
