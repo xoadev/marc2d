@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import unquote
 
 SECTION_FEATURES = "features"
 
@@ -16,6 +17,7 @@ FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
 FEATURE_RTSP = "rtsp"
 FEATURE_DISPLAY = "display"
+FEATURE_PHOTOS = "photos"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
@@ -32,9 +34,37 @@ CONF_PIPELINE = "pipeline"
 CONF_WAKE_PHRASE = "wake_phrase"
 CONF_RTSP_PASSWORD = "rtsp_password"  # noqa: S105 - the name of a form field
 CONF_RTSP_AUDIO = "rtsp_audio"
+# The photo screensaver. The folder and whether to walk its subfolders stay in Home Assistant:
+# the panel asks for the photos with marc2d/photos and only gets their addresses.
+CONF_PHOTOS_FOLDER = "photos_folder"
+CONF_PHOTOS_SUBFOLDERS = "photos_subfolders"
+CONF_PHOTOS_IDLE_MINUTES = "photos_idle_minutes"
+CONF_PHOTOS_SECONDS = "photos_seconds"
+CONF_PHOTOS_ORDER = "photos_order"
+CONF_PHOTOS_FIT = "photos_fit"
+CONF_PHOTOS_CLOCK = "photos_clock"
+CONF_PHOTOS_KEEP_SCREEN_ON = "photos_keep_screen_on"
 
 DEFAULT_INTERCOM_NUMBER = "8001"
 DEFAULT_WAKE_PHRASE = "jarvis"
+
+PHOTOS_ORDER_SHUFFLE = "shuffle"
+PHOTOS_ORDER_NAME = "name"
+PHOTOS_FIT_WHOLE = "fit"
+PHOTOS_FIT_FILL = "fill"
+# What the panel gets for each photo setting left empty: the form shows the same values.
+PHOTOS_DEFAULTS: dict[str, Any] = {
+    CONF_PHOTOS_SUBFOLDERS: False,
+    CONF_PHOTOS_IDLE_MINUTES: 1,
+    CONF_PHOTOS_SECONDS: 30,
+    CONF_PHOTOS_ORDER: PHOTOS_ORDER_SHUFFLE,
+    CONF_PHOTOS_FIT: PHOTOS_FIT_WHOLE,
+    CONF_PHOTOS_CLOCK: True,
+    CONF_PHOTOS_KEEP_SCREEN_ON: False,
+}
+
+MEDIA_SOURCE_PREFIX = "media-source://"
+LOCAL_MEDIA = "media-source://media_source/local"
 
 RTSP_USER = "marc2d"
 RTSP_PORT = 8554
@@ -96,7 +126,40 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
                 config[key] = items
     if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
         config["weather"] = weather
+    if photos_folder(options):
+        config["photos"] = {
+            # Number fields save decimals, and the panel takes whole minutes and seconds.
+            "idle_minutes": int(photos_option(options, CONF_PHOTOS_IDLE_MINUTES)),
+            "seconds": int(photos_option(options, CONF_PHOTOS_SECONDS)),
+            "order": photos_option(options, CONF_PHOTOS_ORDER),
+            "fit": photos_option(options, CONF_PHOTOS_FIT),
+            "clock": photos_option(options, CONF_PHOTOS_CLOCK),
+            "keep_screen_on": photos_option(options, CONF_PHOTOS_KEEP_SCREEN_ON),
+        }
     return config
+
+
+def photos_folder(options: Mapping[str, Any]) -> str | None:
+    """The media source the screensaver shows, only while it is on.
+
+    A plain path, such as `photos`, is a folder of My media: what most people have. Anything else,
+    such as an Immich album, is its `media-source://` identifier. The media browser's address works
+    too: it ends with the folder's identifier, encoded, after those of its parents.
+    """
+    if not is_enabled(options, FEATURE_PHOTOS):
+        return None
+    folder = unquote((options.get(CONF_PHOTOS_FOLDER) or "").strip())
+    if not folder:
+        return None
+    if MEDIA_SOURCE_PREFIX in folder:
+        return folder[folder.rindex(MEDIA_SOURCE_PREFIX) :]
+    return f"{LOCAL_MEDIA}/{folder.strip('/')}"
+
+
+def photos_option(options: Mapping[str, Any], key: str) -> Any:
+    """A photo setting, or its default when it was left empty."""
+    value = options.get(key)
+    return PHOTOS_DEFAULTS[key] if value in (None, "") else value
 
 
 def rtsp_password(options: Mapping[str, Any]) -> str | None:

@@ -20,6 +20,8 @@ It's a half-joking personal project, shared in case it's useful to someone.
 - **Cameras** from Home Assistant in full screen, swiping from one to the next.
 - **Sensors and siren** in Home Assistant: light, battery, temperature, presence, Wi-Fi, whether the camera is on, and
   a siren on the alarm channel.
+- **Photos** as a screensaver, from any Home Assistant media source, such as a folder or an Immich album, when nobody
+  touches the panel.
 - **Readings and charts** of any entity: tiles on the main screen, such as the car's battery, and hourly charts in the
   menu, such as the electricity price.
 - **Updates** from Home Assistant, installed by the panel itself.
@@ -70,19 +72,21 @@ flowchart LR
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
     svc <-- "RTSP, optional<br/>video and sound; the panel's voice" --> vto
     hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
+    ui -- "HTTP(S)<br/>photos, signed" --> ha
     ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
     ha -- "HTTPS<br/>latest version" --> github["GitHub releases"]
     svc -- "HTTPS<br/>signed APK" --> github
 ```
 
-| Connection  | Who starts it | What for                                                 |
-| ----------- | ------------- | -------------------------------------------------------- |
-| SIP and RTP | both          | the panel registers; the intercom calls; audio and video |
-| WebSocket   | the panel     | configuration, entities, doorbell, weather, Assist       |
-| RTSP        | HA or Frigate | reading the video; the camera is only on during it       |
-| RTSP        | the panel     | the intercom's video and sound, and its voice, if set    |
-| HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK   |
+| Connection  | Who starts it | What for                                                   |
+| ----------- | ------------- | ---------------------------------------------------------- |
+| SIP and RTP | both          | the panel registers; the intercom calls; audio and video   |
+| WebSocket   | the panel     | configuration, entities, doorbell, weather, photos, Assist |
+| RTSP        | HA or Frigate | reading the video; the camera is only on during it         |
+| RTSP        | the panel     | the intercom's video and sound, and its voice, if set      |
+| HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK     |
+| HTTP(S)     | the panel     | the screensaver's photos, from HA with a signed address    |
 
 The intercom only works from the home network: over Tailscale, the subnet router's SNAT prevents the
 intercom from reaching the panel.

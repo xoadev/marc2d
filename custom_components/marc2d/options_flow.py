@@ -13,8 +13,14 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     ObjectSelector,
     ObjectSelectorConfig,
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -25,6 +31,14 @@ from .panel_config import (
     CONF_CAMERAS,
     CONF_CHARTS,
     CONF_INTERCOMS,
+    CONF_PHOTOS_CLOCK,
+    CONF_PHOTOS_FIT,
+    CONF_PHOTOS_FOLDER,
+    CONF_PHOTOS_IDLE_MINUTES,
+    CONF_PHOTOS_KEEP_SCREEN_ON,
+    CONF_PHOTOS_ORDER,
+    CONF_PHOTOS_SECONDS,
+    CONF_PHOTOS_SUBFOLDERS,
     CONF_PIPELINE,
     CONF_READINGS,
     CONF_RTSP_AUDIO,
@@ -34,6 +48,7 @@ from .panel_config import (
     DEFAULT_WAKE_PHRASE,
     FEATURE_CAMERAS,
     FEATURE_DISPLAY,
+    FEATURE_PHOTOS,
     FEATURE_RTSP,
     FEATURE_SENSORS,
     FEATURE_SIP,
@@ -41,10 +56,17 @@ from .panel_config import (
     FEATURE_SPEAKER,
     FEATURE_VOICE,
     FEATURE_WEATHER,
+    PHOTOS_DEFAULTS,
+    PHOTOS_FIT_FILL,
+    PHOTOS_FIT_WHOLE,
+    PHOTOS_ORDER_NAME,
+    PHOTOS_ORDER_SHUFFLE,
     SECTION_FEATURES,
     is_enabled,
+    photos_folder,
 )
 from .panel_hub import get_hub
+from .photos import PhotosUnavailable, find_photos
 
 CONF_ENABLED = "enabled"
 MIN_RTSP_PASSWORD = 12
@@ -58,7 +80,21 @@ MENU = {
     "voice": "Voice commands",
     "rtsp": "Publish the camera",
     "display": "Readings and charts",
+    "photos": "Photos",
 }
+PHOTO_SETTINGS = (
+    CONF_PHOTOS_FOLDER,
+    CONF_PHOTOS_SUBFOLDERS,
+    CONF_PHOTOS_IDLE_MINUTES,
+    CONF_PHOTOS_SECONDS,
+    CONF_PHOTOS_ORDER,
+    CONF_PHOTOS_FIT,
+    CONF_PHOTOS_CLOCK,
+    CONF_PHOTOS_KEEP_SCREEN_ON,
+)
+MAX_IDLE_MINUTES = 240
+MIN_PHOTO_SECONDS = 3
+MAX_PHOTO_SECONDS = 3600
 
 
 def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[str, Any]:
@@ -67,6 +103,24 @@ def _field(label: str, selector: dict[str, Any], required: bool = True) -> dict[
 
 def _list_of(fields: dict[str, Any]) -> ObjectSelector:
     return ObjectSelector(ObjectSelectorConfig(fields=fields, multiple=True, label_field="name"))
+
+
+def _number(minimum: int, maximum: int, unit: str) -> NumberSelector:
+    return NumberSelector(
+        NumberSelectorConfig(
+            min=minimum, max=maximum, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement=unit
+        )
+    )
+
+
+def _choice(key: str, *values: str) -> SelectSelector:
+    """The labels come from the translations, under selector.<key>."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[SelectOptionDict(value=value, label=value) for value in values],
+            translation_key=key,
+        )
+    )
 
 
 INTERCOM_FIELDS = {
@@ -292,6 +346,61 @@ class Marc2dOptionsFlow(OptionsFlow):
             errors=errors,
             description_placeholders={"url": stream_url(address, "PASSWORD")},
         )
+
+    async def async_step_photos(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """The screensaver: a folder is needed only while it is on, and it must have photos."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            candidate = {**self._options, **user_input, SECTION_FEATURES: {FEATURE_PHOTOS: True}}
+            if user_input[CONF_ENABLED]:
+                errors = await self._photos_errors(candidate)
+            if not errors:
+                self._set_enabled(FEATURE_PHOTOS, user_input)
+                for key in PHOTO_SETTINGS:
+                    self._options[key] = user_input.get(key)
+                return self.async_create_entry(data=self._options)
+        return self._page(
+            "photos",
+            FEATURE_PHOTOS,
+            {
+                probatio.Optional(CONF_PHOTOS_FOLDER): TextSelector(),
+                probatio.Required(
+                    CONF_PHOTOS_SUBFOLDERS, default=PHOTOS_DEFAULTS[CONF_PHOTOS_SUBFOLDERS]
+                ): BooleanSelector(),
+                probatio.Optional(CONF_PHOTOS_IDLE_MINUTES): _number(1, MAX_IDLE_MINUTES, "min"),
+                probatio.Optional(CONF_PHOTOS_SECONDS): _number(
+                    MIN_PHOTO_SECONDS, MAX_PHOTO_SECONDS, "s"
+                ),
+                probatio.Optional(CONF_PHOTOS_ORDER): _choice(
+                    CONF_PHOTOS_ORDER, PHOTOS_ORDER_SHUFFLE, PHOTOS_ORDER_NAME
+                ),
+                probatio.Optional(CONF_PHOTOS_FIT): _choice(
+                    CONF_PHOTOS_FIT, PHOTOS_FIT_WHOLE, PHOTOS_FIT_FILL
+                ),
+                probatio.Required(
+                    CONF_PHOTOS_CLOCK, default=PHOTOS_DEFAULTS[CONF_PHOTOS_CLOCK]
+                ): BooleanSelector(),
+                probatio.Required(
+                    CONF_PHOTOS_KEEP_SCREEN_ON, default=PHOTOS_DEFAULTS[CONF_PHOTOS_KEEP_SCREEN_ON]
+                ): BooleanSelector(),
+            },
+            suggested={
+                key: value if (value := self._options.get(key)) not in (None, "") else default
+                for key, default in PHOTOS_DEFAULTS.items()
+            },
+            errors=errors,
+        )
+
+    async def _photos_errors(self, options: dict[str, Any]) -> dict[str, str]:
+        """Looks for the photos now, so a wrong folder is said here and not as a black panel."""
+        folder = photos_folder(options)
+        if folder is None:
+            return {CONF_PHOTOS_FOLDER: "required"}
+        try:
+            photos = await find_photos(self.hass, folder, bool(options.get(CONF_PHOTOS_SUBFOLDERS)))
+        except PhotosUnavailable:
+            return {CONF_PHOTOS_FOLDER: "folder_not_found"}
+        return {} if photos else {CONF_PHOTOS_FOLDER: "no_photos"}
 
     def _set_enabled(self, feature: str, user_input: dict[str, Any]) -> None:
         features = dict(self._options.get(SECTION_FEATURES, {}))

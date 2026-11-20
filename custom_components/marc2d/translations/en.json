@@ -108,11 +108,52 @@
           "pipeline": "Needs speech-to-text. Empty uses the preferred assistant.",
           "wake_phrase": "Say it alone, with a pause before and after. Short, unusual phrases work best. It has to use words of the panel's Spanish model: with any other word it never reacts. Empty uses jarvis."
         }
+      },
+      "photos": {
+        "title": "Photos",
+        "description": "A screensaver: when nobody touches the panel for a while, its photos take the place of the clock, until someone touches it again. They only show while the droid has nothing to say: an alarm, the camera, a voice command, a warning or a dark room keep the clock. The photos come from a Home Assistant media source, so the panel needs no other credentials. Android still turns the screen off after its own screen timeout, unless you keep it on below.",
+        "data": {
+          "enabled": "On",
+          "photos_folder": "Folder",
+          "photos_subfolders": "Include subfolders",
+          "photos_idle_minutes": "Minutes without touching it",
+          "photos_seconds": "Seconds per photo",
+          "photos_order": "Order",
+          "photos_fit": "Fit",
+          "photos_clock": "Show the time",
+          "photos_keep_screen_on": "Keep the screen on"
+        },
+        "data_description": {
+          "photos_folder": "A folder of My media, such as photos for /media/photos. For any other source, such as an Immich album or another media folder, open it in Media, in the sidebar, and paste the browser's address here, or its media-source:// identifier. It is checked when you save.",
+          "photos_subfolders": "Also shows the photos in its subfolders, and theirs. At most 2000 photos in 200 folders.",
+          "photos_idle_minutes": "How long the clock stays before the photos start.",
+          "photos_seconds": "How long each photo stays.",
+          "photos_order": "Shuffled again on each pass, or by name.",
+          "photos_fit": "Whole photo, with black bars where it does not fill the screen, or cropped to fill it.",
+          "photos_clock": "The time and the date, small, in a corner of the photos.",
+          "photos_keep_screen_on": "While the photos show, Android does not turn the screen off: it stays on until the room goes dark or someone touches it. It uses more power and wears the OLED screen sooner."
+        }
       }
     },
     "error": {
       "required": "Needed while this is on.",
-      "too_short": "At least 12 characters: anyone on the home network can try it. Leave it empty to generate one."
+      "too_short": "At least 12 characters: anyone on the home network can try it. Leave it empty to generate one.",
+      "folder_not_found": "Home Assistant cannot open this folder. Check that it exists under Media, as a folder of My media or a media-source:// identifier.",
+      "no_photos": "There are no photos in this folder. Add some, or include its subfolders."
+    }
+  },
+  "selector": {
+    "photos_order": {
+      "options": {
+        "shuffle": "Shuffled",
+        "name": "By name"
+      }
+    },
+    "photos_fit": {
+      "options": {
+        "fit": "Whole photo",
+        "fill": "Fill the screen"
+      }
     }
   }
 }

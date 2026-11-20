@@ -136,6 +136,40 @@ class HaClientTest {
 		}
 
 	@Test
+	fun `asks for the photos while the screensaver is on, and keeps them if HA fails`() =
+		runBlocking {
+			val problems = Channel<String>(Channel.UNLIMITED)
+			val connection =
+				fakeHa {
+					val id = subscribeId()
+					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
+					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"photos":{"seconds":10}}}}"""))
+					val first = HaProtocol.parse(receiveRequest("marc2d/photos"))["id"]!!.jsonPrimitive.int
+					send(Frame.Text("""{"id":$first,"type":"result","success":true,"result":{"urls":["/media/local/a.jpg?authSig=x"]}}"""))
+					// A new configuration refreshes at once: this time HA cannot read the folder.
+					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"photos":{}}}}"""))
+					val second = HaProtocol.parse(receiveRequest("marc2d/photos"))["id"]!!.jsonPrimitive.int
+					send(
+						Frame.Text(
+							"""{"id":$second,"type":"result","success":false,"error":{"code":"photos_unavailable","message":"Check it"}}""",
+						),
+					)
+					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{}}}"""))
+					awaitCancellation()
+				}
+			val delivered = Channel<List<String>>(Channel.UNLIMITED)
+			val client = HaClient().apply { onPhotosProblem = { problems.trySend(it) } }
+			val job = launch { client.run(connection, PanelLink(), {}, {}, {}, {}, onPhotos = { delivered.trySend(it) }) }
+			withTimeout(5.seconds) {
+				assertEquals(listOf("/media/local/a.jpg?authSig=x"), delivered.receive())
+				assertEquals("photos_unavailable: Check it", problems.receive())
+				// Turned off, the screensaver gets none.
+				assertEquals(emptyList(), delivered.receive())
+			}
+			job.cancel()
+		}
+
+	@Test
 	fun `reads the weather in the same request as the readings`() =
 		runBlocking {
 			val asked = CompletableDeferred<String>()

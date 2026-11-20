@@ -11,8 +11,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
 from .enrollment import DOMAIN
-from .panel_config import answered_button, build_panel_config, intercom_names
+from .panel_config import (
+    CONF_PHOTOS_SUBFOLDERS,
+    answered_button,
+    build_panel_config,
+    intercom_names,
+    photos_folder,
+    photos_option,
+)
 from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
+from .photos import PhotosUnavailable, photo_urls
 
 CONF_USER_ID = "user_id"
 
@@ -23,6 +31,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_subscribe)
     websocket_api.async_register_command(hass, ws_state)
     websocket_api.async_register_command(hass, ws_doorbell_answered)
+    websocket_api.async_register_command(hass, ws_photos)
 
 
 def config_event(entry: ConfigEntry) -> dict[str, Any]:
@@ -100,3 +109,25 @@ def ws_doorbell_answered(
     if button := answered_button(entry.options, msg["intercom"]):
         hass.async_create_task(hass.services.async_call("button", "press", {"entity_id": button}))
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({probatio.Required("type"): "marc2d/photos"})
+@websocket_api.async_response
+async def ws_photos(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """The addresses of the screensaver's photos, signed for this panel: none while it is off."""
+    if (entry := _own_entry(hass, connection, msg)) is None:
+        return
+    if (folder := photos_folder(entry.options)) is None:
+        connection.send_result(msg["id"], {"urls": []})
+        return
+    subfolders = photos_option(entry.options, CONF_PHOTOS_SUBFOLDERS)
+    try:
+        urls = await photo_urls(hass, folder, subfolders)
+    except PhotosUnavailable as err:
+        connection.send_error(msg["id"], "photos_unavailable", str(err))
+        return
+    connection.send_result(msg["id"], {"urls": urls})

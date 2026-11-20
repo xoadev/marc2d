@@ -55,13 +55,7 @@ fun ClockScreen(
 ) {
 	// The order of day and month depends on the language: the device decides it.
 	val locale = Locale.getDefault()
-	var now by remember { mutableStateOf(LocalDateTime.now()) }
-	LaunchedEffect(Unit) {
-		while (true) {
-			delay(ClockFormat.millisToNextMinute(LocalDateTime.now()))
-			now = LocalDateTime.now()
-		}
-	}
+	val now = rememberNow()
 	val (offsetX, offsetY) = ClockFormat.burnInOffset(now)
 
 	BoxWithConstraints(
@@ -164,4 +158,17 @@ fun ClockScreen(
 			)
 		}
 	}
+}
+
+/** The current time, updated as each minute starts. */
+@Composable
+internal fun rememberNow(): LocalDateTime {
+	var now by remember { mutableStateOf(LocalDateTime.now()) }
+	LaunchedEffect(Unit) {
+		while (true) {
+			delay(ClockFormat.millisToNextMinute(LocalDateTime.now()))
+			now = LocalDateTime.now()
+		}
+	}
+	return now
 }

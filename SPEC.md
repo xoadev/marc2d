@@ -31,6 +31,7 @@ The project is in testing and has no users: break whatever needs breaking.
 - If a permission is missing, a warning icon in the top left corner asks for it again, or opens the app's Android
   settings if Android no longer shows the dialog.
 - Tapping anywhere opens the menu, with **Cameras**, a button per chart, and **Settings**.
+- If nobody touches it for a while, the [photos](#photos) take its place.
 
 ### Charts
 
@@ -41,6 +42,33 @@ The project is in testing and has no users: break whatever needs breaking.
   format of Nord Pool, ENTSO-e and EV Smart Charging, which covers the electricity price. Values every 15 minutes count
   as such. Another format is added in the app, not in each house.
 - It closes with the X, by tapping, and on its own after 2 minutes.
+
+### Photos
+
+A screensaver with photos from a Home Assistant media source: a folder of My media, an Immich album or any other source
+the media browser shows. The panel needs no other credentials, and nothing is copied to it.
+
+- **When:** after `idle_minutes` without any touch, the photos take the place of the main screen, and any touch brings
+  the clock back. They only show while the droid would just be walking: an alarm, the camera, a voice command, a
+  warning or a dark room keep the clock, which shows them. Calls, cameras, the menu and settings come first, as always.
+- **Screen:** Android still turns it off after its own screen timeout, which says how long the photos are seen. With
+  `keep_screen_on` the photos keep it on until someone touches it or the room goes dark. With the screen off nothing is
+  downloaded.
+- **Photos:** one every `seconds`, with a crossfade, shuffled again on each pass or by name, whole with black bars or
+  cropped to fill the screen. With `clock`, the time and date go small in a corner. The pass goes on where it was the
+  next time the screensaver starts.
+- **Where they come from:** the folder, and whether to walk its subfolders, stay in HA. The panel asks for the photos
+  with `marc2d/photos`, on connecting and on each refresh, every 10 minutes. HA lists the images, resolves each one and
+  signs its address for the panel's own user, for a day, so the panel downloads them without its token and never sends
+  it outside the WebSocket. HA's own addresses come as paths, joined to the address the panel knows for HA. A failed
+  refresh keeps the photos it had.
+- **Limits:** up to 2000 photos in 200 folders, walked again on each refresh; photos above 40 MB are skipped, and the
+  rest are decoded no larger than the screen. Android turns them upright from their EXIF data.
+- **Folder:** a plain path, such as `photos`, is a folder of My media (`/media/photos`). Any other source is its
+  `media-source://` identifier, or the media browser's address, copied with that folder open. The form checks that HA
+  can open it and that it has photos.
+- **Log:** the panel logs how many photos it has, and why each one that fails could not be shown; HA logs the
+  subfolders it skipped and the limits it reached.
 
 ### Cameras
 
@@ -269,7 +297,10 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   ],
   "charts": [
     { "entity": "sensor.electricity_price", "name": "Electricity" }
-  ]
+  ],
+  "photos": {
+    "idle_minutes": 1, "seconds": 30, "order": "shuffle", "fit": "fit", "clock": true, "keep_screen_on": false
+  }
 }
 ```
 
@@ -288,6 +319,7 @@ only while it is on, and what a turned-off feature had is kept.
 | Voice    | no voice is sent: the panel does not open the microphone     |
 | Publish  | no password is sent: the panel stops, HA deletes the entity  |
 | Readings | no readings or charts are sent: the panel hides them         |
+| Photos   | no photos are sent: the panel keeps the clock                |
 
 - What is off is left out of the response, or only changes HA, so the panel needs no logic for the toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
@@ -356,6 +388,8 @@ a broker or writing YAML. It requires HA 2026.10.
 - No messages on the screen: what HA has to say, the panel speaks, through its speaker.
 - Updates with `PackageInstaller` and GitHub releases, without an app store: the panels have no Google services.
 - Audio and screen with the Android APIs, without libraries.
+- Photos with `ImageDecoder` and the Ktor client the panel already has, without an image library: it scales them down
+  while decoding, turns them upright and reads HEIC too.
 - The Ktor server only in tests, to run `HaClient` against a real WebSocket.
 - No dependency injection framework: the service creates and connects the pieces by hand.
 - Phone calls through Telecom, as the default dialer, with an `InCallService`: the Android API, without libraries, and

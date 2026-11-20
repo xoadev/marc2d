@@ -52,6 +52,13 @@ class PanelRuntime(
 	private val _charts = MutableStateFlow<List<ChartData>>(emptyList())
 	val charts: StateFlow<List<ChartData>> = _charts.asStateFlow()
 
+	/** Where to download the screensaver's photos: HA's are paths, signed for this panel. Empty while it is off. */
+	private val _photos = MutableStateFlow<List<String>>(emptyList())
+	val photos: StateFlow<List<String>> = _photos.asStateFlow()
+
+	/** Here and not in the screen: it remembers where the pass was when someone touched the panel. */
+	val photoPlaylist = PhotoPlaylist()
+
 	private val _haMood = MutableStateFlow(HaMood.Normal)
 	val haMood: StateFlow<HaMood> = _haMood.asStateFlow()
 
@@ -89,6 +96,7 @@ class PanelRuntime(
 	private val ha =
 		HaClient().apply {
 			onAssistTiming = { Log.i(TAG, it) }
+			onPhotosProblem = { Log.w(TAG, "Could not get the screensaver's photos from Home Assistant, keeping the last ones: $it") }
 			onAssistActive = ::assistChanged
 		}
 	private val enrollment = EnrollmentClient()
@@ -365,6 +373,10 @@ class PanelRuntime(
 					onDisplay = { readings, charts ->
 						_shownReadings.value = readings
 						_charts.value = charts
+					},
+					onPhotos = { photos ->
+						if (photos.size != _photos.value.size) Log.i(TAG, "The screensaver has ${photos.size} photos")
+						_photos.value = photos
 					},
 				)
 			} catch (e: CancellationException) {

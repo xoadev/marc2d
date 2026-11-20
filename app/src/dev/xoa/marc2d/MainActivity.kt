@@ -6,7 +6,9 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
+import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
@@ -25,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
@@ -42,6 +47,14 @@ class MainActivity : ComponentActivity() {
 	private var missingPermissions by mutableStateOf(emptyList<String>())
 	private val micGranted get() = Manifest.permission.RECORD_AUDIO !in missingPermissions
 	private var askedByTap = false
+
+	/** When someone last touched the screen, anywhere: the screensaver waits from here. */
+	private var lastTouch by mutableLongStateOf(SystemClock.elapsedRealtime())
+
+	override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+		lastTouch = SystemClock.elapsedRealtime()
+		return super.dispatchTouchEvent(event)
+	}
 
 	private val permissions =
 		registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -91,10 +104,31 @@ class MainActivity : ComponentActivity() {
 					val enrollmentMessage by runtime.enrollmentMessage.collectAsState()
 					// Remembered: a new flow on each recomposition would restart the collection every time.
 					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
+					val photosConfig by remember { runtime.store.config.map { it.photos } }.collectAsState(initial = null)
+					val photos by runtime.photos.collectAsState()
+					// Any touch starts the wait again, and hides the photos if they were showing.
+					var idle by remember { mutableStateOf(false) }
+					LaunchedEffect(lastTouch, photosConfig) {
+						idle = false
+						val config = photosConfig ?: return@LaunchedEffect
+						delay(config.idleMinutes.minutes)
+						idle = true
+					}
 
-					// The screen does not turn off during a call.
-					LocalView.current.keepScreenOn = call != null || phoneCall != null || camerasOpen || scanOpen
-
+					val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
+					val droid =
+						DroidMoods.resolve(
+							haMood,
+							hasProblem = warning != null,
+							dark = dark,
+							listening = listening,
+							cameraOn = cameraOn,
+							cameraSound = cameraSound,
+							thinking = thinking,
+						)
+					// Only while the droid has nothing to say: an alarm, the camera, a voice command, a warning or a dark room keep
+					// the clock, which shows it.
+					val screensaver = idle && photos.isNotEmpty() && droid == DroidMood.Walking && photosConfig != null
 					val needsSetup = haStatus == HaStatus.NotConfigured
 					val activeCall = call
 					val activePhoneCall = phoneCall
@@ -109,8 +143,12 @@ class MainActivity : ComponentActivity() {
 							settingsOpen || needsSetup -> Screen.Settings
 							openChart != null -> Screen.Chart(openChart)
 							menuOpen -> Screen.Menu
+							screensaver -> Screen.Photos
 							else -> Screen.Main
 						}
+					// The screen does not turn off during a call, nor over the photos if HA asks for it.
+					LocalView.current.keepScreenOn = call != null || phoneCall != null || camerasOpen || scanOpen ||
+						(screen == Screen.Photos && photosConfig?.keepScreenOn == true)
 					when (screen) {
 						is Screen.Call -> {
 							CallScreen(
@@ -217,20 +255,19 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
+						Screen.Photos -> {
+							PhotoScreen(
+								photos = photos,
+								haUrl = connection?.url.orEmpty(),
+								config = photosConfig ?: PhotosConfig(),
+								playlist = runtime.photoPlaylist,
+							)
+						}
+
 						Screen.Main -> {
-							val warning = PanelWarnings.warning(haStatus, intercoms, micGranted)
 							ClockScreen(
 								warning = warning,
-								droid =
-									DroidMoods.resolve(
-										haMood,
-										hasProblem = warning != null,
-										dark = dark,
-										listening = listening,
-										cameraOn = cameraOn,
-										cameraSound = cameraSound,
-										thinking = thinking,
-									),
+								droid = droid,
 								weather = weather,
 								readings = shownReadings,
 								onOpenMenu = { menuOpen = true },
@@ -314,6 +351,9 @@ private sealed interface Screen {
 	) : Screen
 
 	data object Menu : Screen
+
+	/** The screensaver, in place of the main screen when nobody touches it. */
+	data object Photos : Screen
 
 	data object Main : Screen
 }

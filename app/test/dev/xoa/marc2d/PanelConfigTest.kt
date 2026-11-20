@@ -52,4 +52,16 @@ class PanelConfigTest {
 		assertFalse("s3cr3t" in PanelConfig(listOf(intercom)).toString())
 		assertFalse("t0ken" in HaConnection("http://ha", "t0ken").toString())
 	}
+
+	@Test
+	fun `the photos come with their settings, or the defaults`() {
+		assertNull(PanelConfig.fromStored("{}")?.photos)
+		assertEquals(PhotosConfig(), PanelConfig.fromStored("""{"photos":{}}""")?.photos)
+		val photos =
+			PanelConfig
+				.fromStored(
+					"""{"photos":{"idle_minutes":5,"seconds":10,"order":"name","fit":"fill","clock":false,"keep_screen_on":true}}""",
+				)?.photos
+		assertEquals(PhotosConfig(5, 10, PhotoOrder.Name, PhotoFit.Fill, clock = false, keepScreenOn = true), photos)
+	}
 }

@@ -1,5 +1,6 @@
 package dev.xoa.marc2d
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -13,6 +14,7 @@ data class PanelConfig(
 	val rtsp: RtspConfig? = null,
 	val readings: List<ReadingConfig> = emptyList(),
 	val charts: List<ChartConfig> = emptyList(),
+	val photos: PhotosConfig? = null,
 ) {
 	companion object {
 		// A version of the app may have stored fields that this one no longer has.
@@ -37,6 +39,46 @@ data class VoiceConfig(
 	companion object {
 		const val DEFAULT_PHRASE = "jarvis"
 	}
+}
+
+/**
+ * Present only if the photo screensaver is on and has a folder. The photos themselves are asked for with `marc2d/photos`:
+ * the folder stays in HA, and the panel only gets the addresses, signed for it.
+ */
+@Serializable
+data class PhotosConfig(
+	/** How long the main screen stays untouched before the photos take its place. */
+	@SerialName("idle_minutes") val idleMinutes: Int = 1,
+	/** How long each photo stays. */
+	val seconds: Int = 30,
+	val order: PhotoOrder = PhotoOrder.Shuffle,
+	val fit: PhotoFit = PhotoFit.Whole,
+	/** The time and date, small, over the photos. */
+	val clock: Boolean = true,
+	/** Whether the photos keep the screen on, instead of leaving it to Android's screen timeout. */
+	@SerialName("keep_screen_on") val keepScreenOn: Boolean = false,
+)
+
+@Serializable
+enum class PhotoOrder {
+	/** Shuffled again on each pass, so that every photo shows once before any repeats. */
+	@SerialName("shuffle")
+	Shuffle,
+
+	/** By name, as HA sorts them. */
+	@SerialName("name")
+	Name,
+}
+
+@Serializable
+enum class PhotoFit {
+	/** The whole photo, with black bars where its shape is not the screen's. */
+	@SerialName("fit")
+	Whole,
+
+	/** Cropped to fill the screen. */
+	@SerialName("fill")
+	Fill,
 }
 
 /** Present only if the camera is published. */

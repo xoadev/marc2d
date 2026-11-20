@@ -205,6 +205,27 @@ object HaProtocol {
 			put("intercom", intercom)
 		}.toString()
 
+	fun photos(id: Int): String =
+		buildJsonObject {
+			put("id", id)
+			put("type", "marc2d/photos")
+		}.toString()
+
+	/** The screensaver's photos, or nothing if HA could not give them: [errorMessage] says why. */
+	fun photoUrls(message: JsonObject): List<String>? {
+		if (!isSuccess(message)) return null
+		val urls = (message["result"] as? JsonObject)?.get("urls") as? JsonArray ?: return null
+		return urls.mapNotNull { it.jsonPrimitive.contentOrNull }
+	}
+
+	/** What HA says went wrong with a request, to log it. */
+	fun errorMessage(message: JsonObject): String {
+		val error = message["error"] as? JsonObject ?: return "no error given"
+		val code = error["code"]?.jsonPrimitive?.contentOrNull
+		val text = error["message"]?.jsonPrimitive?.contentOrNull
+		return listOfNotNull(code, text).joinToString(": ").ifEmpty { "no error given" }
+	}
+
 	/** The first event brings the state of them all. */
 	fun entityStates(
 		id: Int,

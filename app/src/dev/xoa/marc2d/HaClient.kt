@@ -49,6 +49,9 @@ class HaClient {
 	/** Each step of a voice request, with its time. It reaches the log from outside: this class also runs in plain JVM tests. */
 	var onAssistTiming: (String) -> Unit = {}
 
+	/** Why the screensaver's photos could not be read. It reaches the log from outside, as [onAssistTiming] does. */
+	var onPhotosProblem: (String) -> Unit = {}
+
 	/** Whether a voice request is under way, from its start to its end, for the droid to show it is working on it. */
 	var onAssistActive: (Boolean) -> Unit = {}
 	private var onCommand: (HaProtocol.PanelEvent) -> Unit = {}
@@ -67,6 +70,7 @@ class HaClient {
 		onWeather: (WeatherReport?) -> Unit,
 		onCommand: (HaProtocol.PanelEvent) -> Unit,
 		onDisplay: (List<Reading>, List<ChartData>) -> Unit = { _, _ -> },
+		onPhotos: (List<String>) -> Unit = {},
 	) {
 		this.onCommand = onCommand
 		client.webSocket(HaProtocol.webSocketUrl(connection.url)) {
@@ -83,7 +87,7 @@ class HaClient {
 					launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
 					launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
 					launch { link.assist.collect { startAssist(it, nextId()) } }
-					followConfig(onStatus, onConfig, onWeather, onDisplay, nextId)
+					followConfig(onStatus, onConfig, onWeather, onDisplay, onPhotos, nextId)
 				}
 			}
 			onStatus(HaProtocol.subscribeError(answer).toStatus())
@@ -129,17 +133,19 @@ class HaClient {
 		}
 	}
 
-	/** Never returns: applies each configuration as it arrives, and refreshes the weather meanwhile. */
+	/** Never returns: applies each configuration as it arrives, and refreshes the weather and the photos meanwhile. */
 	private suspend fun DefaultClientWebSocketSession.followConfig(
 		onStatus: (HaStatus) -> Unit,
 		onConfig: suspend (PanelConfig) -> Unit,
 		onWeather: (WeatherReport?) -> Unit,
 		onDisplay: (List<Reading>, List<ChartData>) -> Unit,
+		onPhotos: (List<String>) -> Unit,
 		nextId: () -> Int,
 	): Nothing {
 		var weather: String? = null
 		var readings = emptyList<ReadingConfig>()
 		var charts = emptyList<ChartConfig>()
+		var photos = false
 		while (true) {
 			idleUntilNextRefresh()
 			pendingConfig?.let { result ->
@@ -149,6 +155,7 @@ class HaClient {
 					weather = result.config.weather
 					readings = result.config.readings
 					charts = result.config.charts
+					photos = result.config.photos != null
 				}
 				onStatus(result.toStatus())
 			}
@@ -166,6 +173,8 @@ class HaClient {
 					onDisplay(EntityReadings.readings(readings, event), charts.mapNotNull { EntityReadings.chart(it, event) })
 				}
 			}
+			// Their signatures last a day: asking on each refresh also picks up the photos added since.
+			if (photos) fetchPhotos(nextId)?.let(onPhotos) else onPhotos(emptyList())
 		}
 	}
 
@@ -180,6 +189,16 @@ class HaClient {
 		val event = awaitEvent(id)
 		send(Frame.Text(HaProtocol.unsubscribe(nextId(), id)))
 		return event
+	}
+
+	/** A failed request keeps the photos already shown, whose signatures are still valid. */
+	private suspend fun DefaultClientWebSocketSession.fetchPhotos(nextId: () -> Int): List<String>? {
+		val id = nextId()
+		send(Frame.Text(HaProtocol.photos(id)))
+		val answer = awaitResult(id)
+		return HaProtocol.photoUrls(answer).also { urls ->
+			if (urls == null) onPhotosProblem(HaProtocol.errorMessage(answer))
+		}
 	}
 
 	private fun HaProtocol.ConfigResult.toStatus(): HaStatus =
