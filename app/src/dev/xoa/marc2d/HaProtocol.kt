@@ -1,13 +1,9 @@
 package dev.xoa.marc2d
 
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.format.DateTimeParseException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -18,7 +14,6 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /** The Home Assistant WebSocket API messages the panel uses. */
@@ -60,6 +55,10 @@ object HaProtocol {
 		data class Doorbell(
 			val intercom: String,
 			val payload: String,
+		) : PanelEvent
+
+		data class Widgets(
+			val widgets: List<Widget>,
 		) : PanelEvent
 	}
 
@@ -226,78 +225,7 @@ object HaProtocol {
 		return listOfNotNull(code, text).joinToString(": ").ifEmpty { "no error given" }
 	}
 
-	/** The first event brings the state of them all. */
-	fun entityStates(
-		id: Int,
-		entities: List<String>,
-	): String =
-		buildJsonObject {
-			put("id", id)
-			put("type", "subscribe_entities")
-			putJsonArray("entity_ids") { entities.forEach { add(it) } }
-		}.toString()
-
-	fun unsubscribe(
-		id: Int,
-		subscription: Int,
-	): String =
-		buildJsonObject {
-			put("id", id)
-			put("type", "unsubscribe_events")
-			put("subscription", subscription)
-		}.toString()
-
-	fun hourlyForecast(
-		id: Int,
-		entity: String,
-	): String =
-		buildJsonObject {
-			put("id", id)
-			put("type", "call_service")
-			put("domain", "weather")
-			put("service", "get_forecasts")
-			putJsonObject("target") { put("entity_id", entity) }
-			putJsonObject("service_data") { put("type", "hourly") }
-			put("return_response", true)
-		}.toString()
-
 	fun isSuccess(message: JsonObject): Boolean = message["success"]?.jsonPrimitive?.booleanOrNull == true
-
-	/** No state means no report. No forecast still gives one: at least the current weather is shown. */
-	fun weather(
-		entity: String,
-		state: JsonObject,
-		forecast: JsonObject,
-		now: Instant,
-	): WeatherReport? {
-		val current = EntityReadings.entity(state, entity) ?: return null
-		val condition = current.state ?: return null
-		val temperature = current.attribute("temperature")?.toDoubleOrNull()
-		return WeatherReport(condition, temperature, hours(entity, forecast), now)
-	}
-
-	private fun hours(
-		entity: String,
-		message: JsonObject,
-	): List<HourForecast> {
-		val list =
-			(message["result"] as? JsonObject)
-				?.let { it["response"] as? JsonObject }
-				?.let { it[entity] as? JsonObject }
-				?.let { it["forecast"] as? JsonArray }
-				?: return emptyList()
-		return list.mapNotNull { item ->
-			val hour = item as? JsonObject ?: return@mapNotNull null
-			val time = hour["datetime"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-			val condition = hour["condition"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-			val temperature = hour["temperature"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
-			try {
-				HourForecast(OffsetDateTime.parse(time).toInstant(), condition, temperature)
-			} catch (_: DateTimeParseException) {
-				null
-			}
-		}
-	}
 
 	fun parse(message: String): JsonObject = json.parseToJsonElement(message).jsonObject
 
@@ -366,6 +294,10 @@ object HaProtocol {
 				if (intercom != null && payload != null) PanelEvent.Doorbell(intercom, payload) else null
 			}
 
+			"widgets" -> {
+				widgets(event)
+			}
+
 			else -> {
 				null
 			}
@@ -379,6 +311,16 @@ object HaProtocol {
 		} catch (_: IllegalArgumentException) {
 			// Includes SerializationException. Its message could include values from the configuration, such as passwords.
 			ConfigResult.Invalid(NOT_UNDERSTOOD)
+		}
+	}
+
+	/** Nothing if this version cannot read them, as with the configuration: the last ones stay. */
+	private fun widgets(event: JsonObject): PanelEvent.Widgets? {
+		val widgets = event["widgets"] ?: return null
+		return try {
+			PanelEvent.Widgets(json.decodeFromJsonElement<List<Widget>>(widgets))
+		} catch (_: IllegalArgumentException) {
+			null
 		}
 	}
 

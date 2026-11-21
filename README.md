@@ -5,7 +5,7 @@
 **M**óvil **A**ndroid **R**eciclado **C**omo **C**onsola **D**omótica: MAR + C² + D. In English, a
 recycled Android phone turned into a home console.
 
-marc2d turns an old phone, fixed to the wall, into your home's console: clock and weather, video
+marc2d turns an old phone, fixed to the wall, into your home's console: clock and widgets, video
 intercom, cameras, siren and sensors, connected to [Home Assistant](https://www.home-assistant.io/). The
 logic stays in Home Assistant: the panel is not the hub.
 
@@ -13,7 +13,7 @@ It's a half-joking personal project, shared in case it's useful to someone.
 
 ## What it does
 
-- **Clock and weather** on a black screen, designed for OLED panels that stay on all day.
+- **Clock and widgets** on a black screen, designed for OLED panels that stay on all day.
 - **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
   with an RTSP backchannel, over RTSP from the moment it rings. Tested with a Dahua VTO2202F.
 - **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker.
@@ -22,8 +22,8 @@ It's a half-joking personal project, shared in case it's useful to someone.
   a siren on the alarm channel.
 - **Photos** as a screensaver, from any Home Assistant media source, such as a folder or an Immich album, when nobody
   touches the panel.
-- **Readings and charts** of any entity: tiles on the main screen, such as the car's battery, and hourly charts in the
-  menu, such as the electricity price.
+- **Widgets** written as Home Assistant templates: the weather, the cheap hours of electricity, the car's battery or
+  anything else, on the main screen, opening their detail when tapped.
 - **Updates** from Home Assistant, installed by the panel itself.
 - **A speaker** for `tts.speak` and any other audio from Home Assistant.
 - **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what
@@ -47,7 +47,7 @@ In testing, with a single panel. Releases are published by hand from `main`. Thi
 flowchart LR
     subgraph home["Home network"]
         subgraph panel["Panel: Pixel powered by PoE"]
-            ui["Compose UI<br/>time, weather, call"]
+            ui["Compose UI<br/>time, widgets, call"]
             svc["Foreground service"]
             sip["Linphone SDK"]
             hac["HA client<br/>Ktor"]
@@ -71,7 +71,7 @@ flowchart LR
     rtsp --> sys
     sip <-- "SIP and RTP<br/>registration, call, audio and video" --> vto
     svc <-- "RTSP, optional<br/>video and sound; the panel's voice" --> vto
-    hac <-- "WebSocket<br/>configuration, entities, doorbell, Assist" --> ha
+    hac <-- "WebSocket<br/>configuration, entities, doorbell, widgets, Assist" --> ha
     ui -- "HTTP(S)<br/>photos, signed" --> ha
     ha -- "RTSP" --> rtsp
     frigate -- "RTSP" --> rtsp
@@ -82,7 +82,7 @@ flowchart LR
 | Connection  | Who starts it | What for                                                   |
 | ----------- | ------------- | ---------------------------------------------------------- |
 | SIP and RTP | both          | the panel registers; the intercom calls; audio and video   |
-| WebSocket   | the panel     | configuration, entities, doorbell, weather, photos, Assist |
+| WebSocket   | the panel     | configuration, entities, doorbell, widgets, photos, Assist |
 | RTSP        | HA or Frigate | reading the video; the camera is only on during it         |
 | RTSP        | the panel     | the intercom's video and sound, and its voice, if set      |
 | HTTPS       | HA, the panel | HA looks for new versions; the panel downloads the APK     |

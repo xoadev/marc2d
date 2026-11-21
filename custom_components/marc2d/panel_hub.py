@@ -63,6 +63,8 @@ class PanelHub:
         self.values: dict[str, Any] = {}
         self.mood = MOOD_NORMAL
         self.brightness: float = DEFAULT_BRIGHTNESS
+        # The widgets as last rendered: a panel that connects gets them at once.
+        self.widgets: list[dict[str, Any]] = []
         self._connections: list[Send] = []
         self._listeners: list[tuple[Collection[str], Callable[[], None]]] = []
 

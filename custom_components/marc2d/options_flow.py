@@ -11,8 +11,6 @@ from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
     AssistPipelineSelector,
     BooleanSelector,
-    EntitySelector,
-    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -29,7 +27,6 @@ from homeassistant.helpers.selector import (
 from .camera import panel_address, stream_url
 from .panel_config import (
     CONF_CAMERAS,
-    CONF_CHARTS,
     CONF_INTERCOMS,
     CONF_PHOTOS_CLOCK,
     CONF_PHOTOS_FIT,
@@ -41,14 +38,12 @@ from .panel_config import (
     CONF_PHOTOS_SECONDS,
     CONF_PHOTOS_SUBFOLDERS,
     CONF_PIPELINE,
-    CONF_READINGS,
     CONF_RTSP_AUDIO,
     CONF_RTSP_PASSWORD,
     CONF_WAKE_PHRASE,
-    CONF_WEATHER_ENTITY,
+    CONF_WIDGETS,
     DEFAULT_WAKE_PHRASE,
     FEATURE_CAMERAS,
-    FEATURE_DISPLAY,
     FEATURE_PHOTOS,
     FEATURE_RTSP,
     FEATURE_SENSORS,
@@ -56,7 +51,7 @@ from .panel_config import (
     FEATURE_SIREN,
     FEATURE_SPEAKER,
     FEATURE_VOICE,
-    FEATURE_WEATHER,
+    FEATURE_WIDGETS,
     PHOTOS_DEFAULTS,
     PHOTOS_FIT_FILL,
     PHOTOS_FIT_WHOLE,
@@ -76,11 +71,10 @@ MIN_RTSP_PASSWORD = 12
 MENU = {
     "intercoms": "Intercoms",
     "cameras": "Cameras",
-    "weather": "Weather",
+    "widgets": "Widgets",
     "entities": "Sensors, siren and speaker",
     "voice": "Voice commands",
     "rtsp": "Publish the camera",
-    "display": "Readings and charts",
     "photos": "Photos",
 }
 PHOTO_SETTINGS = (
@@ -153,36 +147,10 @@ INTERCOM_FIELDS = {
 }
 
 
-READING_FIELDS = {
-    "entity": _field("Entity", {"entity": {}}),
+WIDGET_FIELDS = {
     "name": _field("Name", {"text": {}}),
-    # The only colour on the screen is a warning: it shows when the value crosses these.
-    "warn_below": _field(
-        "Warning below", {"number": {"mode": "box", "step": "any"}}, required=False
-    ),
-    "warn_above": _field(
-        "Warning above", {"number": {"mode": "box", "step": "any"}}, required=False
-    ),
-    # Pixel icons drawn by the panel; the battery fills with the value. Without one, the name shows.
-    "icon": _field(
-        "Icon",
-        {
-            "select": {
-                "options": [
-                    {"value": "battery", "label": "Battery"},
-                    {"value": "car", "label": "Car"},
-                    {"value": "thermometer", "label": "Thermometer"},
-                    {"value": "power", "label": "Power"},
-                    {"value": "water", "label": "Water"},
-                ]
-            }
-        },
-        required=False,
-    ),
-}
-CHART_FIELDS = {
-    "entity": _field("Entity with values by the hour", {"entity": {}}),
-    "name": _field("Name", {"text": {}}),
+    # Rendered by HA, with price_widget, weather_widget and reading_widget at hand: see SPEC.md.
+    "template": _field("Template", {"template": {}}),
 }
 
 
@@ -234,45 +202,18 @@ class Marc2dOptionsFlow(OptionsFlow):
             {probatio.Optional(CONF_CAMERAS): _list_of(fields)},
         )
 
-    async def async_step_display(
+    async def async_step_widgets(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Values under the time, and charts by the hour in the menu. Empty lists are valid."""
+        """The widgets on the main screen, in order. Their selector rejects broken templates."""
         if user_input is not None:
-            self._set_enabled(FEATURE_DISPLAY, user_input)
-            self._options[CONF_READINGS] = user_input.get(CONF_READINGS, [])
-            self._options[CONF_CHARTS] = user_input.get(CONF_CHARTS, [])
+            self._set_enabled(FEATURE_WIDGETS, user_input)
+            self._options[CONF_WIDGETS] = user_input.get(CONF_WIDGETS, [])
             return self.async_create_entry(data=self._options)
         return self._page(
-            "display",
-            FEATURE_DISPLAY,
-            {
-                probatio.Optional(CONF_READINGS): _list_of(READING_FIELDS),
-                probatio.Optional(CONF_CHARTS): _list_of(CHART_FIELDS),
-            },
-        )
-
-    async def async_step_weather(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """The weather entity, needed only if the feature is on."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            if user_input[CONF_ENABLED] and not user_input.get(CONF_WEATHER_ENTITY):
-                errors[CONF_WEATHER_ENTITY] = "required"
-            else:
-                self._set_enabled(FEATURE_WEATHER, user_input)
-                self._options[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY)
-                return self.async_create_entry(data=self._options)
-        return self._page(
-            "weather",
-            FEATURE_WEATHER,
-            {
-                probatio.Optional(CONF_WEATHER_ENTITY): EntitySelector(
-                    EntitySelectorConfig(domain="weather")
-                )
-            },
-            errors=errors,
+            "widgets",
+            FEATURE_WIDGETS,
+            {probatio.Optional(CONF_WIDGETS): _list_of(WIDGET_FIELDS)},
         )
 
     async def async_step_entities(

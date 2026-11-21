@@ -17,15 +17,14 @@ CAMERA = {"entity": "camera.door", "name": "Parking", "intercom": ""}
 OPTIONS = {
     "intercoms": [INTERCOM],
     "cameras": [CAMERA],
-    "weather_entity": "weather.home",
 }
+WIDGET = {"name": "Car", "template": "{{ reading_widget('sensor.car_battery', icon='car') }}"}
 
 
 def test_everything_on_by_default() -> None:
     config = build_panel_config(OPTIONS)
     assert config["intercoms"] == [{**INTERCOM, "number": "8001"}]
     assert config["cameras"] == [{"entity": "camera.door", "name": "Parking"}]
-    assert config["weather"] == "weather.home"
 
 
 def test_talk_needs_an_intercom_that_is_sent() -> None:
@@ -47,7 +46,6 @@ def test_a_new_panel_receives_an_empty_configuration() -> None:
     [
         ("sip", lambda c: c["intercoms"] == []),
         ("cameras", lambda c: c["cameras"] == []),
-        ("weather", lambda c: "weather" not in c),
     ],
 )
 def test_each_toggle_turns_off_only_its_part(feature, check) -> None:
@@ -113,14 +111,14 @@ async def test_cameras_work_without_intercoms(hass, entry) -> None:
     assert "intercom" not in form["data_schema"].schema["cameras"].config["fields"]
 
 
-async def test_weather_entity_is_needed_only_while_on(hass, entry) -> None:
-    field = "weather_entity"
+async def test_a_template_that_cannot_be_read_is_not_saved(hass, entry) -> None:
     options = hass.config_entries.options
-    form = await open_page(hass, entry, "weather")
-    again = await options.async_configure(form["flow_id"], {"enabled": True})
-    assert again["errors"] == {field: "required"}
-    done = await options.async_configure(form["flow_id"], {"enabled": False})
-    assert done["type"] == "create_entry"
+    form = await open_page(hass, entry, "widgets")
+    broken = {"name": "Broken", "template": "{{ reading_widget('sensor.car_battery'"}
+    with pytest.raises(InvalidData):
+        await options.async_configure(form["flow_id"], {"enabled": True, "widgets": [broken]})
+    done = await options.async_configure(form["flow_id"], {"enabled": True, "widgets": [WIDGET]})
+    assert done["data"]["widgets"] == [WIDGET]
 
 
 async def test_entities_page_saves_its_switches(hass, entry) -> None:
@@ -133,32 +131,32 @@ async def test_entities_page_saves_its_switches(hass, entry) -> None:
 
 async def test_saving_a_page_keeps_the_others(hass, entry) -> None:
     hass.config_entries.async_update_entry(entry, options={"intercoms": [INTERCOM]})
-    form = await open_page(hass, entry, "weather")
+    form = await open_page(hass, entry, "widgets")
     done = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"enabled": True, "weather_entity": "weather.home"}
+        form["flow_id"], {"enabled": True, "widgets": [WIDGET]}
     )
     assert done["data"]["intercoms"] == [INTERCOM]
 
 
 async def test_turning_off_keeps_what_it_had(hass, entry) -> None:
     hass.config_entries.async_update_entry(
-        entry, options={"weather_entity": "weather.home", "intercoms": [INTERCOM]}
+        entry, options={"widgets": [WIDGET], "intercoms": [INTERCOM]}
     )
-    form = await open_page(hass, entry, "weather")
+    form = await open_page(hass, entry, "widgets")
     done = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"enabled": False, "weather_entity": "weather.home"}
+        form["flow_id"], {"enabled": False, "widgets": [WIDGET]}
     )
-    assert done["data"]["weather_entity"] == "weather.home"
-    assert "weather" not in build_panel_config(done["data"])
+    assert done["data"]["widgets"] == [WIDGET]
+    assert done["data"]["features"]["widgets"] is False
 
 
 async def test_page_shows_saved_values(hass, entry) -> None:
     hass.config_entries.async_update_entry(
-        entry, options={"features": {"weather": False}, "weather_entity": "weather.home"}
+        entry, options={"features": {"widgets": False}, "widgets": [WIDGET]}
     )
-    form = await open_page(hass, entry, "weather")
+    form = await open_page(hass, entry, "widgets")
     keys = {str(key): key.description for key in form["data_schema"].schema}
-    assert keys["weather_entity"] == {"suggested_value": "weather.home"}
+    assert keys["widgets"] == {"suggested_value": [WIDGET]}
     assert keys["enabled"] == {"suggested_value": False}
 
 
@@ -284,40 +282,3 @@ async def test_the_intercom_form_hides_the_rtsp_url(hass, entry) -> None:
     fields = form["data_schema"].schema["intercoms"].config["fields"]
     assert fields["rtsp"]["required"] is False
     assert fields["rtsp"]["selector"]["text"]["type"] == "password"
-
-
-def test_readings_and_charts_reach_the_panel_without_empty_fields() -> None:
-    options = {
-        **OPTIONS,
-        "readings": [
-            {"entity": "sensor.car_battery", "name": "Car", "warn_below": 20, "warn_above": None},
-        ],
-        "charts": [{"entity": "sensor.electricity_price", "name": "Electricity"}],
-    }
-    config = build_panel_config(options)
-    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car", "warn_below": 20}]
-    assert config["charts"] == [{"entity": "sensor.electricity_price", "name": "Electricity"}]
-    assert "readings" not in build_panel_config(OPTIONS)
-    off = {**options, "features": {"display": False}}
-    assert "readings" not in build_panel_config(off)
-    assert "charts" not in build_panel_config(off)
-
-
-async def test_the_display_page_saves_readings_and_charts(hass, entry) -> None:
-    form = await open_page(hass, entry, "display")
-    fields = form["data_schema"].schema["readings"].config["fields"]
-    assert fields["warn_below"]["required"] is False
-    icons = [option["value"] for option in fields["icon"]["selector"]["select"]["options"]]
-    assert "battery" in icons
-    assert "car" in icons
-    done = await hass.config_entries.options.async_configure(
-        form["flow_id"],
-        {
-            "enabled": True,
-            "readings": [{"entity": "sensor.car_battery", "name": "Car", "icon": "car"}],
-            "charts": [{"entity": "sensor.electricity_price", "name": "Electricity"}],
-        },
-    )
-    config = build_panel_config(done["data"])
-    assert config["readings"] == [{"entity": "sensor.car_battery", "name": "Car", "icon": "car"}]
-    assert config["charts"][0]["name"] == "Electricity"

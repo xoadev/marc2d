@@ -44,25 +44,15 @@
           "cameras": "If you have intercoms, choose one to offer Talk on that camera."
         }
       },
-      "display": {
-        "title": "Readings and charts",
-        "description": "Readings are shown under the time, with the value and unit of their entity. Each chart gets a button in the panel's menu, with the next 24 hours. You can leave the lists empty.",
+      "widgets": {
+        "title": "Widgets",
+        "description": "Small squares on the panel's main screen, two per row, in this order. Each is a template that Home Assistant renders whenever an entity it reads changes. Three macros write the usual ones: price_widget('sensor.electricity_price'), weather_widget('weather.home', 'sensor.hourly_forecast') and reading_widget('sensor.car_battery', icon='car', warn_below=20, charging='binary_sensor.car_charging'). A template can also write its own JSON. A widget that fails is left out, and the log says why.",
         "data": {
           "enabled": "On",
-          "readings": "Readings",
-          "charts": "Charts"
+          "widgets": "Widgets"
         },
         "data_description": {
-          "readings": "Any entity, such as the car's battery. Its value turns yellow when it crosses a warning.",
-          "charts": "An entity with the values by the hour in its raw_today and raw_tomorrow attributes, as lists of start and value: the format of Nord Pool, ENTSO-e or EV Smart Charging, for example for the electricity price. The cheapest hours stand out."
-        }
-      },
-      "weather": {
-        "title": "Weather",
-        "description": "The weather and the forecast next to the clock.",
-        "data": {
-          "enabled": "On",
-          "weather_entity": "Weather entity"
+          "widgets": "The weather widget needs the hourly forecast in a template sensor, as a template cannot ask for it: the recipe is in the integration's documentation."
         }
       },
       "init": {

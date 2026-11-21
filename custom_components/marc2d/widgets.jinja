@@ -1,0 +1,167 @@
+{#-
+  The ready-made widgets, added in front of every widget template. Each macro writes a widget as JSON: the pieces are in
+  SPEC.md, under Widgets. Everything here uses {%- -%}, so defining them writes nothing.
+-#}
+
+{%- macro _clock(t) -%}
+  {{- t.strftime('%H') if t.minute == 0 else t.strftime('%H:%M') -}}
+{%- endmacro -%}
+
+{%- macro _number(value) -%}
+  {{- '%g' % (value | round(2)) -}}
+{%- endmacro -%}
+
+{#- The price by the hour, from raw_today and raw_tomorrow: the format of Nord Pool, ENTSO-e and EV Smart Charging. -#}
+{%- macro price_widget(entity, cheap_hours=6, title='Electricity') -%}
+  {%- set t = now() -%}
+  {%- set ns = namespace(slots=[], step=3600, day=[], windows=[], open=none, end=none, cells=[]) -%}
+  {%- for item in (state_attr(entity, 'raw_today') or []) + (state_attr(entity, 'raw_tomorrow') or []) -%}
+    {%- set start = as_datetime(item.start, none) if item.start is defined else none -%}
+    {%- if start is not none and item.value is number -%}
+      {%- set ns.slots = ns.slots + [{'start': as_local(start), 'value': item.value}] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- set slots = ns.slots | sort(attribute='start') -%}
+  {#- An hour, or the quarters some tariffs use. -#}
+  {%- for slot in slots[:-1] -%}
+    {%- set gap = (slots[loop.index].start - slot.start).total_seconds() -%}
+    {%- if 0 < gap < ns.step -%}{%- set ns.step = gap -%}{%- endif -%}
+  {%- endfor -%}
+  {%- set step = timedelta(seconds=ns.step) -%}
+  {#- 24 hours from the value running now. -#}
+  {%- set running = slots | selectattr('start', 'gt', t - step) | list -%}
+  {%- for slot in running if slot.start < running[0].start + timedelta(hours=24) -%}
+    {%- set ns.day = ns.day + [slot] -%}
+  {%- endfor -%}
+  {%- if not ns.day -%}
+    {{- {'icon': 'power', 'lines': [{'text': 'No prices', 'size': 'small'}]} | to_json -}}
+  {%- else -%}
+    {%- set count = [1, (cheap_hours * 3600 / ns.step) | int] | max -%}
+    {%- set cheap = (ns.day | sort(attribute='value'))[:count] | map(attribute='start') | list -%}
+    {%- set horizon = t + timedelta(hours=18) -%}
+    {%- for slot in ns.day if slot.start < horizon -%}
+      {%- set is_cheap = slot.start in cheap -%}
+      {%- if ns.open is not none and (not is_cheap or slot.start != ns.end) -%}
+        {%- set ns.windows = ns.windows + [[ns.open, ns.end]] -%}
+        {%- set ns.open = none -%}
+      {%- endif -%}
+      {%- if is_cheap -%}
+        {%- if ns.open is none -%}{%- set ns.open = slot.start -%}{%- endif -%}
+        {%- set ns.end = slot.start + step -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if ns.open is not none -%}{%- set ns.windows = ns.windows + [[ns.open, ns.end]] -%}{%- endif -%}
+    {%- set cheap_now = ns.windows and ns.windows[0][0] <= t -%}
+    {%- set hour = t.replace(minute=0, second=0, microsecond=0) -%}
+    {%- for offset in range(18) -%}
+      {%- set begin = hour + timedelta(hours=offset) -%}
+      {%- set ns.cells = ns.cells + [ns.day | selectattr('start', 'ge', begin) | selectattr('start', 'lt', begin + timedelta(hours=1))
+        | map(attribute='start') | select('in', cheap) | list | count > 0] -%}
+    {%- endfor -%}
+    {%- set status = {'text': 'Cheap now' if cheap_now else 'Not now', 'size': 'small', 'tone': 'white' if cheap_now else 'gray'} -%}
+    {%- set lines = namespace(items=[status]) -%}
+    {%- for window in ns.windows[:2] -%}
+      {%- set first = 'now' if window[0] <= t else _clock(window[0]) -%}
+      {%- set lines.items = lines.items + [{'text': first ~ '–' ~ _clock(window[1]) ~ ('h' if window[1].minute == 0 else ''), 'tone': 'white'}] -%}
+    {%- endfor -%}
+    {%- set unit = state_attr(entity, 'unit_of_measurement') or '' -%}
+    {%- set values = ns.day | map(attribute='value') | list -%}
+    {%- set bars = namespace(items=[]) -%}
+    {%- for slot in ns.day -%}
+      {%- set bars.items = bars.items + [{'label': slot.start.strftime('%H') if slot.start.minute == 0 else '', 'value': slot.value, 'lit': slot.start in cheap}] -%}
+    {%- endfor -%}
+    {{- {
+      'icon': 'power',
+      'tone': 'white' if cheap_now else 'gray',
+      'lines': lines.items,
+      'strip': {'cells': ns.cells, 'current': 0},
+      'expires': (ns.day[0].start + step + timedelta(minutes=5)).isoformat(),
+      'tap': {
+        'screen': 'bars',
+        'title': title,
+        'subtitle': (_number(values | min) ~ ' – ' ~ _number(values | max) ~ ' ' ~ unit) | trim,
+        'bars': bars.items,
+        'current': 0,
+      },
+    } | to_json -}}
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro _degrees(value) -%}
+  {{- (value | round(0) | int) ~ '°' -}}
+{%- endmacro -%}
+
+{#- Three columns of 6 hours, from the hourly forecast that a trigger-based template sensor keeps: see SPEC.md. -#}
+{%- macro weather_widget(weather, forecast) -%}
+  {%- set order = ['exceptional', 'lightning-rainy', 'lightning', 'hail', 'snowy-rainy', 'snowy', 'pouring', 'rainy',
+    'fog', 'windy-variant', 'windy', 'cloudy', 'partlycloudy', 'clear-night', 'sunny'] -%}
+  {%- set labels = {'clear-night': 'Clear', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional', 'fog': 'Fog',
+    'hail': 'Hail', 'lightning': 'Thunderstorm', 'lightning-rainy': 'Thunderstorm with rain', 'partlycloudy': 'Partly cloudy',
+    'pouring': 'Heavy rain', 'rainy': 'Rain', 'snowy': 'Snow', 'snowy-rainy': 'Sleet', 'sunny': 'Sunny', 'windy': 'Windy',
+    'windy-variant': 'Windy'} -%}
+  {%- set t = now() -%}
+  {%- set hour = t.replace(minute=0, second=0, microsecond=0) -%}
+  {%- set ns = namespace(hours=[], columns=[]) -%}
+  {%- for item in state_attr(forecast, 'forecast') or [] -%}
+    {%- set start = as_datetime(item.datetime, none) if item.datetime is defined else none -%}
+    {%- if start is not none and item.temperature is number and as_local(start) >= hour -%}
+      {%- set ns.hours = ns.hours + [{'start': as_local(start), 'condition': item.condition | default('exceptional'),
+        'temperature': item.temperature}] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if not ns.hours or states[forecast] is none -%}
+    {{- {'lines': [{'text': 'No forecast', 'size': 'small'}]} | to_json -}}
+  {%- else -%}
+    {%- for slot in range(3) -%}
+      {%- set begin = hour + timedelta(hours=6 * slot) -%}
+      {%- set inside = ns.hours | selectattr('start', 'ge', begin) | selectattr('start', 'lt', begin + timedelta(hours=6)) | list -%}
+      {%- if inside -%}
+        {%- set conditions = inside | map(attribute='condition') | list -%}
+        {%- set worst = order | select('in', conditions) | first | default(conditions[0]) -%}
+        {%- set temperatures = inside | map(attribute='temperature') | list -%}
+        {%- set ns.columns = ns.columns + [{'label': 'Now' if slot == 0 else begin.strftime('%H') ~ 'h', 'symbol': worst,
+          'value': _degrees(temperatures | max), 'sub': _degrees(temperatures | min)}] -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- set detail = namespace(columns=[]) -%}
+    {%- for item in ns.hours[:24] -%}
+      {%- set detail.columns = detail.columns + [{'label': item.start.strftime('%H'), 'symbol': item.condition,
+        'value': _degrees(item.temperature)}] -%}
+    {%- endfor -%}
+    {%- set condition = states(weather) -%}
+    {%- set temperature = state_attr(weather, 'temperature') -%}
+    {{- {
+      'columns': ns.columns,
+      'expires': (states[forecast].last_updated + timedelta(hours=1)).isoformat(),
+      'tap': {
+        'screen': 'columns',
+        'title': 'Weather',
+        'headline': labels.get(condition, condition),
+        'value': _degrees(temperature) if temperature is number else '',
+        'columns': detail.columns,
+      },
+    } | to_json -}}
+  {%- endif -%}
+{%- endmacro -%}
+
+{#- Any entity's value, such as the car's battery, with its warning limits and whether it is charging. -#}
+{%- macro reading_widget(entity, icon=none, warn_below=none, warn_above=none, charging=none) -%}
+  {%- set value = states(entity) | float(none) -%}
+  {%- set unit = state_attr(entity, 'unit_of_measurement') or '' -%}
+  {%- set is_charging = charging is not none and is_state(charging, 'on') -%}
+  {%- set warning = value is not none and not is_charging and (
+    (warn_below is not none and value < warn_below) or (warn_above is not none and value > warn_above)) -%}
+  {%- if value is none -%}
+    {%- set text = '–' -%}
+  {%- else -%}
+    {%- set text = _number(value) ~ ('' if unit in ('', '%') else ' ') ~ unit -%}
+  {%- endif -%}
+  {%- set lines = [] if icon else [{'text': state_attr(entity, 'friendly_name') or entity, 'size': 'small'}] -%}
+  {%- set widget = {'tone': 'yellow' if warning else 'gray', 'lines': lines + [{'text': text}]} -%}
+  {%- if icon -%}{%- set widget = dict(widget, icon=icon) -%}{%- endif -%}
+  {%- if is_charging -%}{%- set widget = dict(widget, badge='charging') -%}{%- endif -%}
+  {%- if unit == '%' and value is not none -%}
+    {%- set widget = dict(widget, level=([0, [1, value / 100] | min] | max)) -%}
+  {%- endif -%}
+  {{- widget | to_json -}}
+{%- endmacro -%}

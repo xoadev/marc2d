@@ -79,59 +79,15 @@ class HaClientTest {
 				fakeHa {
 					val id = subscribeId()
 					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
-					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"weather":"weather.home"}}}"""))
+					send(Frame.Text("""{"id":$id,"type":"event","event":{"kind":"config","config":{"cameras":[{"entity":"camera.door","name":"Door"}]}}}"""))
 					awaitCancellation()
 				}
 			val config = CompletableDeferred<PanelConfig>()
 			val job =
 				launch {
-					HaClient().run(connection, PanelLink(), {}, { config.complete(it) }, {}, {})
+					HaClient().run(connection, PanelLink(), {}, { config.complete(it) }, {})
 				}
-			assertEquals("weather.home", withTimeout(5.seconds) { config.await() }.weather)
-			job.cancel()
-		}
-
-	@Test
-	fun `reads the configured entities in one request and delivers readings and charts`() =
-		runBlocking {
-			val asked = CompletableDeferred<String>()
-			val connection =
-				fakeHa {
-					val id = subscribeId()
-					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
-					send(
-						Frame.Text(
-							"""{"id":$id,"type":"event","event":{"kind":"config","config":{
-							"readings":[{"entity":"sensor.car_battery","name":"Car"}],
-							"charts":[{"entity":"sensor.price","name":"Electricity"}]}}}""",
-						),
-					)
-					val request = receiveRequest("subscribe_entities")
-					asked.complete(request)
-					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
-					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
-					send(
-						Frame.Text(
-							"""{"id":$stateId,"type":"event","event":{"a":{
-							"sensor.car_battery":{"s":"73.0","a":{"unit_of_measurement":"%"}},
-							"sensor.price":{"s":"0.19","a":{"raw_today":[{"start":"2026-11-15T23:00:00+01:00","value":0.19}]}}}}}""",
-						),
-					)
-					awaitCancellation()
-				}
-			val shown = CompletableDeferred<Pair<List<Reading>, List<ChartData>>>()
-			val job =
-				launch {
-					HaClient().run(connection, PanelLink(), {}, {}, {}, {}, onDisplay = { readings, charts ->
-						if (readings.isNotEmpty()) shown.complete(readings to charts)
-					})
-				}
-			val request = HaProtocol.parse(withTimeout(5.seconds) { asked.await() })
-			assertEquals("subscribe_entities", request["type"]!!.jsonPrimitive.content)
-			assertEquals("[\"sensor.car_battery\",\"sensor.price\"]", request["entity_ids"].toString())
-			val (readings, charts) = withTimeout(5.seconds) { shown.await() }
-			assertEquals(listOf(Reading("Car", "73", "%", warning = false, level = 0.73f)), readings)
-			assertEquals("Electricity", charts.single().name)
+			assertEquals("Door", withTimeout(5.seconds) { config.await() }.cameras.single().name)
 			job.cancel()
 		}
 
@@ -159,51 +115,13 @@ class HaClientTest {
 				}
 			val delivered = Channel<List<String>>(Channel.UNLIMITED)
 			val client = HaClient().apply { onPhotosProblem = { problems.trySend(it) } }
-			val job = launch { client.run(connection, PanelLink(), {}, {}, {}, {}, onPhotos = { delivered.trySend(it) }) }
+			val job = launch { client.run(connection, PanelLink(), {}, {}, {}, onPhotos = { delivered.trySend(it) }) }
 			withTimeout(5.seconds) {
 				assertEquals(listOf("/media/local/a.jpg?authSig=x"), delivered.receive())
 				assertEquals("photos_unavailable: Check it", problems.receive())
 				// Turned off, the screensaver gets none.
 				assertEquals(emptyList(), delivered.receive())
 			}
-			job.cancel()
-		}
-
-	@Test
-	fun `reads the weather in the same request as the readings`() =
-		runBlocking {
-			val asked = CompletableDeferred<String>()
-			val connection =
-				fakeHa {
-					val id = subscribeId()
-					send(Frame.Text("""{"id":$id,"type":"result","success":true}"""))
-					send(
-						Frame.Text(
-							"""{"id":$id,"type":"event","event":{"kind":"config","config":{
-							"weather":"weather.home","readings":[{"entity":"sensor.outside","name":"Out"}]}}}""",
-						),
-					)
-					val request = receiveRequest("subscribe_entities")
-					asked.complete(request)
-					val stateId = HaProtocol.parse(request)["id"]!!.jsonPrimitive.int
-					send(Frame.Text("""{"id":$stateId,"type":"result","success":true}"""))
-					send(
-						Frame.Text(
-							"""{"id":$stateId,"type":"event","event":{"a":{
-							"weather.home":{"s":"sunny","a":{"temperature":21}},"sensor.outside":{"s":"18","a":{}}}}}""",
-						),
-					)
-					val forecast = HaProtocol.parse(receiveRequest("call_service"))["id"]!!.jsonPrimitive.int
-					send(Frame.Text("""{"id":$forecast,"type":"result","success":true,"result":{"response":{}}}"""))
-					awaitCancellation()
-				}
-			val weather = CompletableDeferred<WeatherReport?>()
-			val job = launch { HaClient().run(connection, PanelLink(), {}, {}, { weather.complete(it) }, {}) }
-			val request = HaProtocol.parse(withTimeout(5.seconds) { asked.await() })
-			assertEquals("[\"weather.home\",\"sensor.outside\"]", request["entity_ids"].toString())
-			val report = withTimeout(5.seconds) { weather.await() }
-			assertEquals("sunny", report?.condition)
-			assertEquals(21.0, report?.temperature)
 			job.cancel()
 		}
 
@@ -223,11 +141,11 @@ class HaClientTest {
 				}
 			val statuses = mutableListOf<HaStatus>()
 			val client = HaClient()
-			withTimeout(5.seconds) { client.run(connection, PanelLink(), { statuses += it }, {}, {}, {}) }
+			withTimeout(5.seconds) { client.run(connection, PanelLink(), { statuses += it }, {}, {}) }
 			assertEquals(listOf<HaStatus>(HaStatus.NotAdded), statuses)
 
 			val config = CompletableDeferred<PanelConfig>()
-			val job = launch { client.run(connection, PanelLink(), { statuses += it }, { config.complete(it) }, {}, {}) }
+			val job = launch { client.run(connection, PanelLink(), { statuses += it }, { config.complete(it) }, {}) }
 			withTimeout(5.seconds) { config.await() }
 			job.cancel()
 		}
@@ -247,7 +165,7 @@ class HaClientTest {
 			val command = CompletableDeferred<HaProtocol.PanelEvent>()
 			val link = PanelLink()
 			link.report("battery", JsonPrimitive(80))
-			val job = launch { HaClient().run(connection, link, {}, {}, {}, { command.complete(it) }) }
+			val job = launch { HaClient().run(connection, link, {}, {}, { command.complete(it) }) }
 
 			assertEquals(HaProtocol.PanelEvent.Siren(true), withTimeout(5.seconds) { command.await() })
 			assertTrue(""""battery":80""" in withTimeout(5.seconds) { reported.await() })
@@ -271,7 +189,7 @@ class HaClientTest {
 				}
 			val link = PanelLink()
 			val stopped = CompletableDeferred<Unit>()
-			val job = launch { HaClient().run(connection, link, {}, {}, {}, {}) }
+			val job = launch { HaClient().run(connection, link, {}, {}, {}) }
 			withTimeout(5.seconds) {
 				link.assistListeners.first { it > 0 }
 				link.requestAssist(AssistRun(null, Channel(Channel.UNLIMITED)) { stopped.complete(Unit) })
@@ -303,7 +221,7 @@ class HaClientTest {
 				}
 			val link = PanelLink()
 			val reply = CompletableDeferred<HaProtocol.PanelEvent>()
-			val job = launch { HaClient().run(connection, link, {}, {}, {}, { reply.complete(it) }) }
+			val job = launch { HaClient().run(connection, link, {}, {}, { reply.complete(it) }) }
 			val audio = Channel<ByteArray>(Channel.UNLIMITED)
 			audio.trySend(byteArrayOf(1, 2))
 			audio.close()

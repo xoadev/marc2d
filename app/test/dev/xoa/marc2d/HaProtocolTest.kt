@@ -31,7 +31,6 @@ class HaProtocolTest {
 				"""
 				{"kind":"config","config":{
 				  "intercoms":[{"name":"Parking","server":"192.0.2.8","extension":"9901#1","password":"s3"}],
-				  "weather":"weather.home",
 				  "future":true
 				}}
 				""".trimIndent(),
@@ -46,7 +45,45 @@ class HaProtocolTest {
 				.single()
 				.name,
 		)
-		assertEquals("weather.home", result.config.weather)
+	}
+
+	@Test
+	fun `reads the widgets HA rendered`() {
+		val message =
+			event(
+				"""
+				{"kind":"widgets","widgets":[
+				  {"name":"Car","icon":"car","badge":"charging","tone":"yellow","lines":[{"text":"15%"}],"level":0.15},
+				  {"name":"Electricity","lines":[{"text":"Not now","size":"small"}],"strip":{"cells":[false,true],"current":0},
+				   "expires":"2026-11-21T14:05:00+01:00",
+				   "tap":{"screen":"bars","title":"Electricity","bars":[{"label":"13","value":0.14},{"value":0.09,"lit":true}]}}
+				]}
+				""".trimIndent(),
+			)
+
+		val widgets = assertIs<HaProtocol.PanelEvent.Widgets>(HaProtocol.panelEvent(message)).widgets
+		val car = widgets[0]
+		assertEquals(WidgetIcon.Car, car.icon)
+		assertEquals(WidgetBadge.Charging, car.badge)
+		assertEquals(WidgetTone.Yellow, car.tone)
+		assertEquals(LineSize.Large, car.lines.single().size)
+		val price = widgets[1]
+		assertEquals(listOf(false, true), price.strip?.cells)
+		assertEquals(TapScreen.Bars, price.tap?.screen)
+		assertEquals(WidgetBar(value = 0.09, lit = true), price.tap?.bars?.last())
+	}
+
+	@Test
+	fun `a widget is hidden once it expires`() {
+		val price = Widget(expires = "2026-11-21T14:05:00+01:00")
+		assertTrue(price.isShown(Instant.parse("2026-11-21T13:04:59Z")))
+		assertFalse(price.isShown(Instant.parse("2026-11-21T13:05:00Z")))
+		assertTrue(Widget().isShown(Instant.MAX))
+	}
+
+	@Test
+	fun `widgets this version cannot read keep the last ones`() {
+		assertNull(HaProtocol.panelEvent(event("""{"kind":"widgets","widgets":[{"icon":"rocket"}]}""")))
 	}
 
 	@Test
@@ -158,12 +195,6 @@ class HaProtocolTest {
 	fun `reports its values`() {
 		val message = HaProtocol.panelState(3, mapOf("battery" to JsonPrimitive(80), "charging" to JsonPrimitive(true)))
 		assertEquals("""{"id":3,"type":"marc2d/state","values":{"battery":80,"charging":true}}""", message)
-	}
-
-	@Test
-	fun `an unavailable entity gives no report`() {
-		val state = HaProtocol.parse("""{"event":{"a":{"weather.home":{"s":"unavailable","a":{}}}}}""")
-		assertNull(HaProtocol.weather("weather.home", state, HaProtocol.parse("{}"), Instant.EPOCH))
 	}
 
 	@Test

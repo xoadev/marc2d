@@ -10,20 +10,17 @@ SECTION_FEATURES = "features"
 
 FEATURE_SIP = "sip"
 FEATURE_CAMERAS = "cameras"
-FEATURE_WEATHER = "weather"
+FEATURE_WIDGETS = "widgets"
 FEATURE_SENSORS = "sensors"
 FEATURE_SIREN = "siren"
 FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
 FEATURE_RTSP = "rtsp"
-FEATURE_DISPLAY = "display"
 FEATURE_PHOTOS = "photos"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
-CONF_READINGS = "readings"
-CONF_CHARTS = "charts"
-CONF_WEATHER_ENTITY = "weather_entity"
+CONF_WIDGETS = "widgets"
 CONF_DOORBELL = "doorbell"
 CONF_ANSWERED_BUTTON = "answered_button"
 # What only Home Assistant uses: the panel does not get it.
@@ -118,16 +115,6 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             }
             for camera in options.get(CONF_CAMERAS, [])
         ]
-    if is_enabled(options, FEATURE_DISPLAY):
-        # Empty fields are left out: the panel uses its defaults.
-        for key in (CONF_READINGS, CONF_CHARTS):
-            if items := [
-                {name: value for name, value in item.items() if value not in (None, "")}
-                for item in options.get(key, [])
-            ]:
-                config[key] = items
-    if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
-        config["weather"] = weather
     if photos_folder(options):
         config["photos"] = {
             # Number fields save decimals, and the panel takes whole minutes and seconds.

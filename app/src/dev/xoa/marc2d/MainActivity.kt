@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
 					val phoneCall by runtime.line.call.collectAsState()
-					val weather by runtime.weather.collectAsState()
+					val widgets by runtime.widgets.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
 					val listening by runtime.listening.collectAsState()
@@ -93,11 +93,8 @@ class MainActivity : ComponentActivity() {
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
-					var chartOpen by rememberSaveable { mutableStateOf<String?>(null) }
-					val shownReadings by runtime.shownReadings.collectAsState()
-					val charts by runtime.charts.collectAsState()
-					// The menu offers the charts that are configured, even before their values arrive.
-					val chartNames by remember { runtime.store.config.map { config -> config.charts.map { it.name } } }.collectAsState(initial = emptyList())
+					// By name: the widget is looked up again, so the screen follows its new values.
+					var widgetOpen by rememberSaveable { mutableStateOf<String?>(null) }
 					var scanOpen by rememberSaveable { mutableStateOf(false) }
 					val enrollmentMessage by runtime.enrollmentMessage.collectAsState()
 					// Remembered: a new flow on each recomposition would restart the collection every time.
@@ -131,7 +128,9 @@ class MainActivity : ComponentActivity() {
 					val needsSetup = haStatus == HaStatus.NotConfigured
 					val activeCall = call
 					val activePhoneCall = phoneCall
-					val openChart = chartOpen
+					val openTap = widgetOpen?.let { name -> widgets.firstOrNull { it.name == name }?.tap }
+					// A widget that HA removes closes its screen, which would otherwise reopen if it came back.
+					LaunchedEffect(openTap) { if (openTap == null) widgetOpen = null }
 					val cameraConnection = connection
 					val screen =
 						when {
@@ -140,7 +139,7 @@ class MainActivity : ComponentActivity() {
 							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
 							scanOpen -> Screen.Scan
 							settingsOpen || needsSetup -> Screen.Settings
-							openChart != null -> Screen.Chart(openChart)
+							openTap != null -> Screen.WidgetDetail(openTap)
 							menuOpen -> Screen.Menu
 							screensaver -> Screen.Photos
 							else -> Screen.Main
@@ -220,13 +219,9 @@ class MainActivity : ComponentActivity() {
 							)
 						}
 
-						is Screen.Chart -> {
-							BackHandler { chartOpen = null }
-							ChartScreen(
-								chart = charts.firstOrNull { it.name == screen.name },
-								name = screen.name,
-								onClose = { chartOpen = null },
-							)
+						is Screen.WidgetDetail -> {
+							BackHandler { widgetOpen = null }
+							WidgetScreen(tap = screen.tap, onClose = { widgetOpen = null })
 						}
 
 						Screen.Menu -> {
@@ -241,11 +236,6 @@ class MainActivity : ComponentActivity() {
 											camerasOpen = true
 										}
 									},
-								charts = chartNames,
-								onChart = { name ->
-									menuOpen = false
-									chartOpen = name
-								},
 								onSettings = {
 									menuOpen = false
 									settingsOpen = true
@@ -268,9 +258,9 @@ class MainActivity : ComponentActivity() {
 							ClockScreen(
 								warning = warning,
 								droid = droid,
-								weather = weather,
-								readings = shownReadings,
+								widgets = widgets,
 								onOpenMenu = { menuOpen = true },
+								onOpenWidget = { widgetOpen = it.name },
 								onFixPermissions = if (missingPermissions.isEmpty()) null else ::askForPermissions,
 							)
 						}
@@ -346,8 +336,8 @@ private sealed interface Screen {
 
 	data object Settings : Screen
 
-	data class Chart(
-		val name: String,
+	data class WidgetDetail(
+		val tap: WidgetTap,
 	) : Screen
 
 	data object Menu : Screen

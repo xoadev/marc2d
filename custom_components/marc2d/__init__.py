@@ -16,6 +16,7 @@ from .panel_config import FEATURE_SIREN, FEATURE_SPEAKER, doorbell_buttons, is_e
 from .panel_hub import DOORBELL_RING, doorbell_event, get_hub, remove_hub
 from .siren import SIREN_OFF
 from .websocket import CONF_USER_ID, async_register, config_event
+from .widgets import async_start_widgets
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS = [
@@ -37,13 +38,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Create the entities, watch the doorbells and follow the option changes."""
+    """Create the entities, watch the doorbells, render the widgets and follow the options."""
     # The unique IDs of the entities the platforms make: they decide what is on.
     entry.runtime_data = set()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _remove_entities_not_made(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     _watch_doorbells(hass, entry)
+    async_start_widgets(hass, entry, get_hub(hass, entry.entry_id))
     return True
 
 

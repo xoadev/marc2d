@@ -37,19 +37,16 @@ import kotlinx.coroutines.delay
 // Black background and dimmed white: the screens are OLED and stay on for many hours.
 private val WarningColor = Color(0xFFE0A030)
 private const val MAX_CLOCK_HEIGHT = 0.5f
-private val WEATHER_LIST_WIDTH = 160.dp
-
-// The readings' column, on the left as the weather is on the right, so that the droid never covers them.
-private val READINGS_WIDTH = 200.dp
+private val EDGE = 16.dp
 private const val DROID_WIDTH = 0.1f
 
 @Composable
 fun ClockScreen(
 	warning: String?,
-	weather: WeatherReport?,
+	widgets: List<Widget>,
 	droid: DroidMood,
-	readings: List<Reading>,
 	onOpenMenu: () -> Unit,
+	onOpenWidget: (Widget) -> Unit,
 	onFixPermissions: (() -> Unit)?,
 	modifier: Modifier = Modifier,
 ) {
@@ -68,18 +65,16 @@ fun ClockScreen(
 		val clockMaxHeight = maxHeight * MAX_CLOCK_HEIGHT
 		val landscape = maxWidth > maxHeight
 		val instant = now.atZone(ZoneId.systemDefault()).toInstant()
-		val visibleWeather = weather?.takeIf { it.isFresh(instant) }
+		val shown = widgets.filter { it.isShown(instant) }
+		val widgetsWidth = WIDGET_WIDTH * minOf(shown.size, WIDGETS_PER_ROW) + WIDGET_GAP * (minOf(shown.size, WIDGETS_PER_ROW) - 1).coerceAtLeast(0)
 		Column(
 			modifier =
 				Modifier
 					.align(Alignment.Center)
 					.fillMaxWidth()
 					.offset(offsetX.dp, offsetY.dp)
-					// In landscape the forecast goes in a list to the right of the time.
-					.padding(
-						start = if (landscape && readings.isNotEmpty()) READINGS_WIDTH else 24.dp,
-						end = if (landscape && visibleWeather != null) WEATHER_LIST_WIDTH else 24.dp,
-					),
+					// In landscape the widgets go to the right of the time.
+					.padding(start = 24.dp, end = if (landscape && shown.isNotEmpty()) widgetsWidth + EDGE * 2 else 24.dp),
 			horizontalAlignment = Alignment.CenterHorizontally,
 			verticalArrangement = Arrangement.spacedBy(8.dp),
 		) {
@@ -105,27 +100,15 @@ fun ClockScreen(
 				textAlign = TextAlign.Center,
 			)
 		}
-		if (visibleWeather != null) {
-			WeatherPanel(
-				report = visibleWeather,
-				now = instant,
-				asList = landscape,
+		if (shown.isNotEmpty()) {
+			WidgetGrid(
+				widgets = shown,
+				onOpen = onOpenWidget,
 				modifier =
 					Modifier
 						.align(Alignment.TopEnd)
 						.offset(offsetX.dp, offsetY.dp)
-						.padding(16.dp),
-			)
-		}
-		if (readings.isNotEmpty()) {
-			ReadingTiles(
-				readings = readings,
-				modifier =
-					Modifier
-						.align(Alignment.TopStart)
-						.offset(offsetX.dp, offsetY.dp)
-						// Below the permissions icon, when it is there.
-						.padding(start = 24.dp, top = if (onFixPermissions != null) CLOSE_BUTTON + 32.dp else 24.dp),
+						.padding(EDGE),
 			)
 		}
 		DroidSprite(
