@@ -74,6 +74,41 @@ RTSP_PATH = "/camera"
 OFF_BY_DEFAULT = {FEATURE_VOICE, FEATURE_RTSP}
 
 
+# What the form saves. Anything else was saved by an older version, such as an MQTT password, and is
+# dropped on the next save: secrets nothing uses must not stay in the options.
+FEATURES = {
+    FEATURE_SIP,
+    FEATURE_CAMERAS,
+    FEATURE_WIDGETS,
+    FEATURE_SENSORS,
+    FEATURE_SIREN,
+    FEATURE_SPEAKER,
+    FEATURE_VOICE,
+    FEATURE_RTSP,
+    FEATURE_PHOTOS,
+}
+OPTIONS = {
+    CONF_INTERCOMS,
+    CONF_CAMERAS,
+    CONF_WIDGETS,
+    CONF_PIPELINE,
+    CONF_WAKE_PHRASE,
+    CONF_RTSP_PASSWORD,
+    CONF_RTSP_AUDIO,
+    *PHOTOS_DEFAULTS,
+    CONF_PHOTOS_FOLDER,
+}
+
+
+def known_options(options: Mapping[str, Any]) -> dict[str, Any]:
+    """The options this version uses, and nothing an older one left behind."""
+    features = options.get(SECTION_FEATURES, {})
+    return {
+        **{key: value for key, value in options.items() if key in OPTIONS},
+        SECTION_FEATURES: {key: value for key, value in features.items() if key in FEATURES},
+    }
+
+
 def is_enabled(options: Mapping[str, Any], feature: str) -> bool:
     """Whether the feature is on, or its default when it was never set."""
     return bool(options.get(SECTION_FEATURES, {}).get(feature, feature not in OFF_BY_DEFAULT))

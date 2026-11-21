@@ -383,6 +383,8 @@ feature had is kept. The [widgets](#widgets) are not in this response: they arri
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
   way. Administrators can see them in the form, masked.
+- The secrets reach no entity, state or attribute: only the panel gets them, through `marc2d/subscribe`. Saving the form
+  drops whatever an older version left in the options, such as a password nothing uses any more.
 - It is kept in the app's private storage, along with the connection, and never in the repo: the
   panel keeps handling calls even if HA is down.
 - The presence detector will be added to this response in its delivery.

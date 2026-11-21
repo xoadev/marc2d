@@ -282,3 +282,41 @@ async def test_the_intercom_form_hides_the_rtsp_url(hass, entry) -> None:
     fields = form["data_schema"].schema["intercoms"].config["fields"]
     assert fields["rtsp"]["required"] is False
     assert fields["rtsp"]["selector"]["text"]["type"] == "password"
+
+
+async def test_saving_drops_what_an_older_version_left(hass, entry) -> None:
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            "mqtt": {"password": "old-secret"},
+            "weather_entity": "weather.home",
+            "features": {"weather": False, "sip": True},
+            "intercoms": [INTERCOM],
+        },
+    )
+    form = await open_page(hass, entry, "widgets")
+    done = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"enabled": True, "widgets": [WIDGET]}
+    )
+    assert done["data"] == {
+        "intercoms": [INTERCOM],
+        "widgets": [WIDGET],
+        "features": {"sip": True, "widgets": True},
+    }
+
+
+async def test_secrets_are_not_in_any_state(hass, entry) -> None:
+    rtsp_url = "rtsp://admin:door-secret@192.0.2.10/cam"
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            "intercoms": [{**INTERCOM, "rtsp": rtsp_url}],
+            "rtsp_password": "camera-secret",
+            "features": {"rtsp": True},
+        },
+    )
+    await hass.async_block_till_done()
+    # Only the panel gets them, through marc2d/subscribe.
+    states = str([(state.state, dict(state.attributes)) for state in hass.states.async_all()])
+    for secret in (INTERCOM["password"], "door-secret", "camera-secret"):
+        assert secret not in states

@@ -59,6 +59,7 @@ from .panel_config import (
     PHOTOS_ORDER_SHUFFLE,
     SECTION_FEATURES,
     is_enabled,
+    known_options,
     photos_folder,
 )
 from .panel_hub import get_hub
@@ -162,7 +163,7 @@ class Marc2dOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose what to change."""
-        self._options = dict(self.config_entry.options)
+        self._options = known_options(self.config_entry.options)
         return self.async_show_menu(step_id="init", menu_options=MENU)
 
     async def async_step_intercoms(
