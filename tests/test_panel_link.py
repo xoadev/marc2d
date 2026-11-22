@@ -42,7 +42,11 @@ def entry_options(hass: HomeAssistant) -> dict:
 async def panel(hass, entry, hass_ws_client):
     """The panel connected, past its first events."""
     client, events = await connect_panel(hass, entry, hass_ws_client)
-    assert events[1:] == [{"kind": "mood", "value": "Normal"}, {"kind": "brightness", "level": 100}]
+    assert events[1:] == [
+        {"kind": "widgets", "widgets": []},
+        {"kind": "mood", "value": "Normal"},
+        {"kind": "brightness", "level": 100},
+    ]
     return client
 
 

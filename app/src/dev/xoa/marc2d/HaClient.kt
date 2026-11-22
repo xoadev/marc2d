@@ -7,7 +7,6 @@ import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -67,9 +66,7 @@ class HaClient {
 		link: PanelLink,
 		onStatus: (HaStatus) -> Unit,
 		onConfig: suspend (PanelConfig) -> Unit,
-		onWeather: (WeatherReport?) -> Unit,
 		onCommand: (HaProtocol.PanelEvent) -> Unit,
-		onDisplay: (List<Reading>, List<ChartData>) -> Unit = { _, _ -> },
 		onPhotos: (List<String>) -> Unit = {},
 	) {
 		this.onCommand = onCommand
@@ -87,7 +84,7 @@ class HaClient {
 					launch { link.values.collect { send(Frame.Text(HaProtocol.panelState(nextId(), it))) } }
 					launch { link.answered.collect { send(Frame.Text(HaProtocol.doorbellAnswered(nextId(), it))) } }
 					launch { link.assist.collect { startAssist(it, nextId()) } }
-					followConfig(onStatus, onConfig, onWeather, onDisplay, onPhotos, nextId)
+					followConfig(onStatus, onConfig, onPhotos, nextId)
 				}
 			}
 			onStatus(HaProtocol.subscribeError(answer).toStatus())
@@ -133,18 +130,13 @@ class HaClient {
 		}
 	}
 
-	/** Never returns: applies each configuration as it arrives, and refreshes the weather and the photos meanwhile. */
+	/** Never returns: applies each configuration as it arrives, and refreshes the photos meanwhile. */
 	private suspend fun DefaultClientWebSocketSession.followConfig(
 		onStatus: (HaStatus) -> Unit,
 		onConfig: suspend (PanelConfig) -> Unit,
-		onWeather: (WeatherReport?) -> Unit,
-		onDisplay: (List<Reading>, List<ChartData>) -> Unit,
 		onPhotos: (List<String>) -> Unit,
 		nextId: () -> Int,
 	): Nothing {
-		var weather: String? = null
-		var readings = emptyList<ReadingConfig>()
-		var charts = emptyList<ChartConfig>()
 		var photos = false
 		while (true) {
 			idleUntilNextRefresh()
@@ -152,43 +144,13 @@ class HaClient {
 				pendingConfig = null
 				if (result is HaProtocol.ConfigResult.Ok) {
 					onConfig(result.config)
-					weather = result.config.weather
-					readings = result.config.readings
-					charts = result.config.charts
 					photos = result.config.photos != null
 				}
 				onStatus(result.toStatus())
 			}
-			val entity = weather
-			val entities = (listOfNotNull(entity) + readings.map { it.entity } + charts.map { it.entity }).distinct()
-			val states = if (entities.isEmpty()) null else fetchStates(entities, nextId)
-			val report = entity?.let { states?.let { fetchWeather(entity, it, nextId) } }
-			// A failed refresh keeps the last report, which hides by itself once it is an hour old.
-			if (entity == null || report != null) onWeather(report)
-			if (readings.isEmpty() && charts.isEmpty()) {
-				onDisplay(emptyList(), emptyList())
-			} else {
-				// A failed refresh keeps what was shown.
-				states?.let { event ->
-					onDisplay(EntityReadings.readings(readings, event), charts.mapNotNull { EntityReadings.chart(it, event) })
-				}
-			}
 			// Their signatures last a day: asking on each refresh also picks up the photos added since.
 			if (photos) fetchPhotos(nextId)?.let(onPhotos) else onPhotos(emptyList())
 		}
-	}
-
-	/** The current state of the entities, in one event. */
-	private suspend fun DefaultClientWebSocketSession.fetchStates(
-		entities: List<String>,
-		nextId: () -> Int,
-	): JsonObject? {
-		val id = nextId()
-		send(Frame.Text(HaProtocol.entityStates(id, entities)))
-		if (!HaProtocol.isSuccess(awaitResult(id))) return null
-		val event = awaitEvent(id)
-		send(Frame.Text(HaProtocol.unsubscribe(nextId(), id)))
-		return event
 	}
 
 	/** A failed request keeps the photos already shown, whose signatures are still valid. */
@@ -208,17 +170,6 @@ class HaClient {
 			is HaProtocol.ConfigResult.Invalid -> HaStatus.InvalidConfig(reason)
 		}
 
-	/** The current weather comes with the other states: each refresh also brings the forecast. */
-	private suspend fun DefaultClientWebSocketSession.fetchWeather(
-		entity: String,
-		state: JsonObject,
-		nextId: () -> Int,
-	): WeatherReport? {
-		val forecastId = nextId()
-		send(Frame.Text(HaProtocol.hourlyForecast(forecastId, entity)))
-		return HaProtocol.weather(entity, state, awaitResult(forecastId), Instant.now())
-	}
-
 	private suspend fun DefaultClientWebSocketSession.authenticate(token: String) {
 		while (true) {
 			when (HaProtocol.type(receiveMessage())) {
@@ -233,13 +184,6 @@ class HaClient {
 		while (true) {
 			val message = receiveMessage()
 			if (HaProtocol.type(message) == "result" && HaProtocol.id(message) == id) return message
-		}
-	}
-
-	private suspend fun DefaultClientWebSocketSession.awaitEvent(id: Int): JsonObject {
-		while (true) {
-			val message = receiveMessage()
-			if (HaProtocol.type(message) == "event" && HaProtocol.id(message) == id) return message
 		}
 	}
 

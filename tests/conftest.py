@@ -51,6 +51,6 @@ async def connect_panel(hass: HomeAssistant, entry, hass_ws_client) -> tuple[Any
     client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
     await client.send_json({"id": 1, "type": "marc2d/subscribe"})
     assert (await client.receive_json())["success"] is True
-    events = [(await client.receive_json())["event"] for _ in range(3)]
-    assert [event["kind"] for event in events] == ["config", "mood", "brightness"]
+    events = [(await client.receive_json())["event"] for _ in range(4)]
+    assert [event["kind"] for event in events] == ["config", "widgets", "mood", "brightness"]
     return client, events

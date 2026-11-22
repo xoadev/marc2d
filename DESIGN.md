@@ -58,17 +58,18 @@ or add a word. They are white, and red is reserved for **Hang up**.
 
 ## Screens
 
-- **Main:** time, date, weather, readings and droid, with no buttons. The readings are a column of tiles on the left,
-  each with a 12×12 pixel icon (battery, car, thermometer, power or water) and its value in gray; a percentage gets a bar
-  of ten pixel cells, and the battery icon fills instead. Only a warning turns one yellow. Tapping anywhere opens the menu.
+- **Main:** time, date, widgets and droid. The widgets go in the top right corner, two per row: black squares of
+  140×168 with a 12×12 pixel icon, their lines of text and, if they have them, columns, a strip of cells and a bar of ten
+  cells, in white and gray. Only a warning turns one yellow. One that opens something has a gray edge; the rest, a dimmer
+  one. Tapping anywhere else opens the menu.
 - **Menu:** large buttons on black. It closes with the X, by tapping outside, and on its own after 10 seconds.
 - **Settings:** black background, straight-edged fields and text buttons with the same shape as the rest. It
   closes with the X.
 - **Cameras:** full screen, swiping from one to the next. If one can be called, it shows
   **Talk**. Exit with the X, by tapping the image, or automatically after 2 minutes.
-- **Chart:** full screen, the bars in whole pixels with a gap between them, as the droid. The lowest values in white
-  and the rest in gray: no colour, which is kept for warnings. In the menu its button has the name under it, as its icon
-  alone does not say which chart it is. Exit with the X, by tapping, or automatically after 2 minutes.
+- **Widget detail:** full screen, opened from its widget. Bars in whole pixels with a gap between them, as the droid,
+  with every hour under them: the lit ones in white and the rest in gray, with no colour, which is kept for warnings. Or
+  columns, as the forecast, over the whole width. Exit with the X, by tapping, or automatically after 2 minutes.
 - **Call:** the video fills the whole screen; a phone call has none, only its number on black.
   **Hang up** never moves and sits in the corner opposite **Answer**, so that a double tap does not
   end the call.
@@ -78,4 +79,5 @@ or add a word. They are white, and red is reserved for **Hang up**.
 ## Text
 
 In English, with short sentences and no technical jargon on screen: "No connection to Home Assistant" is the limit. Technical
-detail goes in the settings, not on the main screen.
+detail goes in the settings, not on the main screen. The widgets are the exception: their words come from Home
+Assistant, in its language.

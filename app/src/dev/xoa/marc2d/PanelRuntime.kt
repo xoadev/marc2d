@@ -42,15 +42,9 @@ class PanelRuntime(
 	private val _haStatus = MutableStateFlow<HaStatus>(HaStatus.NotConfigured)
 	val haStatus: StateFlow<HaStatus> = _haStatus.asStateFlow()
 
-	private val _weather = MutableStateFlow<WeatherReport?>(null)
-	val weather: StateFlow<WeatherReport?> = _weather.asStateFlow()
-
-	/** Other entities' values, under the time. */
-	private val _shownReadings = MutableStateFlow<List<Reading>>(emptyList())
-	val shownReadings: StateFlow<List<Reading>> = _shownReadings.asStateFlow()
-
-	private val _charts = MutableStateFlow<List<ChartData>>(emptyList())
-	val charts: StateFlow<List<ChartData>> = _charts.asStateFlow()
+	/** As HA last rendered them: they stay while the connection is down, and each hides by itself once it expires. */
+	private val _widgets = MutableStateFlow<List<Widget>>(emptyList())
+	val widgets: StateFlow<List<Widget>> = _widgets.asStateFlow()
 
 	/** Where to download the screensaver's photos: HA's are paths, signed for this panel. Empty while it is off. */
 	private val _photos = MutableStateFlow<List<String>>(emptyList())
@@ -321,6 +315,10 @@ class PanelRuntime(
 				_brightness.value = windowBrightness(command.percent)
 			}
 
+			is HaProtocol.PanelEvent.Widgets -> {
+				_widgets.value = command.widgets
+			}
+
 			is HaProtocol.PanelEvent.Config -> {}
 		}
 	}
@@ -374,11 +372,6 @@ class PanelRuntime(
 						wait = MIN_RETRY
 					},
 					onConfig = store::saveConfig,
-					onWeather = { _weather.value = it },
-					onDisplay = { readings, charts ->
-						_shownReadings.value = readings
-						_charts.value = charts
-					},
 					onPhotos = { photos ->
 						if (photos.size != _photos.value.size) Log.i(TAG, "The screensaver has ${photos.size} photos")
 						_photos.value = photos

@@ -21,6 +21,7 @@ from .panel_config import (
 )
 from .panel_hub import DOORBELL_ANSWERED, doorbell_to_all, get_hub
 from .photos import PhotosUnavailable, photo_urls
+from .widgets import widgets_event
 
 CONF_USER_ID = "user_id"
 
@@ -69,6 +70,7 @@ def ws_subscribe(
     connection.subscriptions[msg["id"]] = hub.connect(send)
     connection.send_result(msg["id"])
     send(config_event(entry))
+    send(widgets_event(hub))
     send({"kind": "mood", "value": hub.mood})
     send({"kind": "brightness", "level": hub.brightness})
 

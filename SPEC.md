@@ -19,29 +19,92 @@ The project is in testing and has no users: break whatever needs breaking.
 ## Main screen
 
 - The time in large type and the date.
-- In the top right corner, the current weather and the forecast for the next 8 hours, in white
-  and gray, in a list next to the time. They come from the `weather.*` entity
-  named in the configuration, not from a service of our own. They update every 10 minutes and
-  are hidden if the data is more than an hour old.
-- In a column on the left, as the weather is on the right, the readings: a tile per entity named in the configuration,
-  such as the car's battery, with its icon and its value and unit, in gray. A percentage gets a level bar, and the battery
-  icon fills with it. Without an icon the name says what it is. A reading turns yellow only when it crosses one of its
-  warning limits. They update with the weather, in one request for every entity, and the droid never covers them.
+- In the top right corner, the [widgets](#widgets), two per row, in the order of the configuration. The droid never
+  covers them.
 - At the bottom, a warning only if something fails: HA, registration with an intercom or the microphone permission.
 - If a permission is missing, a warning icon in the top left corner asks for it again, or opens the app's Android
   settings if Android no longer shows the dialog.
-- Tapping anywhere opens the menu, with **Cameras**, a button per chart, and **Settings**.
+- Tapping a widget that has a detail opens it; tapping anywhere else opens the menu, with **Cameras** and **Settings**.
 - If nobody touches it for a while, the [photos](#photos) take its place.
 
-### Charts
+### Widgets
 
-- Each chart in the configuration gets a button in the menu, with its name under it, and opens full screen: the next 24
-  hours as bars, from the value running now, with the lowest 6 hours in white, the rest in gray, and the current one
-  framed. Below, the hours every 3; above, the lowest and highest values with the unit.
-- The entity needs its values in the attributes `raw_today` and `raw_tomorrow`, lists of `start` and `value`: the
-  format of Nord Pool, ENTSO-e and EV Smart Charging, which covers the electricity price. Values every 15 minutes count
-  as such. Another format is added in the app, not in each house.
-- It closes with the X, by tapping, and on its own after 2 minutes.
+Small squares on the main screen, such as the weather, the electricity price or the car's battery. What they show is
+decided in Home Assistant: the panel knows nothing of weather, prices or cars, only how to draw a few pieces.
+
+- **Each widget is a Jinja template**, with a name, in the panel's options. The integration renders it and sends the
+  panel the result, a JSON object made of the pieces below. It renders it again whenever an entity it reads changes, and
+  every minute if it uses `now()`, so a widget can read as many entities as it needs.
+- **A template that fails, or whose result is not a valid widget, is left out**, and HA's log says which widget and
+  why. The rest keep showing.
+- **The widgets reach the panel in their own event**, `widgets`, with the whole list each time one changes. The panel
+  keeps the last list, and hides a widget once its `expires` has passed: better nothing than old data.
+
+| Piece     | What it is                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------- |
+| `icon`    | a 12×12 pixel icon: `battery`, `car`, `thermometer`, `power` or `water`. The battery fills with `level` |
+| `badge`   | a small icon next to it: `charging`                                                                     |
+| `tone`    | `gray`, the default, `white` or `yellow`: the colour of the icon, the lines and the level               |
+| `lines`   | texts, each `{text, size, tone}`: `size` is `large`, the default, or `small`                            |
+| `columns` | for a forecast: each `{label, symbol, value, sub}`, `symbol` being a condition of HA's weather          |
+| `strip`   | a row of cells, `{cells, current}`: each cell `true` in white or `false` in gray, `current` framed      |
+| `level`   | from 0 to 1: a bar of ten cells. With the `charging` badge, the next empty cell is framed               |
+| `tap`     | what opens when it is tapped: `bars` or `columns`, below. Without it, the widget is not a button        |
+| `expires` | an ISO date and time with its offset: from then on the panel hides it                                   |
+
+The integration adds `name`, the widget's name in the configuration, which accessibility services read with its lines.
+
+The two screens a widget opens, full screen, closing with the X, by tapping and on their own after 2 minutes:
+
+- **`bars`**: `{title, subtitle, bars, current}`, each bar `{label, value, lit}`. The bars in white when `lit` and in
+  gray otherwise, the `current` one framed, and their labels below.
+- **`columns`**: `{title, headline, value, columns}`, the columns as in the widget, over the whole width.
+
+#### Ready-made widgets
+
+The integration adds three macros to every widget template. They are the usual widgets, and an example to write others;
+a template can also build its JSON by hand and call `to_json`. Their own words, such as "Cheap now" or the condition of
+the weather, are in HA's language: English, Spanish and Galician, and English for any other. What a template writes is
+up to whoever writes it.
+
+- **`price_widget(entity, cheap_hours=6, title=none)`**: the price by the hour of an entity with
+  `raw_today` and `raw_tomorrow`, lists of `start` and `value`: the format of Nord Pool, ENTSO-e and EV Smart Charging.
+  Values every 15 minutes count as such. The cheap ones are the lowest `cheap_hours` of the next 24 hours. It says
+  whether now is cheap, the first two cheap windows of the next 18 hours, and a strip of those 18 hours. Tapped, it
+  opens the next 24 hours as bars, with every hour under them and the lowest and highest values above, under `title`
+  or the word for electricity.
+- **`weather_widget(weather, forecast)`**: three columns of 6 hours, each with the most significant condition (rain
+  beats cloud, cloud beats sun) and the highest temperature over the lowest. Tapped, it opens the current weather and
+  the next 24 hours. A template cannot call a service, and the hourly forecast only comes from `weather.get_forecasts`,
+  so `forecast` is a trigger-based template sensor that keeps it in its `forecast` attribute:
+
+  ```yaml
+  template:
+    - trigger:
+        - trigger: time_pattern
+          minutes: /30
+      action:
+        - action: weather.get_forecasts
+          target: {entity_id: weather.home}
+          data: {type: hourly}
+          response_variable: forecast
+      sensor:
+        - name: Hourly forecast
+          state: "{{ now().isoformat() }}"
+          attributes:
+            forecast: "{{ forecast['weather.home'].forecast }}"
+  ```
+
+  The widget expires an hour after that sensor last changed.
+- **`reading_widget(entity, icon=none, warn_below=none, warn_above=none, charging=none)`**: the value and unit of any
+  entity, such as the car's battery. A percentage gets a level. Without an icon its name says what it is. It turns
+  yellow past a warning limit, unless `charging`, a binary sensor, is on: then it shows the `charging` badge.
+
+```jinja
+{{ price_widget('sensor.electricity_price') }}
+{{ weather_widget('weather.home', 'sensor.hourly_forecast') }}
+{{ reading_widget('sensor.car_battery', icon='car', warn_below=20, charging='binary_sensor.car_charging') }}
+```
 
 ### Photos
 
@@ -291,18 +354,11 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "intercoms": [
     { "name": "Parking", "server": "192.0.2.10", "extension": "9901#1", "password": "…", "number": "8001" }
   ],
-  "weather": "weather.home",
   "cameras": [
     { "entity": "camera.door", "name": "Parking", "intercom": "Parking" }
   ],
   "voice": { "pipeline": "01h...", "phrase": "jarvis" },
   "rtsp": { "password": "…", "audio": true },
-  "readings": [
-    { "entity": "sensor.car_battery", "name": "Car", "warn_below": 20, "icon": "car" }
-  ],
-  "charts": [
-    { "entity": "sensor.electricity_price", "name": "Electricity" }
-  ],
   "photos": {
     "idle_minutes": 1, "seconds": 30, "order": "shuffle", "fit": "fit", "match_orientation": true, "clock": true,
     "keep_screen_on": false
@@ -311,33 +367,34 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
 ```
 
 The form is a menu that links to a page per feature, and submitting a page saves it right away. HA forms cannot show fields
-depending on another field, so each page has its switch and its data. Lists can stay empty; the weather entity is needed
-only while it is on, and what a turned-off feature had is kept.
+depending on another field, so each page has its switch and its data. Lists can stay empty, and what a turned-off
+feature had is kept. The [widgets](#widgets) are not in this response: they arrive in their own event.
 
 | Feature  | When it is off                                               |
 | -------- | ------------------------------------------------------------ |
 | Intercom | no intercoms are sent: the panel unregisters, does not ring  |
 | Cameras  | no cameras are sent: the menu hides them                     |
-| Weather  | no weather entity is sent: the panel hides it                |
 | Sensors  | HA deletes those entities and ignores those reports          |
 | Siren    | HA silences the panel and deletes the entity                 |
 | Speaker  | HA stops the audio and deletes the entity                    |
 | Voice    | no voice is sent: the panel does not open the microphone     |
 | Publish  | no password is sent: the panel stops, HA deletes the entity  |
-| Readings | no readings or charts are sent: the panel hides them         |
+| Widgets  | HA stops rendering them and sends an empty list              |
 | Photos   | no photos are sent: the panel keeps the clock                |
 
 - What is off is left out of the response, or only changes HA, so the panel needs no logic for the toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.
 - The command identifies the panel by its user: no other user, not even an administrator, gets a panel's secrets this
   way. Administrators can see them in the form, masked.
+- The secrets reach no entity, state or attribute: only the panel gets them, through `marc2d/subscribe`. Saving the form
+  drops whatever an older version left in the options, such as a password nothing uses any more.
 - It is kept in the app's private storage, along with the connection, and never in the repo: the
   panel keeps handling calls even if HA is down.
 - The presence detector will be added to this response in its delivery.
 
 ## Delivery order
 
-1. Time, date, weather, kiosk mode and answering the intercom.
+1. Time, date, widgets, kiosk mode and answering the intercom.
 2. Siren.
 3. Turning the screen on with presence.
 4. Voice commands.

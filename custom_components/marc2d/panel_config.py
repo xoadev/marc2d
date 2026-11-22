@@ -10,20 +10,17 @@ SECTION_FEATURES = "features"
 
 FEATURE_SIP = "sip"
 FEATURE_CAMERAS = "cameras"
-FEATURE_WEATHER = "weather"
+FEATURE_WIDGETS = "widgets"
 FEATURE_SENSORS = "sensors"
 FEATURE_SIREN = "siren"
 FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
 FEATURE_RTSP = "rtsp"
-FEATURE_DISPLAY = "display"
 FEATURE_PHOTOS = "photos"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
-CONF_READINGS = "readings"
-CONF_CHARTS = "charts"
-CONF_WEATHER_ENTITY = "weather_entity"
+CONF_WIDGETS = "widgets"
 CONF_DOORBELL = "doorbell"
 CONF_ANSWERED_BUTTON = "answered_button"
 # What only Home Assistant uses: the panel does not get it.
@@ -77,6 +74,41 @@ RTSP_PATH = "/camera"
 OFF_BY_DEFAULT = {FEATURE_VOICE, FEATURE_RTSP}
 
 
+# What the form saves. Anything else was saved by an older version, such as an MQTT password, and is
+# dropped on the next save: secrets nothing uses must not stay in the options.
+FEATURES = {
+    FEATURE_SIP,
+    FEATURE_CAMERAS,
+    FEATURE_WIDGETS,
+    FEATURE_SENSORS,
+    FEATURE_SIREN,
+    FEATURE_SPEAKER,
+    FEATURE_VOICE,
+    FEATURE_RTSP,
+    FEATURE_PHOTOS,
+}
+OPTIONS = {
+    CONF_INTERCOMS,
+    CONF_CAMERAS,
+    CONF_WIDGETS,
+    CONF_PIPELINE,
+    CONF_WAKE_PHRASE,
+    CONF_RTSP_PASSWORD,
+    CONF_RTSP_AUDIO,
+    *PHOTOS_DEFAULTS,
+    CONF_PHOTOS_FOLDER,
+}
+
+
+def known_options(options: Mapping[str, Any]) -> dict[str, Any]:
+    """The options this version uses, and nothing an older one left behind."""
+    features = options.get(SECTION_FEATURES, {})
+    return {
+        **{key: value for key, value in options.items() if key in OPTIONS},
+        SECTION_FEATURES: {key: value for key, value in features.items() if key in FEATURES},
+    }
+
+
 def is_enabled(options: Mapping[str, Any], feature: str) -> bool:
     """Whether the feature is on, or its default when it was never set."""
     return bool(options.get(SECTION_FEATURES, {}).get(feature, feature not in OFF_BY_DEFAULT))
@@ -118,16 +150,6 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             }
             for camera in options.get(CONF_CAMERAS, [])
         ]
-    if is_enabled(options, FEATURE_DISPLAY):
-        # Empty fields are left out: the panel uses its defaults.
-        for key in (CONF_READINGS, CONF_CHARTS):
-            if items := [
-                {name: value for name, value in item.items() if value not in (None, "")}
-                for item in options.get(key, [])
-            ]:
-                config[key] = items
-    if is_enabled(options, FEATURE_WEATHER) and (weather := options.get(CONF_WEATHER_ENTITY)):
-        config["weather"] = weather
     if photos_folder(options):
         config["photos"] = {
             # Number fields save decimals, and the panel takes whole minutes and seconds.

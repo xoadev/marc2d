@@ -8,12 +8,9 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class PanelConfig(
 	val intercoms: List<IntercomConfig> = emptyList(),
-	val weather: String? = null,
 	val cameras: List<CameraConfig> = emptyList(),
 	val voice: VoiceConfig? = null,
 	val rtsp: RtspConfig? = null,
-	val readings: List<ReadingConfig> = emptyList(),
-	val charts: List<ChartConfig> = emptyList(),
 	val photos: PhotosConfig? = null,
 ) {
 	companion object {
