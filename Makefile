@@ -10,7 +10,7 @@ AGENTS_SCRIPT := https://xoa.dev/_dev/agents.sh
 
 .DEFAULT_GOAL := help
 .PHONY: help check lint test format build release app-check app-format integration-check integration-format \
-	lint-app test-app lint-integration test-integration lint-markdown lint-typos lint-shell \
+	lint-app test-app check-release lint-integration test-integration lint-markdown lint-typos lint-shell \
 	agents-sync agents-check
 
 help: ## Show this help
@@ -36,6 +36,22 @@ release: ## Build the signed APK: needs VERSION, VERSION_CODE and app/keystore.p
 	sed -i 's/^    versionName: .*/    versionName: $(VERSION)\n    versionCode: $(VERSION_CODE)\n    signing:\n      enabled: true/' app/module.yaml
 	./kotlin build -m app -v release; status=$$?; cp build/module.yaml.keep app/module.yaml; exit $$status
 	cp build/tasks/_app_buildAndroidRelease/gradle-project-release.apk build/marc2d.apk
+
+# R8 shrinks and renames the release, and native code finds Java fields by name: v0.1.0 crashed on start because JNA's
+# Pointer.peer was renamed. A debug build never shows it, so this builds the release, unsigned, and looks inside.
+RELEASE_DIR := build/tasks/_app_buildAndroidRelease
+RELEASE_DEX := build/release-dex
+check-release: ## App: build the release and check R8 kept what native code looks up by name
+	@# The build does not count app/proguard-rules.pro as an input: a cached release would hide a change to it.
+	rm -rf $(RELEASE_DIR) $(RELEASE_DEX)
+	./kotlin build -m app -v release
+	unzip -q -o $(RELEASE_DIR)/gradle-project-release-unsigned.apk 'classes*.dex' -d $(RELEASE_DEX)
+	@sdk=$$(sed -n 's/^sdk.dir=//p' $(RELEASE_DIR)/gradle-project/local.properties); \
+	dexdump=$$(ls -d "$$sdk"/build-tools/*/dexdump | sort -V | tail -n 1); \
+	for file in $(RELEASE_DEX)/*.dex; do "$$dexdump" "$$file"; done > $(RELEASE_DEX)/dump.txt; \
+	grep -A 20 "Class descriptor  : 'Lcom/sun/jna/Pointer;'" $(RELEASE_DEX)/dump.txt | grep -q "name          : 'peer'" \
+		|| { echo "R8 renamed com.sun.jna.Pointer.peer: voice would crash the release. Keep it in app/proguard-rules.pro" >&2; exit 1; }; \
+	echo "R8 kept com.sun.jna.Pointer.peer"
 
 app-check: lint-app test-app ## App: ktlint, Compose rules and tests
 

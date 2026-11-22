@@ -20,6 +20,8 @@ jobs:
         run: make test-app
       - name: Build
         run: make build
+      - name: Release build keeps what native code needs
+        run: make check-release
 
   integration:
     runs-on: ubuntu-latest
