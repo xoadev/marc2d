@@ -25,6 +25,7 @@ INTERCOM = {
     "password": "s3cr3t",
     "doorbell": "binary_sensor.button",
     "answered_button": "button.cancel_call",
+    "answered_elsewhere": "binary_sensor.answered",
 }
 LIGHT = "sensor.kitchen_light"
 SIREN = "siren.kitchen_siren"
@@ -168,6 +169,21 @@ async def test_doorbell_rings_and_answer_reaches_all_and_stops_the_intercom(hass
     )
     await hass.async_block_till_done()
     assert [press.data["entity_id"] for press in presses] == ["button.cancel_call"]
+
+
+async def test_answering_elsewhere_stops_the_panel_ringing(hass, panel) -> None:
+    hass.states.async_set("binary_sensor.answered", "off")
+    await hass.async_block_till_done()
+    presses = async_mock_service(hass, "button", "press")
+    hass.states.async_set("binary_sensor.answered", "on")
+    await hass.async_block_till_done()
+    assert (await panel.receive_json())["event"] == {
+        "kind": "doorbell",
+        "intercom": "Parking",
+        "payload": "ANSWERED",
+    }
+    # DMSS has the call: pressing Cancel Call would hang up on whoever answered.
+    assert presses == []
 
 
 async def test_a_panel_cannot_silence_an_intercom_it_does_not_have(hass, panel) -> None:

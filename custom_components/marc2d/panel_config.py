@@ -23,8 +23,9 @@ CONF_CAMERAS = "cameras"
 CONF_WIDGETS = "widgets"
 CONF_DOORBELL = "doorbell"
 CONF_ANSWERED_BUTTON = "answered_button"
+CONF_ANSWERED_ELSEWHERE = "answered_elsewhere"
 # What only Home Assistant uses: the panel does not get it.
-HA_ONLY_INTERCOM_KEYS = {CONF_DOORBELL, CONF_ANSWERED_BUTTON}
+HA_ONLY_INTERCOM_KEYS = {CONF_DOORBELL, CONF_ANSWERED_BUTTON, CONF_ANSWERED_ELSEWHERE}
 CONF_INTERCOM_RTSP = "rtsp"
 CONF_CAMERA_INTERCOM = "intercom"
 CONF_PIPELINE = "pipeline"
@@ -223,10 +224,10 @@ def answered_button(options: Mapping[str, Any], name: str) -> str | None:
     )
 
 
-def doorbell_buttons(options: Mapping[str, Any]) -> dict[str, str]:
-    """The intercom that each entity rings, by entity."""
+def intercom_entities(options: Mapping[str, Any], field: str) -> dict[str, str]:
+    """The intercom of each entity chosen in one of its fields, by entity."""
     return {
         entity: intercom["name"]
         for intercom in intercoms(options)
-        if (entity := intercom.get(CONF_DOORBELL))
+        if (entity := intercom.get(field))
     }

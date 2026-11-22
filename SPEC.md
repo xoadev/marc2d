@@ -175,6 +175,10 @@ whatever alarm was active.
 - On answering, the panel tells the integration, the others stop ringing, and it calls the intercom's
   number over SIP (`number`, `8001` by default). The VTO picks up by itself and provides two-way audio and
   video. If HA goes down, the panels do not ring, but DMSS keeps working.
+- Each intercom can also have an "answered elsewhere" entity, a binary sensor or an event: when it fires, the panels
+  ringing for that intercom stop, as if another panel had answered, and nothing is pressed. It is how an answer from the
+  intercom's own app reaches them. A Dahua VTO answered from DMSS sends `IgnoreInvite` with `Action: Start`, which the
+  `dahua` integration fires on the bus as `dahua_event_received`: a trigger-based template binary sensor on it is enough.
 - An incoming SIP call to the extension is also handled.
 - **Audio over SIP:** what Linphone negotiates and plays. An intercom that does not follow the negotiation, as the VTO,
   goes over RTSP instead.
