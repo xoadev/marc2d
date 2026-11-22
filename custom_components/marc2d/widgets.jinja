@@ -137,7 +137,7 @@
       {%- set detail.columns = detail.columns + [{'label': item.start.strftime('%H'), 'symbol': item.condition,
         'value': _degrees(item.temperature)}] -%}
     {%- endfor -%}
-      {%- set temperature = state_attr(weather, 'temperature') -%}
+    {%- set temperature = state_attr(weather, 'temperature') -%}
     {{- {
       'columns': ns.columns,
       'expires': (states[forecast].last_updated + timedelta(hours=1)).isoformat(),
