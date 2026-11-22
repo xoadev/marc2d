@@ -6,8 +6,14 @@ from typing import Any
 
 import pytest
 
-from custom_components.marc2d.widgets import InvalidWidget, parse_widget, widget_template
+from custom_components.marc2d.widgets import (
+    InvalidWidget,
+    parse_widget,
+    widget_template,
+    widget_variables,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
 from .conftest import connect_panel
@@ -27,10 +33,14 @@ PRICES = [0.118, 0.109, 0.088, 0.081, 0.079, 0.085, 0.112, 0.139, 0.167, 0.149, 
 PRICES += [0.115, 0.142, 0.098, 0.092, 0.121, 0.158, 0.196, 0.214, 0.205, 0.181, 0.152, 0.131]
 
 
+PRICE = {"name": "Luz", "template": "{{ price_widget('sensor.price') }}"}
+
+
 @pytest.fixture
-def entry_options() -> dict[str, Any]:
-    """A widget that works and one that does not."""
-    return {"widgets": [CAR, BROKEN, FAILING]}
+def entry_options(hass: HomeAssistant) -> dict[str, Any]:
+    """Widgets that work, one in HA's language, and some that do not."""
+    hass.config.language = "es"
+    return {"widgets": [CAR, BROKEN, FAILING, PRICE]}
 
 
 def local(hour: int, minute: int = 0, day: int = 21) -> datetime:
@@ -40,7 +50,8 @@ def local(hour: int, minute: int = 0, day: int = 21) -> datetime:
 
 def render(hass: HomeAssistant, source: str) -> dict[str, Any]:
     """What a widget template writes, as the panel gets it."""
-    return parse_widget(widget_template(hass, source).async_render(parse_result=False))
+    template = widget_template(hass, source)
+    return parse_widget(template.async_render(widget_variables(hass), parse_result=False))
 
 
 def set_prices(hass: HomeAssistant, slots: list[tuple[datetime, float]]) -> None:
@@ -78,7 +89,8 @@ async def test_the_panel_gets_the_widgets_that_work(
         "lines": [{"text": "15%"}],
         "level": 0.15,
     }
-    assert events[1] == {"kind": "widgets", "widgets": [car]}
+    price = {"name": "Luz", "icon": "power", "lines": [{"text": "Sin precios", "size": "small"}]}
+    assert events[1] == {"kind": "widgets", "widgets": [car, price]}
     # Rendered while the panel was set up.
     told = " ".join(record.getMessage() for record in caplog.get_records("setup"))
     assert "the widget Broken is left out, as it does not write JSON" in told
@@ -87,7 +99,10 @@ async def test_the_panel_gets_the_widgets_that_work(
     hass.states.async_set("binary_sensor.car_charging", "on")
     await hass.async_block_till_done()
     charging = {**car, "tone": "gray", "badge": "charging"}
-    assert (await client.receive_json())["event"] == {"kind": "widgets", "widgets": [charging]}
+    assert (await client.receive_json())["event"] == {
+        "kind": "widgets",
+        "widgets": [charging, price],
+    }
 
 
 async def test_a_problem_is_logged_once(hass: HomeAssistant, entry, caplog) -> None:
@@ -149,6 +164,23 @@ async def test_the_price_says_when_it_is_cheap(hass: HomeAssistant, freezer) -> 
         f"now{DASH}16h",
         f"02{DASH}06h",
     ]
+    assert widget["tap"]["title"] == "Electricity"
+
+
+async def test_the_macros_speak_the_language_of_ha(hass: HomeAssistant, freezer) -> None:
+    freezer.move_to(local(14, 10))
+    set_prices(hass, hourly_prices())
+    hass.config.language = "es"
+    widget = render(hass, "{{ price_widget('sensor.price') }}")
+    assert [line["text"] for line in widget["lines"]] == [
+        "Barata ahora",
+        f"ahora{DASH}16h",
+        f"02{DASH}06h",
+    ]
+    assert widget["tap"]["title"] == "Luz"
+    # A language they do not have gets English.
+    hass.config.language = "pt-BR"
+    assert render(hass, "{{ price_widget('sensor.price') }}")["lines"][0]["text"] == "Cheap now"
 
 
 async def test_the_price_by_quarters(hass: HomeAssistant, freezer) -> None:
@@ -175,6 +207,8 @@ async def test_no_prices(hass: HomeAssistant) -> None:
 
 async def test_the_weather_in_three_columns(hass: HomeAssistant, freezer) -> None:
     freezer.move_to(local(13, 42))
+    # Its translations give the condition in HA's language.
+    assert await async_setup_component(hass, "weather", {})
     hass.states.async_set("weather.home", "partlycloudy", {"temperature": 15.4})
     forecast = [
         {

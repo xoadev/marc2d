@@ -3,6 +3,17 @@
   SPEC.md, under Widgets. Everything here uses {%- -%}, so defining them writes nothing.
 -#}
 
+{#- The macros' own words, in HA's language, which the integration passes as `language`. English for the rest. -#}
+{%- macro _text(key) -%}
+  {%- set texts = {
+    'en': {'cheap_now': 'Cheap now', 'not_now': 'Not now', 'no_prices': 'No prices', 'electricity': 'Electricity',
+      'now': 'Now', 'no_forecast': 'No forecast', 'weather': 'Weather'},
+    'es': {'cheap_now': 'Barata ahora', 'not_now': 'Ahora no', 'no_prices': 'Sin precios', 'electricity': 'Luz',
+      'now': 'Ahora', 'no_forecast': 'Sin previsión', 'weather': 'Tiempo'},
+  } -%}
+  {{- texts.get((language | default('en'))[:2], texts.en)[key] -}}
+{%- endmacro -%}
+
 {%- macro _clock(t) -%}
   {{- t.strftime('%H') if t.minute == 0 else t.strftime('%H:%M') -}}
 {%- endmacro -%}
@@ -12,7 +23,7 @@
 {%- endmacro -%}
 
 {#- The price by the hour, from raw_today and raw_tomorrow: the format of Nord Pool, ENTSO-e and EV Smart Charging. -#}
-{%- macro price_widget(entity, cheap_hours=6, title='Electricity') -%}
+{%- macro price_widget(entity, cheap_hours=6, title=none) -%}
   {%- set t = now() -%}
   {%- set ns = namespace(slots=[], step=3600, day=[], windows=[], open=none, end=none, cells=[]) -%}
   {%- for item in (state_attr(entity, 'raw_today') or []) + (state_attr(entity, 'raw_tomorrow') or []) -%}
@@ -34,7 +45,7 @@
     {%- set ns.day = ns.day + [slot] -%}
   {%- endfor -%}
   {%- if not ns.day -%}
-    {{- {'icon': 'power', 'lines': [{'text': 'No prices', 'size': 'small'}]} | to_json -}}
+    {{- {'icon': 'power', 'lines': [{'text': _text('no_prices'), 'size': 'small'}]} | to_json -}}
   {%- else -%}
     {%- set count = [1, (cheap_hours * 3600 / ns.step) | int] | max -%}
     {%- set cheap = (ns.day | sort(attribute='value'))[:count] | map(attribute='start') | list -%}
@@ -58,10 +69,10 @@
       {%- set ns.cells = ns.cells + [ns.day | selectattr('start', 'ge', begin) | selectattr('start', 'lt', begin + timedelta(hours=1))
         | map(attribute='start') | select('in', cheap) | list | count > 0] -%}
     {%- endfor -%}
-    {%- set status = {'text': 'Cheap now' if cheap_now else 'Not now', 'size': 'small', 'tone': 'white' if cheap_now else 'gray'} -%}
+    {%- set status = {'text': _text('cheap_now') if cheap_now else _text('not_now'), 'size': 'small', 'tone': 'white' if cheap_now else 'gray'} -%}
     {%- set lines = namespace(items=[status]) -%}
     {%- for window in ns.windows[:2] -%}
-      {%- set first = 'now' if window[0] <= t else _clock(window[0]) -%}
+      {%- set first = _text('now') | lower if window[0] <= t else _clock(window[0]) -%}
       {%- set lines.items = lines.items + [{'text': first ~ '–' ~ _clock(window[1]) ~ ('h' if window[1].minute == 0 else ''), 'tone': 'white'}] -%}
     {%- endfor -%}
     {%- set unit = state_attr(entity, 'unit_of_measurement') or '' -%}
@@ -78,7 +89,7 @@
       'expires': (ns.day[0].start + step + timedelta(minutes=5)).isoformat(),
       'tap': {
         'screen': 'bars',
-        'title': title,
+        'title': title or _text('electricity'),
         'subtitle': (_number(values | min) ~ ' – ' ~ _number(values | max) ~ ' ' ~ unit) | trim,
         'bars': bars.items,
         'current': 0,
@@ -95,10 +106,6 @@
 {%- macro weather_widget(weather, forecast) -%}
   {%- set order = ['exceptional', 'lightning-rainy', 'lightning', 'hail', 'snowy-rainy', 'snowy', 'pouring', 'rainy',
     'fog', 'windy-variant', 'windy', 'cloudy', 'partlycloudy', 'clear-night', 'sunny'] -%}
-  {%- set labels = {'clear-night': 'Clear', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional', 'fog': 'Fog',
-    'hail': 'Hail', 'lightning': 'Thunderstorm', 'lightning-rainy': 'Thunderstorm with rain', 'partlycloudy': 'Partly cloudy',
-    'pouring': 'Heavy rain', 'rainy': 'Rain', 'snowy': 'Snow', 'snowy-rainy': 'Sleet', 'sunny': 'Sunny', 'windy': 'Windy',
-    'windy-variant': 'Windy'} -%}
   {%- set t = now() -%}
   {%- set hour = t.replace(minute=0, second=0, microsecond=0) -%}
   {%- set ns = namespace(hours=[], columns=[]) -%}
@@ -110,7 +117,7 @@
     {%- endif -%}
   {%- endfor -%}
   {%- if not ns.hours or states[forecast] is none -%}
-    {{- {'lines': [{'text': 'No forecast', 'size': 'small'}]} | to_json -}}
+    {{- {'lines': [{'text': _text('no_forecast'), 'size': 'small'}]} | to_json -}}
   {%- else -%}
     {%- for slot in range(3) -%}
       {%- set begin = hour + timedelta(hours=6 * slot) -%}
@@ -119,7 +126,7 @@
         {%- set conditions = inside | map(attribute='condition') | list -%}
         {%- set worst = order | select('in', conditions) | first | default(conditions[0]) -%}
         {%- set temperatures = inside | map(attribute='temperature') | list -%}
-        {%- set ns.columns = ns.columns + [{'label': 'Now' if slot == 0 else begin.strftime('%H') ~ 'h', 'symbol': worst,
+        {%- set ns.columns = ns.columns + [{'label': _text('now') if slot == 0 else begin.strftime('%H') ~ 'h', 'symbol': worst,
           'value': _degrees(temperatures | max), 'sub': _degrees(temperatures | min)}] -%}
       {%- endif -%}
     {%- endfor -%}
@@ -128,15 +135,14 @@
       {%- set detail.columns = detail.columns + [{'label': item.start.strftime('%H'), 'symbol': item.condition,
         'value': _degrees(item.temperature)}] -%}
     {%- endfor -%}
-    {%- set condition = states(weather) -%}
-    {%- set temperature = state_attr(weather, 'temperature') -%}
+      {%- set temperature = state_attr(weather, 'temperature') -%}
     {{- {
       'columns': ns.columns,
       'expires': (states[forecast].last_updated + timedelta(hours=1)).isoformat(),
       'tap': {
         'screen': 'columns',
-        'title': 'Weather',
-        'headline': labels.get(condition, condition),
+        'title': _text('weather'),
+        'headline': state_translated(weather),
         'value': _degrees(temperature) if temperature is number else '',
         'columns': detail.columns,
       },

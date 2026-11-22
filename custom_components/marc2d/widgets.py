@@ -126,6 +126,11 @@ def widget_template(hass: HomeAssistant, source: str) -> Template:
     return Template(MACROS + source, hass)
 
 
+def widget_variables(hass: HomeAssistant) -> dict[str, Any]:
+    """What the macros read besides the entities: HA's language, for their own words."""
+    return {"language": hass.config.language}
+
+
 @callback
 def async_start_widgets(hass: HomeAssistant, entry: ConfigEntry, hub: PanelHub) -> None:
     """Render the panel's widgets and send them each time one changes, until it unloads."""
@@ -172,7 +177,13 @@ def async_start_widgets(hass: HomeAssistant, entry: ConfigEntry, hub: PanelHub) 
                 publish()
 
         info = async_track_template_result(
-            hass, [TrackTemplate(widget_template(hass, config.get("template", "")), None)], changed
+            hass,
+            [
+                TrackTemplate(
+                    widget_template(hass, config.get("template", "")), widget_variables(hass)
+                )
+            ],
+            changed,
         )
         info.async_refresh()
         entry.async_on_unload(info.async_remove)

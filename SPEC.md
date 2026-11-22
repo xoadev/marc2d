@@ -63,13 +63,16 @@ The two screens a widget opens, full screen, closing with the X, by tapping and 
 #### Ready-made widgets
 
 The integration adds three macros to every widget template. They are the usual widgets, and an example to write others;
-a template can also build its JSON by hand and call `to_json`.
+a template can also build its JSON by hand and call `to_json`. Their own words, such as "Cheap now" or the condition of
+the weather, are in HA's language: English and Spanish, and English for any other. What a template writes is up to
+whoever writes it.
 
-- **`price_widget(entity, cheap_hours=6, title='Electricity')`**: the price by the hour of an entity with
+- **`price_widget(entity, cheap_hours=6, title=none)`**: the price by the hour of an entity with
   `raw_today` and `raw_tomorrow`, lists of `start` and `value`: the format of Nord Pool, ENTSO-e and EV Smart Charging.
   Values every 15 minutes count as such. The cheap ones are the lowest `cheap_hours` of the next 24 hours. It says
   whether now is cheap, the first two cheap windows of the next 18 hours, and a strip of those 18 hours. Tapped, it
-  opens the next 24 hours as bars, with every hour under them and the lowest and highest values above.
+  opens the next 24 hours as bars, with every hour under them and the lowest and highest values above, under `title`
+  or the word for electricity.
 - **`weather_widget(weather, forecast)`**: three columns of 6 hours, each with the most significant condition (rain
   beats cloud, cloud beats sun) and the highest temperature over the lowest. Tapped, it opens the current weather and
   the next 24 hours. A template cannot call a service, and the hourly forecast only comes from `weather.get_forecasts`,
