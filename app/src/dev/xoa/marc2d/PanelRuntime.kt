@@ -183,6 +183,10 @@ class PanelRuntime(
 						voice.run(config.pipeline, config.phrase)
 					} catch (e: CancellationException) {
 						throw e
+					} catch (e: LinkageError) {
+						// A native library that cannot load never will: the rest of the panel, the intercom first, goes on.
+						Log.e(TAG, "Voice is off, its native library cannot load: ${e.message}")
+						return@collectLatest
 					} catch (e: Exception) {
 						Log.w(TAG, "Voice stopped: ${e::class.simpleName}")
 					}
