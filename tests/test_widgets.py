@@ -178,6 +178,8 @@ async def test_the_macros_speak_the_language_of_ha(hass: HomeAssistant, freezer)
         f"02{DASH}06h",
     ]
     assert widget["tap"]["title"] == "Luz"
+    hass.config.language = "gl"
+    assert render(hass, "{{ price_widget('sensor.price') }}")["lines"][0]["text"] == "Barata agora"
     # A language they do not have gets English.
     hass.config.language = "pt-BR"
     assert render(hass, "{{ price_widget('sensor.price') }}")["lines"][0]["text"] == "Cheap now"

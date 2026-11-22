@@ -10,6 +10,8 @@
       'now': 'Now', 'no_forecast': 'No forecast', 'weather': 'Weather'},
     'es': {'cheap_now': 'Barata ahora', 'not_now': 'Ahora no', 'no_prices': 'Sin precios', 'electricity': 'Luz',
       'now': 'Ahora', 'no_forecast': 'Sin previsión', 'weather': 'Tiempo'},
+    'gl': {'cheap_now': 'Barata agora', 'not_now': 'Agora non', 'no_prices': 'Sen prezos', 'electricity': 'Luz',
+      'now': 'Agora', 'no_forecast': 'Sen previsión', 'weather': 'Tempo'},
   } -%}
   {{- texts.get((language | default('en'))[:2], texts.en)[key] -}}
 {%- endmacro -%}

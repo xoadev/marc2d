@@ -64,7 +64,7 @@ The two screens a widget opens, full screen, closing with the X, by tapping and 
 
 The integration adds three macros to every widget template. They are the usual widgets, and an example to write others;
 a template can also build its JSON by hand and call `to_json`. Their own words, such as "Cheap now" or the condition of
-the weather, are in HA's language: English and Spanish, and English for any other. What a template writes is up to
+the weather, are in HA's language: English, Spanish and Galician, and English for any other. What a template writes is up to
 whoever writes it.
 
 - **`price_widget(entity, cheap_hours=6, title=none)`**: the price by the hour of an entity with
