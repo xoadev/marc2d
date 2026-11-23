@@ -145,6 +145,12 @@ INTERCOM_FIELDS = {
         {"entity": {"domain": ["button"]}},
         required=False,
     ),
+    # An intercom answered from its own app (DMSS) says so only to whatever listens to it.
+    "answered_elsewhere": _field(
+        "Answered elsewhere: stops the panels ringing",
+        {"entity": {"domain": ["binary_sensor", "event"]}},
+        required=False,
+    ),
 }
 
 

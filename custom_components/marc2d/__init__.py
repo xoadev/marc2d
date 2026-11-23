@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, Platform
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
@@ -12,12 +14,20 @@ from homeassistant.helpers.typing import ConfigType
 
 from .enrollment import DOMAIN, async_remove_user
 from .media_player import STOP
-from .panel_config import FEATURE_SIREN, FEATURE_SPEAKER, doorbell_buttons, is_enabled
-from .panel_hub import DOORBELL_RING, doorbell_event, get_hub, remove_hub
+from .panel_config import (
+    CONF_ANSWERED_ELSEWHERE,
+    CONF_DOORBELL,
+    FEATURE_SIREN,
+    FEATURE_SPEAKER,
+    intercom_entities,
+    is_enabled,
+)
+from .panel_hub import DOORBELL_ANSWERED, DOORBELL_RING, doorbell_event, get_hub, remove_hub
 from .siren import SIREN_OFF
 from .websocket import CONF_USER_ID, async_register, config_event
 from .widgets import async_start_widgets
 
+_LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -80,18 +90,31 @@ def _remove_entities_not_made(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 def _watch_doorbells(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    buttons = doorbell_buttons(entry.options)
-    if not buttons:
+    """Ring on the doorbell, and stop ringing when the intercom says it was answered elsewhere."""
+    # The panel ignores ANSWERED unless that intercom is ringing: no call state is kept here.
+    watched = {
+        entity: (intercom, payload)
+        for field, payload in (
+            (CONF_DOORBELL, DOORBELL_RING),
+            (CONF_ANSWERED_ELSEWHERE, DOORBELL_ANSWERED),
+        )
+        for entity, intercom in intercom_entities(entry.options, field).items()
+    }
+    if not watched:
         return
     hub = get_hub(hass, entry.entry_id)
 
     @callback
     def changed(event: Event[EventStateChangedData]) -> None:
-        # Only its own panel: every panel with this button watches it too.
+        # Only its own panel: every panel with this entity watches it too.
         if _is_press(event.data["old_state"], event.data["new_state"]):
-            hub.send(doorbell_event(buttons[event.data["entity_id"]], DOORBELL_RING))
+            intercom, payload = watched[event.data["entity_id"]]
+            _LOGGER.info(
+                "%s: %s sends %s to the panel", entry.title, event.data["entity_id"], payload
+            )
+            hub.send(doorbell_event(intercom, payload))
 
-    entry.async_on_unload(async_track_state_change_event(hass, list(buttons), changed))
+    entry.async_on_unload(async_track_state_change_event(hass, list(watched), changed))
 
 
 def _is_press(old_state: State | None, new_state: State | None) -> bool:
