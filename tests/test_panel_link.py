@@ -171,8 +171,10 @@ async def test_doorbell_rings_and_answer_reaches_all_and_stops_the_intercom(hass
     assert [press.data["entity_id"] for press in presses] == ["button.cancel_call"]
 
 
-async def test_answering_elsewhere_stops_the_panel_ringing(hass, panel) -> None:
-    hass.states.async_set("binary_sensor.answered", "off")
+# A trigger template sensor stays unknown until it first fires.
+@pytest.mark.parametrize("before", ["off", "unknown"])
+async def test_answering_elsewhere_stops_the_panel_ringing(hass, panel, before: str) -> None:
+    hass.states.async_set("binary_sensor.answered", before)
     await hass.async_block_till_done()
     presses = async_mock_service(hass, "button", "press")
     hass.states.async_set("binary_sensor.answered", "on")
