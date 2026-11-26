@@ -229,8 +229,11 @@ number, and without video: **Answer** takes it, **Hang up** turns it down or end
   mobiles, emergencies, anyone. HA has no phone numbers of its own, not even in its people, so they are written there.
   They only go from HA to the panel, in its configuration, and turning them off empties them. A number takes digits, `*`,
   `#` and a leading `+`; spaces, dashes and brackets are dropped, and the form refuses anything else.
-- **Phone**, in the menu while there are contacts, lists them: tapping one calls it, and the call screen takes over with
-  **Hang up**. There is no keypad: only the contacts are called.
+- **Only with a SIM:** a panel need not have one. It reports `sim`, whether one is ready, every minute, as a SIM can be
+  put in or taken out: without one the menu hides Phone, HA hides the Phone contacts page and `marc2d.call` fails.
+  Before the panel says anything, HA offers them.
+- **Phone**, in the menu while there are contacts and a SIM, lists them: tapping one calls it, and the call screen takes
+  over with **Hang up**. There is no keypad: only the contacts are called.
 - **From HA:** the `marc2d.call` action, with the panel and a number or a contact's name, whatever its case, makes it
   call. It fails, saying why, if the panel is not connected, its contacts are off or it is neither. Whether the call gets
   through is only in the panel's log: one without a SIM or signal ends at once.

@@ -92,6 +92,8 @@ def _call(service: ServiceCall) -> None:
     hub = get_hub(service.hass, entry.entry_id)
     if not hub.online:
         raise ServiceValidationError(f"{entry.title} is not connected: it cannot call now")
+    if hub.without_sim:
+        raise ServiceValidationError(f"{entry.title} has no SIM ready: it cannot make phone calls")
     # Never the number in the log, as on the panel: only that it was asked.
     _LOGGER.info("%s: asked to make a phone call", entry.title)
     hub.send(dial_event(number))

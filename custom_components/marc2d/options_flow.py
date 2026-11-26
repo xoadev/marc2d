@@ -180,7 +180,12 @@ class Marc2dOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose what to change."""
         self._options = known_options(self.config_entry.options)
-        return self.async_show_menu(step_id="init", menu_options=MENU)
+        # The contacts are only for calling over a SIM: a panel that said it has none hides them.
+        without_sim = get_hub(self.hass, self.config_entry.entry_id).without_sim
+        menu = {
+            step: label for step, label in MENU.items() if step != "contacts" or not without_sim
+        }
+        return self.async_show_menu(step_id="init", menu_options=menu)
 
     async def async_step_intercoms(
         self, user_input: dict[str, Any] | None = None

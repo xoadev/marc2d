@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
 					val phoneCall by runtime.line.call.collectAsState()
+					val sim by runtime.line.sim.collectAsState()
 					val widgets by runtime.widgets.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
@@ -102,6 +103,8 @@ class MainActivity : ComponentActivity() {
 					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
 					val photosConfig by remember { runtime.store.config.map { it.photos } }.collectAsState(initial = null)
 					val contacts by remember { runtime.store.config.map { it.contacts } }.collectAsState(initial = emptyList())
+					// Without a SIM there is nothing to call with: the contacts stay out of sight.
+					val callable = if (sim) contacts else emptyList()
 					val photos by runtime.photos.collectAsState()
 					val lastTouch by runtime.lastTouch.collectAsState()
 					// Any touch starts the wait again, and hides the photos if they were showing.
@@ -139,7 +142,7 @@ class MainActivity : ComponentActivity() {
 							activeCall != null -> Screen.Call(activeCall)
 							activePhoneCall != null -> Screen.Phone(activePhoneCall)
 							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
-							contactsOpen && contacts.isNotEmpty() -> Screen.Contacts
+							contactsOpen && callable.isNotEmpty() -> Screen.Contacts
 							scanOpen -> Screen.Scan
 							settingsOpen || needsSetup -> Screen.Settings
 							openTap != null -> Screen.WidgetDetail(openTap)
@@ -188,7 +191,7 @@ class MainActivity : ComponentActivity() {
 						Screen.Contacts -> {
 							BackHandler { contactsOpen = false }
 							ContactsScreen(
-								contacts = contacts,
+								contacts = callable,
 								onCall = { contact ->
 									contactsOpen = false
 									runtime.line.dial(contact.number)
@@ -252,7 +255,7 @@ class MainActivity : ComponentActivity() {
 										}
 									},
 								onPhone =
-									if (contacts.isEmpty()) {
+									if (callable.isEmpty()) {
 										null
 									} else {
 										{

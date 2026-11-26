@@ -60,6 +60,10 @@ async def test_turned_off_it_has_no_contacts_and_cannot_call(hass, entry, hass_w
 
 
 async def test_the_form_refuses_a_wrong_number(hass, entry) -> None:
+    # Before the panel says anything about its SIM, the page is there.
+    assert (
+        "contacts" in (await hass.config_entries.options.async_init(entry.entry_id))["menu_options"]
+    )
     options = hass.config_entries.options
     form = await open_page(hass, entry, "contacts")
     wrong = {"name": "Work", "number": "call me"}
@@ -69,3 +73,15 @@ async def test_the_form_refuses_a_wrong_number(hass, entry) -> None:
     assert refused["errors"] == {"contacts": "invalid_number"}
     done = await options.async_configure(form["flow_id"], {"enabled": True, "contacts": [GRANDMA]})
     assert done["data"]["contacts"] == [GRANDMA]
+
+
+async def test_without_a_sim_it_cannot_call_nor_offers_contacts(
+    hass, entry, hass_ws_client
+) -> None:
+    client, _ = await connect_panel(hass, entry, hass_ws_client)
+    await client.send_json({"id": 2, "type": "marc2d/state", "values": {"sim": False}})
+    assert (await client.receive_json())["success"] is True
+    with pytest.raises(ServiceValidationError, match="no SIM"):
+        await call(hass, entry, "112")
+    menu = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "contacts" not in menu["menu_options"]

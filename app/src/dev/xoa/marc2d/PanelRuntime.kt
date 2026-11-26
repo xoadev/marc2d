@@ -344,6 +344,7 @@ class PanelRuntime(
 				link.report(PanelLink.TEMPERATURE, JsonPrimitive(battery.temperature))
 				link.report(PanelLink.CHARGING, JsonPrimitive(battery.charging))
 			}
+			link.report(PanelLink.SIM, JsonPrimitive(line.refreshSim()))
 			delay(BATTERY_INTERVAL)
 		}
 	}

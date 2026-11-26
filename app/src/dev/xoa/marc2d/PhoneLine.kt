@@ -11,6 +11,7 @@ import android.telecom.InCallService
 import android.telecom.PhoneAccount
 import android.telecom.TelecomManager
 import android.telecom.VideoProfile
+import android.telephony.TelephonyManager
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +67,18 @@ class PhoneLine(
 	/** From HA: they name the calls and the panel calls them. */
 	@Volatile var contacts: List<Contact> = emptyList()
 
+	/** Whether there is a SIM ready to call: without it the panel offers no phone. A panel need not have one. */
+	private val _sim = MutableStateFlow(false)
+	val sim: StateFlow<Boolean> = _sim.asStateFlow()
+
+	/** A SIM can be put in or taken out while the panel runs: it is looked at again from time to time. */
+	fun refreshSim(): Boolean {
+		val ready = context.getSystemService(TelephonyManager::class.java)?.simState == TelephonyManager.SIM_STATE_READY
+		if (ready != _sim.value) Log.i(TAG, if (ready) "SIM ready: the phone is on" else "No SIM ready: the phone is off")
+		_sim.value = ready
+		return ready
+	}
+
 	private val _call = MutableStateFlow<PhoneCall?>(null)
 	val call: StateFlow<PhoneCall?> = _call.asStateFlow()
 
@@ -103,6 +116,10 @@ class PhoneLine(
 	 * it shows on the call screen like any other.
 	 */
 	fun dial(number: String) {
+		if (!refreshSim()) {
+			Log.w(TAG, "Phone call not made: there is no SIM ready")
+			return
+		}
 		if (current != null) {
 			Log.w(TAG, "Phone call not made: there is one already")
 			return

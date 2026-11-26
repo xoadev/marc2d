@@ -57,7 +57,7 @@
       },
       "contacts": {
         "title": "Phone contacts",
-        "description": "For a panel with a SIM. The panel lists them under Phone in its menu, to call them on the speaker, and shows their name when they call. Home Assistant can also make the panel call a number or one of these contacts with the marc2d.call action. You can leave the list empty. Off: the panel forgets them and Home Assistant cannot make it call.",
+        "description": "For a panel with a SIM: one that has said it has none does not show this page, and the panel hides Phone while it has no SIM ready. The panel lists them under Phone in its menu, to call them on the speaker, and shows their name when they call. Home Assistant can also make the panel call a number or one of these contacts with the marc2d.call action. You can leave the list empty. Off: the panel forgets them and Home Assistant cannot make it call.",
         "data": {
           "enabled": "On",
           "contacts": "Contacts"
