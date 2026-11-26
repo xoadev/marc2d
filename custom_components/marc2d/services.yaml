@@ -1,0 +1,12 @@
+call:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: marc2d
+    number:
+      required: true
+      example: "Grandma"
+      selector:
+        text:

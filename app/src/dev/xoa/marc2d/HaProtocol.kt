@@ -60,6 +60,13 @@ object HaProtocol {
 		data class Widgets(
 			val widgets: List<Widget>,
 		) : PanelEvent
+
+		/** HA asks the panel to call a number over its SIM. */
+		data class Dial(
+			val number: String,
+		) : PanelEvent {
+			override fun toString(): String = "Dial"
+		}
 	}
 
 	sealed interface ConfigResult {
@@ -296,6 +303,10 @@ object HaProtocol {
 
 			"widgets" -> {
 				widgets(event)
+			}
+
+			"dial" -> {
+				text("number")?.let { PanelEvent.Dial(it) }
 			}
 
 			else -> {

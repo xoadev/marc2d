@@ -94,6 +94,7 @@ class HaProtocolTest {
 			HaProtocol.PanelEvent.Doorbell("Parking", "RING"),
 			HaProtocol.panelEvent(event("""{"kind":"doorbell","intercom":"Parking","payload":"RING"}""")),
 		)
+		assertEquals(HaProtocol.PanelEvent.Dial("112"), HaProtocol.panelEvent(event("""{"kind":"dial","number":"112"}""")))
 	}
 
 	@Test

@@ -29,7 +29,8 @@ At the door:
 - **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
   with an RTSP backchannel, over RTSP from the moment it rings. Answering on one panel, or in the intercom's own app,
   stops the others ringing. Tested with a Dahua VTO2202F.
-- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker.
+- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker. It calls
+  the contacts you list in Home Assistant, from its menu or from an automation, and names their calls.
 
 For Home Assistant:
 

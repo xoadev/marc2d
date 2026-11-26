@@ -12,6 +12,8 @@ data class PanelConfig(
 	val voice: VoiceConfig? = null,
 	val rtsp: RtspConfig? = null,
 	val photos: PhotosConfig? = null,
+	/** Empty while the phone is turned off in HA. */
+	val contacts: List<Contact> = emptyList(),
 ) {
 	companion object {
 		// A version of the app may have stored fields that this one no longer has.
@@ -88,6 +90,16 @@ data class RtspConfig(
 	val audio: Boolean = false,
 ) {
 	override fun toString(): String = "RtspConfig"
+}
+
+/** Someone the panel calls over its SIM, and whose calls show their name. */
+@Serializable
+data class Contact(
+	val name: String,
+	val number: String,
+) {
+	/** The number never reaches the log. */
+	override fun toString(): String = "Contact(name=$name)"
 }
 
 @Serializable

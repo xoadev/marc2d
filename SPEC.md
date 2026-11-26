@@ -222,17 +222,38 @@ Verified against a VTO2202F-P-S3 (UDP 5060), which is Asterisk inside:
 
 ## Phone line
 
-A panel with a SIM shows its calls on the intercom's call screen, named by the number, or by the name the network gives,
-and without video: **Answer** takes it, **Hang up** turns it down or ends it, and it always talks on the speaker.
+A panel with a SIM shows its calls on the intercom's call screen, named by its contact, the name the network gives or the
+number, and without video: **Answer** takes it, **Hang up** turns it down or ends it, and it always talks on the speaker.
 
-- The panel is the default dialer, which the Device Owner sets when it enters the kiosk: Telecom then hands it the calls
-  instead of showing its own screen, which the kiosk would hide. It is the dialer only to show calls: it has no keypad,
-  and dialing just opens the panel.
+- **Contacts:** a list in HA, under Phone contacts, with each one's name and number: the people of the house with their
+  mobiles, emergencies, anyone. HA has no phone numbers of its own, not even in its people, so they are written there.
+  They only go from HA to the panel, in its configuration, and turning them off empties them. A number takes digits, `*`,
+  `#` and a leading `+`; spaces, dashes and brackets are dropped, and the form refuses anything else.
+- **Phone**, in the menu while there are contacts, lists them: tapping one calls it, and the call screen takes over with
+  **Hang up**. There is no keypad: only the contacts are called.
+- **From HA:** the `marc2d.call` action, with the panel and a number or a contact's name, whatever its case, makes it
+  call. It fails, saying why, if the panel is not connected, its contacts are off or it is neither. Whether the call gets
+  through is only in the panel's log: one without a SIM or signal ends at once.
+
+  ```yaml
+  action: marc2d.call
+  data:
+    config_entry_id: 01M81SJ9S95FJJ18KXH676JBFD
+    number: Grandma
+  ```
+
+- **The name of a call** is its contact's when the digits match, whatever the spaces or the prefix: from 7 digits, a
+  number matches a longer one that ends with it, so `600 12 34 56` is `+34600123456`. A shorter one, such as `112`, only
+  matches itself. Two numbers that differ only in their country code look the same.
+- The panel is the default dialer, which the Device Owner sets when it enters the kiosk: Telecom then hands it the calls,
+  incoming and outgoing, instead of showing its own screen, which the kiosk would hide. Dialing from another app only
+  opens the panel. The kiosk also grants the permission to call.
 - The ringtone is Telecom's, the phone's own: the panel does not ring them itself.
 - One call at a time: a second one while there is a call is turned down.
 - The intercom comes first: if it rings during a phone call, its screen covers the phone's, and the phone call goes on
   behind it until the intercom's ends.
-- The log only says that a call rang, was answered or ended: never the number.
+- The log only says that a call rang, was dialed, was answered or ended, and why it was disconnected: never the number,
+  in the panel or in HA.
 
 ## Entities
 
@@ -366,7 +387,10 @@ the integration, and the panel receives it right away through `marc2d/subscribe`
   "photos": {
     "idle_minutes": 1, "seconds": 30, "order": "shuffle", "fit": "fit", "match_orientation": true, "clock": true,
     "keep_screen_on": false
-  }
+  },
+  "contacts": [
+    { "name": "Grandma", "number": "+34 600 12 34 56" }
+  ]
 }
 ```
 
@@ -385,6 +409,7 @@ feature had is kept. The [widgets](#widgets) are not in this response: they arri
 | Publish  | no password is sent: the panel stops, HA deletes the entity  |
 | Widgets  | HA stops rendering them and sends an empty list              |
 | Photos   | no photos are sent: the panel keeps the clock                |
+| Contacts | an empty list: the menu hides Phone, and `marc2d.call` fails |
 
 - What is off is left out of the response, or only changes HA, so the panel needs no logic for the toggles.
 - A camera gets its `intercom` only if that intercom is sent: otherwise **Talk** would do nothing.

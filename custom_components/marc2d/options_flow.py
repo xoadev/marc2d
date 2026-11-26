@@ -27,6 +27,7 @@ from homeassistant.helpers.selector import (
 from .camera import panel_address, stream_url
 from .panel_config import (
     CONF_CAMERAS,
+    CONF_CONTACTS,
     CONF_INTERCOMS,
     CONF_PHOTOS_CLOCK,
     CONF_PHOTOS_FIT,
@@ -44,6 +45,7 @@ from .panel_config import (
     CONF_WIDGETS,
     DEFAULT_WAKE_PHRASE,
     FEATURE_CAMERAS,
+    FEATURE_CONTACTS,
     FEATURE_PHOTOS,
     FEATURE_RTSP,
     FEATURE_SENSORS,
@@ -58,6 +60,7 @@ from .panel_config import (
     PHOTOS_ORDER_NAME,
     PHOTOS_ORDER_SHUFFLE,
     SECTION_FEATURES,
+    dialable,
     is_enabled,
     known_options,
     photos_folder,
@@ -73,6 +76,7 @@ MENU = {
     "intercoms": "Intercoms",
     "cameras": "Cameras",
     "widgets": "Widgets",
+    "contacts": "Phone contacts",
     "entities": "Sensors, siren and speaker",
     "voice": "Voice commands",
     "rtsp": "Publish the camera",
@@ -161,6 +165,12 @@ WIDGET_FIELDS = {
 }
 
 
+CONTACT_FIELDS = {
+    "name": _field("Name", {"text": {}}),
+    "number": _field("Number", {"text": {"type": "tel"}}),
+}
+
+
 class Marc2dOptionsFlow(OptionsFlow):
     """The menu links to each page, and submitting a page saves it and reaches the panel at once."""
 
@@ -221,6 +231,28 @@ class Marc2dOptionsFlow(OptionsFlow):
             "widgets",
             FEATURE_WIDGETS,
             {probatio.Optional(CONF_WIDGETS): _list_of(WIDGET_FIELDS)},
+        )
+
+    async def async_step_contacts(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The phone contacts, in order: the panel calls them and names their calls."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            chosen = user_input.get(CONF_CONTACTS, [])
+            # Checked with the switch on, as the panel would get them: a wrong number is said here.
+            candidate = {CONF_CONTACTS: chosen, SECTION_FEATURES: {FEATURE_CONTACTS: True}}
+            if any(dialable(candidate, contact["number"]) is None for contact in chosen):
+                errors[CONF_CONTACTS] = "invalid_number"
+            else:
+                self._set_enabled(FEATURE_CONTACTS, user_input)
+                self._options[CONF_CONTACTS] = chosen
+                return self.async_create_entry(data=self._options)
+        return self._page(
+            "contacts",
+            FEATURE_CONTACTS,
+            {probatio.Optional(CONF_CONTACTS): _list_of(CONTACT_FIELDS)},
+            errors=errors,
         )
 
     async def async_step_entities(

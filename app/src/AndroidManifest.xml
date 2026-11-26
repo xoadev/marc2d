@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- To call the contacts that Home Assistant sends, over the SIM. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <!-- Home Assistant is usually served over HTTP inside the LAN. -->
     <application
@@ -40,7 +42,7 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <!-- The dialer role asks for both: dialing only opens the panel, which has no keypad. -->
+            <!-- The dialer role asks for both: dialing only opens the panel, which calls only its contacts. -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />

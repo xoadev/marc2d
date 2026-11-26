@@ -37,7 +37,7 @@ class PanelRuntime(
 ) {
 	val store = PanelStore(context)
 	val phone by lazy { IntercomPhone(context) }
-	val line = PhoneLine()
+	val line = PhoneLine(context)
 
 	private val _haStatus = MutableStateFlow<HaStatus>(HaStatus.NotConfigured)
 	val haStatus: StateFlow<HaStatus> = _haStatus.asStateFlow()
@@ -149,6 +149,7 @@ class PanelRuntime(
 		started = true
 
 		scope.launch { store.config.collect(phone::apply) }
+		scope.launch { store.config.collect { line.contacts = it.contacts } }
 		phone.onDoorbellAnswered = link::answer
 		scope.launch { keepListening() }
 		scope.launch { publishCamera() }
@@ -317,6 +318,10 @@ class PanelRuntime(
 			is HaProtocol.PanelEvent.Brightness -> {
 				presence.ignoreChanges(SystemClock.elapsedRealtime())
 				_brightness.value = windowBrightness(command.percent)
+			}
+
+			is HaProtocol.PanelEvent.Dial -> {
+				line.dial(command.number)
 			}
 
 			is HaProtocol.PanelEvent.Widgets -> {

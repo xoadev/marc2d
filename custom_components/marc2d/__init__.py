@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import logging
 
+import probatio
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, Platform
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    ServiceCall,
+    State,
+    callback,
+)
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
@@ -17,18 +27,33 @@ from .media_player import STOP
 from .panel_config import (
     CONF_ANSWERED_ELSEWHERE,
     CONF_DOORBELL,
+    FEATURE_CONTACTS,
     FEATURE_SIREN,
     FEATURE_SPEAKER,
+    dialable,
     intercom_entities,
     is_enabled,
 )
-from .panel_hub import DOORBELL_ANSWERED, DOORBELL_RING, doorbell_event, get_hub, remove_hub
+from .panel_hub import (
+    DOORBELL_ANSWERED,
+    DOORBELL_RING,
+    dial_event,
+    doorbell_event,
+    get_hub,
+    remove_hub,
+)
 from .siren import SIREN_OFF
 from .websocket import CONF_USER_ID, async_register, config_event
 from .widgets import async_start_widgets
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+SERVICE_CALL = "call"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_NUMBER = "number"
+CALL_SCHEMA = probatio.Schema(
+    {probatio.Required(ATTR_CONFIG_ENTRY_ID): cv.string, probatio.Required(ATTR_NUMBER): cv.string}
+)
 PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.CAMERA,
@@ -44,7 +69,32 @@ PLATFORMS = [
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the commands that panels use."""
     async_register(hass)
+    hass.services.async_register(DOMAIN, SERVICE_CALL, _call, schema=CALL_SCHEMA)
     return True
+
+
+@callback
+def _call(service: ServiceCall) -> None:
+    """Make a panel call a number, or one of its contacts by name, over its SIM."""
+    entry = service.hass.config_entries.async_get_entry(service.data[ATTR_CONFIG_ENTRY_ID])
+    if entry is None or entry.domain != DOMAIN:
+        raise ServiceValidationError("No marc2d panel has that config_entry_id: choose a panel")
+    if not is_enabled(entry.options, FEATURE_CONTACTS):
+        raise ServiceValidationError(
+            f"{entry.title} has its phone turned off: turn it on in its settings, Phone contacts"
+        )
+    number = dialable(entry.options, service.data[ATTR_NUMBER])
+    if number is None:
+        raise ServiceValidationError(
+            f"Neither a number nor one of the contacts of {entry.title}: use digits, *, # and a"
+            " leading +, or a contact's name"
+        )
+    hub = get_hub(service.hass, entry.entry_id)
+    if not hub.online:
+        raise ServiceValidationError(f"{entry.title} is not connected: it cannot call now")
+    # Never the number in the log, as on the panel: only that it was asked.
+    _LOGGER.info("%s: asked to make a phone call", entry.title)
+    hub.send(dial_event(number))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

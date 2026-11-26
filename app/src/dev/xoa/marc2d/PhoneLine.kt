@@ -1,8 +1,15 @@
 package dev.xoa.marc2d
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Bundle
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
+import android.telecom.PhoneAccount
+import android.telecom.TelecomManager
 import android.telecom.VideoProfile
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,11 +33,39 @@ internal fun phoneCall(
 		else -> PhoneCall(name, answered = true)
 	}
 
+/** From this many digits, a number matches a longer one that ends with it: 600123456 is +34 600 12 34 56. */
+private const val MIN_MATCHING_DIGITS = 7
+
+/** The contact with this number, compared by its digits, whatever the spaces, dashes or prefix of either. */
+internal fun contactFor(
+	contacts: List<Contact>,
+	number: String?,
+): Contact? {
+	val digits = number?.filter(Char::isDigit).orEmpty()
+	if (digits.isEmpty()) return null
+	return contacts.firstOrNull { sameNumber(it.number.filter(Char::isDigit), digits) }
+}
+
+// ponytail: two numbers that differ only in their country code look the same, as with Android's old PhoneNumberUtils.compare;
+// libphonenumber would tell them apart, for the weight of its metadata.
+private fun sameNumber(
+	a: String,
+	b: String,
+): Boolean {
+	val (shorter, longer) = if (a.length <= b.length) a to b else b to a
+	return shorter == longer || (shorter.length >= MIN_MATCHING_DIGITS && longer.endsWith(shorter))
+}
+
 /**
  * The phone line's call, which Telecom hands to [PanelInCallService] because the panel is the default dialer.
  * Everything runs on the main thread, where Telecom delivers its callbacks.
  */
-class PhoneLine {
+class PhoneLine(
+	private val context: Context,
+) {
+	/** From HA: they name the calls and the panel calls them. */
+	@Volatile var contacts: List<Contact> = emptyList()
+
 	private val _call = MutableStateFlow<PhoneCall?>(null)
 	val call: StateFlow<PhoneCall?> = _call.asStateFlow()
 
@@ -47,7 +82,10 @@ class PhoneLine {
 		if (call != current) return
 		val details = call.details
 		val number = details.handle?.schemeSpecificPart
-		publish(phoneCall(details.state, details.callerDisplayName?.ifBlank { null } ?: number ?: UNKNOWN_CALLER))
+		val name = contactFor(contacts, number)?.name ?: details.callerDisplayName?.ifBlank { null } ?: number ?: UNKNOWN_CALLER
+		// Why it ended says, for instance, that there is no SIM or no signal. Never the number.
+		if (details.state == Call.STATE_DISCONNECTED) Log.i(TAG, "Phone call disconnected: ${details.disconnectCause}")
+		publish(phoneCall(details.state, name))
 	}
 
 	internal fun release(call: Call) {
@@ -58,6 +96,29 @@ class PhoneLine {
 
 	fun answer() {
 		current?.answer(VideoProfile.STATE_AUDIO_ONLY)
+	}
+
+	/**
+	 * Calls over the SIM, on the speaker. Telecom hands the call back to [PanelInCallService], as the panel is the dialer, and
+	 * it shows on the call screen like any other.
+	 */
+	fun dial(number: String) {
+		if (current != null) {
+			Log.w(TAG, "Phone call not made: there is one already")
+			return
+		}
+		if (context.checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+			Log.w(TAG, "Phone call not made: the app may not call. The kiosk grants it: open the app again, or grant Phone in its settings")
+			return
+		}
+		val extras = Bundle().apply { putBoolean(TelecomManager.EXTRA_START_CALL_WITH_SPEAKERPHONE, true) }
+		try {
+			context.getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts(PhoneAccount.SCHEME_TEL, number, null), extras)
+			Log.i(TAG, "Phone call dialed")
+		} catch (e: SecurityException) {
+			// Not its message: it may carry the number.
+			Log.w(TAG, "Phone call not made: Telecom refused it (${e::class.simpleName})")
+		}
 	}
 
 	/** Also turns down a call that is still ringing. */

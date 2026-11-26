@@ -140,6 +140,11 @@ def doorbell_event(intercom: str, payload: str) -> dict[str, Any]:
     return {"kind": "doorbell", "intercom": intercom, "payload": payload}
 
 
+def dial_event(number: str) -> dict[str, Any]:
+    """What makes the panel call a number over its SIM."""
+    return {"kind": "dial", "number": number}
+
+
 @callback
 def doorbell_to_all(hass: HomeAssistant, intercom: str, payload: str) -> None:
     """Tell every panel: those without this intercom ignore it."""
