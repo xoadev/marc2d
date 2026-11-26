@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
 					val intercoms by runtime.phone.status.collectAsState()
 					val call by runtime.phone.call.collectAsState()
 					val phoneCall by runtime.line.call.collectAsState()
+					val sim by runtime.line.sim.collectAsState()
 					val widgets by runtime.widgets.collectAsState()
 					val haMood by runtime.haMood.collectAsState()
 					val dark by runtime.dark.collectAsState()
@@ -93,6 +94,7 @@ class MainActivity : ComponentActivity() {
 					var settingsOpen by rememberSaveable { mutableStateOf(false) }
 					var menuOpen by rememberSaveable { mutableStateOf(false) }
 					var camerasOpen by rememberSaveable { mutableStateOf(false) }
+					var contactsOpen by rememberSaveable { mutableStateOf(false) }
 					// By name: the widget is looked up again, so the screen follows its new values.
 					var widgetOpen by rememberSaveable { mutableStateOf<String?>(null) }
 					var scanOpen by rememberSaveable { mutableStateOf(false) }
@@ -100,6 +102,9 @@ class MainActivity : ComponentActivity() {
 					// Remembered: a new flow on each recomposition would restart the collection every time.
 					val cameras by remember { runtime.store.config.map { it.cameras } }.collectAsState(initial = emptyList())
 					val photosConfig by remember { runtime.store.config.map { it.photos } }.collectAsState(initial = null)
+					val contacts by remember { runtime.store.config.map { it.contacts } }.collectAsState(initial = emptyList())
+					// Without a SIM there is nothing to call with: the contacts stay out of sight.
+					val callable = if (sim) contacts else emptyList()
 					val photos by runtime.photos.collectAsState()
 					val lastTouch by runtime.lastTouch.collectAsState()
 					// Any touch starts the wait again, and hides the photos if they were showing.
@@ -137,6 +142,7 @@ class MainActivity : ComponentActivity() {
 							activeCall != null -> Screen.Call(activeCall)
 							activePhoneCall != null -> Screen.Phone(activePhoneCall)
 							camerasOpen && cameraConnection != null && cameras.isNotEmpty() -> Screen.Cameras(cameraConnection)
+							contactsOpen && callable.isNotEmpty() -> Screen.Contacts
 							scanOpen -> Screen.Scan
 							settingsOpen || needsSetup -> Screen.Settings
 							openTap != null -> Screen.WidgetDetail(openTap)
@@ -179,6 +185,18 @@ class MainActivity : ComponentActivity() {
 								connection = screen.connection,
 								onTalk = runtime.phone::callIntercom,
 								onClose = { camerasOpen = false },
+							)
+						}
+
+						Screen.Contacts -> {
+							BackHandler { contactsOpen = false }
+							ContactsScreen(
+								contacts = callable,
+								onCall = { contact ->
+									contactsOpen = false
+									runtime.line.dial(contact.number)
+								},
+								onClose = { contactsOpen = false },
 							)
 						}
 
@@ -234,6 +252,15 @@ class MainActivity : ComponentActivity() {
 										{
 											menuOpen = false
 											camerasOpen = true
+										}
+									},
+								onPhone =
+									if (callable.isEmpty()) {
+										null
+									} else {
+										{
+											menuOpen = false
+											contactsOpen = true
 										}
 									},
 								onSettings = {
@@ -331,6 +358,9 @@ private sealed interface Screen {
 	data class Cameras(
 		val connection: HaConnection,
 	) : Screen
+
+	/** The phone contacts, to call one. */
+	data object Contacts : Screen
 
 	data object Scan : Screen
 

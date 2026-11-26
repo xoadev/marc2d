@@ -13,23 +13,43 @@ It's a half-joking personal project, shared in case it's useful to someone.
 
 ## What it does
 
-- **Clock and widgets** on a black screen, designed for OLED panels that stay on all day.
-- **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
-  with an RTSP backchannel, over RTSP from the moment it rings. Tested with a Dahua VTO2202F.
-- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker.
-- **Cameras** from Home Assistant in full screen, swiping from one to the next.
-- **Sensors and siren** in Home Assistant: light, battery, temperature, presence, Wi-Fi, whether the camera is on, and
-  a siren on the alarm channel.
+On the wall:
+
+- **Clock and widgets** on a black screen, designed for OLED panels that stay on all day. Widgets are Home Assistant
+  templates: the weather, the cheap hours of electricity, the car's battery or anything else, opening their detail
+  when tapped.
 - **Photos** as a screensaver, from any Home Assistant media source, such as a folder or an Immich album, when nobody
   touches the panel.
-- **Widgets** written as Home Assistant templates: the weather, the cheap hours of electricity, the car's battery or
-  anything else, on the main screen, opening their detail when tapped.
-- **Updates** from Home Assistant, installed by the panel itself.
-- **A speaker** for `tts.speak` and any other audio from Home Assistant.
+- **Cameras** from Home Assistant in full screen, swiping from one to the next.
+- **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of its eye: an
+  alarm, the camera recording, listening, offline or asleep.
+
+At the door:
+
+- **Intercom:** it rings, you answer with audio and video, and you can call it yourself, over SIP or, for intercoms
+  with an RTSP backchannel, over RTSP from the moment it rings. Answering on one panel, or in the intercom's own app,
+  stops the others ringing. Tested with a Dahua VTO2202F.
+- **Phone calls**, if the phone has a SIM: they ring and you answer on the same call screen, on the speaker. It calls
+  the contacts you list in Home Assistant, from its menu or from an automation, and names their calls.
+
+For Home Assistant:
+
+- **Sensors:** light, presence guessed from the light, battery, temperature, charging and Wi-Fi.
+- **A siren** on the alarm channel and **a speaker** for `tts.speak` and any other audio.
+- **Its own camera**, off by default: an RTSP stream for Home Assistant or Frigate, on only while someone watches and
+  always shown on screen.
 - **Voice commands**, off by default: it listens for a wake phrase, configurable, on the device and sends what
   follows to Assist.
-- **A droid**, 16×16 pixels, that wanders around the screen and shows what's going on with the color of
-  its eye.
+- **Screen brightness and the droid's state**, set from Home Assistant.
+
+Running it:
+
+- **A kiosk:** the app is the home screen and the device owner, starts by itself and reconnects by itself.
+- **Set up from Home Assistant:** the panel joins by scanning a QR code, and everything else is in the integration's
+  options.
+- **Updates** from Home Assistant, installed by the panel itself.
+
+How each one behaves is in [SPEC.md](SPEC.md).
 
 ## Status
 

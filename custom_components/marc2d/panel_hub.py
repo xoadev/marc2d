@@ -26,6 +26,8 @@ KEY_PRESENCE = "presence"
 KEY_WIFI_SIGNAL = "wifi_signal"
 KEY_APP_VERSION = "app_version"
 KEY_UPDATING = "updating"
+# Whether it has a SIM ready to call: a panel need not have one.
+KEY_SIM = "sim"
 
 # What each value must be: the panel has its own user, but these reach entities as they come.
 NUMBER = (int, float)
@@ -43,6 +45,7 @@ REPORTED_TYPES: dict[str, tuple[type, ...]] = {
     KEY_CAMERA_ON: (bool,),
     KEY_APP_VERSION: (str,),
     KEY_UPDATING: (bool,),
+    KEY_SIM: (bool,),
 }
 
 DEFAULT_BRIGHTNESS = 100
@@ -67,6 +70,11 @@ class PanelHub:
         self.widgets: list[dict[str, Any]] = []
         self._connections: list[Send] = []
         self._listeners: list[tuple[Collection[str], Callable[[], None]]] = []
+
+    @property
+    def without_sim(self) -> bool:
+        """Whether the panel said it has no SIM: before it says anything, it may have one."""
+        return self.values.get(KEY_SIM) is False
 
     @property
     def online(self) -> bool:
@@ -138,6 +146,11 @@ def remove_hub(hass: HomeAssistant, entry_id: str) -> None:
 def doorbell_event(intercom: str, payload: str) -> dict[str, Any]:
     """What the panel receives about an intercom's doorbell."""
     return {"kind": "doorbell", "intercom": intercom, "payload": payload}
+
+
+def dial_event(number: str) -> dict[str, Any]:
+    """What makes the panel call a number over its SIM."""
+    return {"kind": "dial", "number": number}
 
 
 @callback

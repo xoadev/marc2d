@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 from typing import Any
 from urllib.parse import unquote
 
@@ -17,10 +18,12 @@ FEATURE_SPEAKER = "speaker"
 FEATURE_VOICE = "voice"
 FEATURE_RTSP = "rtsp"
 FEATURE_PHOTOS = "photos"
+FEATURE_CONTACTS = "contacts"
 
 CONF_INTERCOMS = "intercoms"
 CONF_CAMERAS = "cameras"
 CONF_WIDGETS = "widgets"
+CONF_CONTACTS = "contacts"
 CONF_DOORBELL = "doorbell"
 CONF_ANSWERED_BUTTON = "answered_button"
 CONF_ANSWERED_ELSEWHERE = "answered_elsewhere"
@@ -66,6 +69,9 @@ PHOTOS_DEFAULTS: dict[str, Any] = {
 MEDIA_SOURCE_PREFIX = "media-source://"
 LOCAL_MEDIA = "media-source://media_source/local"
 
+# What a phone dials: a leading + and up to 20 digits, star or hash, as in *31# or +34 600 000 000.
+PHONE_NUMBER = re.compile(r"\+?[0-9*#]{1,20}")
+
 RTSP_USER = "marc2d"
 RTSP_PORT = 8554
 RTSP_PATH = "/camera"
@@ -87,9 +93,11 @@ FEATURES = {
     FEATURE_VOICE,
     FEATURE_RTSP,
     FEATURE_PHOTOS,
+    FEATURE_CONTACTS,
 }
 OPTIONS = {
     CONF_INTERCOMS,
+    CONF_CONTACTS,
     CONF_CAMERAS,
     CONF_WIDGETS,
     CONF_PIPELINE,
@@ -131,6 +139,9 @@ def build_panel_config(options: Mapping[str, Any]) -> dict[str, Any]:
             for intercom in intercoms(options)
         ],
         "cameras": [],
+        "contacts": [
+            {"name": contact["name"], "number": contact["number"]} for contact in contacts(options)
+        ],
     }
     if is_enabled(options, FEATURE_VOICE):
         config["voice"] = _pipeline(options)
@@ -205,6 +216,24 @@ def intercoms(options: Mapping[str, Any]) -> list[dict[str, Any]]:
     if not is_enabled(options, FEATURE_SIP):
         return []
     return options.get(CONF_INTERCOMS, [])
+
+
+def contacts(options: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The panel's phone contacts: none while they are turned off."""
+    if not is_enabled(options, FEATURE_CONTACTS):
+        return []
+    return options.get(CONF_CONTACTS, [])
+
+
+def dialable(options: Mapping[str, Any], wanted: str) -> str | None:
+    """The number to dial for a contact's name, whatever its case, or for a number written as is.
+
+    Only digits, `*`, `#` and a leading `+` reach the phone: anything else is not a number.
+    """
+    by_name = {contact["name"].casefold(): contact["number"] for contact in contacts(options)}
+    number = by_name.get(wanted.strip().casefold(), wanted)
+    cleaned = re.sub(r"[\s().-]", "", number)
+    return cleaned if PHONE_NUMBER.fullmatch(cleaned) else None
 
 
 def intercom_names(options: Mapping[str, Any]) -> set[str]:

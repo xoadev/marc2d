@@ -5,6 +5,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+private val GRANDMA = Contact("Grandma", "+34 600 12-34-56")
+private val EMERGENCIES = Contact("Emergencies", "112")
+private val CONTACTS = listOf(GRANDMA, EMERGENCIES)
+
 class PhoneLineTest {
 	@Test
 	fun `a call rings until Telecom says it is under way`() {
@@ -19,5 +23,22 @@ class PhoneLineTest {
 	fun `a call that is ending leaves the screen`() {
 		assertNull(phoneCall(Call.STATE_DISCONNECTING, "600"))
 		assertNull(phoneCall(Call.STATE_DISCONNECTED, "600"))
+	}
+
+	/** The network and HA write the same number differently. */
+	@Test
+	fun `a call takes the name of the contact with its number`() {
+		assertEquals(GRANDMA, contactFor(CONTACTS, "600123456"))
+		assertEquals(GRANDMA, contactFor(CONTACTS, "0034600123456"))
+		assertEquals(EMERGENCIES, contactFor(CONTACTS, "112"))
+	}
+
+	/** A short number only matches itself: 112 is not the end of every number that ends in 112. */
+	@Test
+	fun `other numbers have no name`() {
+		assertNull(contactFor(CONTACTS, "600123457"))
+		assertNull(contactFor(CONTACTS, "981000112"))
+		assertNull(contactFor(CONTACTS, "12"))
+		assertNull(contactFor(CONTACTS, null))
 	}
 }

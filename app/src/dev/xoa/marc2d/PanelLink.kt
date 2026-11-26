@@ -65,5 +65,6 @@ class PanelLink {
 		const val CHARGING = "charging"
 		const val PRESENCE = "presence"
 		const val WIFI_SIGNAL = "wifi_signal"
+		const val SIM = "sim"
 	}
 }

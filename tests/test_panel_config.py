@@ -38,7 +38,7 @@ def test_talk_needs_an_intercom_that_is_sent() -> None:
 
 
 def test_a_new_panel_receives_an_empty_configuration() -> None:
-    assert build_panel_config({}) == {"intercoms": [], "cameras": []}
+    assert build_panel_config({}) == {"intercoms": [], "cameras": [], "contacts": []}
 
 
 @pytest.mark.parametrize(

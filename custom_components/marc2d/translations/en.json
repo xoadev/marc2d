@@ -55,6 +55,17 @@
           "widgets": "The weather widget needs the hourly forecast in a template sensor, as a template cannot ask for it: the recipe is in the integration's documentation."
         }
       },
+      "contacts": {
+        "title": "Phone contacts",
+        "description": "For a panel with a SIM: one that has said it has none does not show this page, and the panel hides Phone while it has no SIM ready. The panel lists them under Phone in its menu, to call them on the speaker, and shows their name when they call. Home Assistant can also make the panel call a number or one of these contacts with the marc2d.call action. You can leave the list empty. Off: the panel forgets them and Home Assistant cannot make it call.",
+        "data": {
+          "enabled": "On",
+          "contacts": "Contacts"
+        },
+        "data_description": {
+          "contacts": "Anyone you want to call from the panel: each one of the house, with their mobile, and numbers such as emergencies. A number has digits, *, # and a leading + for another country; spaces, dashes and brackets are ignored."
+        }
+      },
       "init": {
         "title": "Panel settings",
         "description": "Open what you want to change. Submitting a page saves it, and the panel applies it right away."
@@ -131,7 +142,8 @@
       "required": "Needed while this is on.",
       "too_short": "At least 12 characters: anyone on the home network can try it. Leave it empty to generate one.",
       "folder_not_found": "Home Assistant cannot open this folder. Check that it exists under Media, as a folder of My media or a media-source:// identifier.",
-      "no_photos": "There are no photos in this folder. Add some, or include its subfolders."
+      "no_photos": "There are no photos in this folder. Add some, or include its subfolders.",
+      "invalid_number": "One of the numbers is not a phone number: use digits, *, # and a leading +."
     }
   },
   "selector": {
@@ -145,6 +157,22 @@
       "options": {
         "fit": "Whole photo",
         "fill": "Fill the screen"
+      }
+    }
+  },
+  "services": {
+    "call": {
+      "name": "Call",
+      "description": "Makes a panel with a SIM call a number, on its speaker.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Panel",
+          "description": "The panel that calls."
+        },
+        "number": {
+          "name": "Number or contact",
+          "description": "A phone number, or the name of one of the panel's contacts."
+        }
       }
     }
   }
